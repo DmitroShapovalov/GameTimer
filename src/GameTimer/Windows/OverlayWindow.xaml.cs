@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using GameTimer.Helpers;
 using GameTimer.Models;
 
@@ -9,18 +10,25 @@ namespace GameTimer.Windows;
 public partial class OverlayWindow : Window
 {
     private AppSettings _settings;
+    private DispatcherTimer? _topmostTimer;
 
     public OverlayWindow(AppSettings settings)
     {
         InitializeComponent();
         _settings = settings;
         ApplySettings();
+        Closed += (_, _) => _topmostTimer?.Stop();
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         NativeHelper.MakeOverlay(this);
         PositionOnScreen();
+
+        // Some games keep stealing the topmost slot — re-assert it periodically
+        _topmostTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _topmostTimer.Tick += (_, _) => NativeHelper.ReassertTopmost(this);
+        _topmostTimer.Start();
     }
 
     public void ApplySettings()
