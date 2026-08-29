@@ -6,3 +6,5 @@ obj/
 *.cache
 *.log
 publish/
+
+installer/Output/

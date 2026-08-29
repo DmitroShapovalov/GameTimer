@@ -1,0 +1,40 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish
+        run: dotnet publish src/GameTimer/GameTimer.csproj -c Release -r win-x64 --self-contained -o publish
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Build Installer
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v',''
+          iscc installer/setup.iss /DAppVersion=$version
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/Output/GameTimerSetup.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

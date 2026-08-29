@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using GameTimer.Localization;
 
 namespace GameTimer.Models;
 
@@ -46,12 +47,18 @@ public class AppSettings
 
     // Custom sound file path (null = built-in)
     public string? CustomSoundPath { get; set; }
+
+    // UI language (en, ru)
+    public string Language { get; set; } = "en";
 }
 
 public class AlertPoint
 {
     public int Minutes { get; set; }
     public bool Enabled { get; set; } = true;
+
+    [JsonIgnore]
+    public string DisplayText => $"{Minutes} {Loc.Get("MinBeforeTimer")}";
 }
 
 public enum TimerAction

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="GameTimer"
-        Width="500" Height="470"
+        Width="500" Height="500"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         ExtendsContentIntoTitleBar="True"
@@ -32,33 +32,30 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <ui:SymbolIcon Symbol="Timer24" Margin="0,0,6,0"/>
-                        <TextBlock Text="Таймер"/>
+                        <TextBlock x:Name="TabTimerText" Text="Timer"/>
                     </StackPanel>
                 </TabItem.Header>
                 <StackPanel Margin="16">
-                    <!-- Mode selector -->
-                    <TextBlock Text="Режим" Style="{StaticResource SectionLabel}"/>
+                    <TextBlock x:Name="ModeLabel" Text="Mode" Style="{StaticResource SectionLabel}"/>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                        <RadioButton x:Name="ModeInterval" Content="Интервал" IsChecked="True"
+                        <RadioButton x:Name="ModeInterval" Content="Interval" IsChecked="True"
                                      Checked="Mode_Changed" Margin="0,0,16,0"/>
-                        <RadioButton x:Name="ModeAbsolute" Content="Время дня"
+                        <RadioButton x:Name="ModeAbsolute" Content="Time of day"
                                      Checked="Mode_Changed"/>
                     </StackPanel>
 
-                    <!-- Interval inputs -->
                     <StackPanel x:Name="IntervalPanel" Orientation="Horizontal" Margin="0,0,0,12">
-                        <TextBlock Text="Часы:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="HoursLabel" Text="Hours:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ui:TextBox x:Name="IntervalHours" Width="60" Text="1" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
-                        <TextBlock Text="Минуты:" VerticalAlignment="Center" Margin="16,0,6,0"/>
+                        <TextBlock x:Name="MinutesLabel" Text="Minutes:" VerticalAlignment="Center" Margin="16,0,6,0"/>
                         <ui:TextBox x:Name="IntervalMinutes" Width="60" Text="0" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                     </StackPanel>
 
-                    <!-- Absolute inputs -->
                     <StackPanel x:Name="AbsolutePanel" Orientation="Horizontal" Margin="0,0,0,12"
                                 Visibility="Collapsed">
-                        <TextBlock Text="Час:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="HourLabel" Text="Hour:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ui:TextBox x:Name="AbsoluteHour" Width="60" Text="20" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                         <TextBlock Text=":" VerticalAlignment="Center" Margin="4,0,4,0" FontWeight="Bold"/>
@@ -66,10 +63,9 @@
                                  TextChanged="TimerInput_Changed"/>
                     </StackPanel>
 
-                    <!-- Status -->
                     <ui:Card Margin="0,4,0,12">
                         <StackPanel>
-                            <TextBlock x:Name="StatusText" Text="Таймер не запущен"
+                            <TextBlock x:Name="StatusText" Text="Timer not started"
                                        FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                             <TextBlock x:Name="RemainingText" Text=""
                                        FontSize="28" FontWeight="Bold" FontFamily="Consolas"
@@ -77,14 +73,13 @@
                         </StackPanel>
                     </ui:Card>
 
-                    <!-- Buttons -->
                     <StackPanel Orientation="Horizontal">
-                        <ui:Button x:Name="StartButton" Content="Старт" Width="100" Height="34"
+                        <ui:Button x:Name="StartButton" Content="Start" Width="100" Height="34"
                                 Margin="0,0,8,0" Click="Start_Click"
                                 Appearance="Success" FontWeight="Bold"/>
-                        <ui:Button x:Name="StopButton" Content="Стоп" Width="100" Height="34"
+                        <ui:Button x:Name="StopButton" Content="Stop" Width="100" Height="34"
                                 Margin="0,0,8,0" Click="Stop_Click" IsEnabled="False"/>
-                        <ui:Button x:Name="ResetButton" Content="Сброс" Width="100" Height="34"
+                        <ui:Button x:Name="ResetButton" Content="Reset" Width="100" Height="34"
                                 Click="Reset_Click" IsEnabled="False"/>
                     </StackPanel>
                 </StackPanel>
@@ -95,13 +90,12 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <ui:SymbolIcon Symbol="PaintBrush24" Margin="0,0,6,0"/>
-                        <TextBlock Text="Отображение"/>
+                        <TextBlock x:Name="TabDisplayText" Text="Display"/>
                     </StackPanel>
                 </TabItem.Header>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="16">
-                        <!-- Position preview -->
-                        <TextBlock Text="Позиция оверлея (перетащите маркер)" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="OverlayPositionLabel" Text="Overlay position (drag the marker)" Style="{StaticResource SectionLabel}"/>
                         <Border BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1" CornerRadius="4"
                                 Height="120" Margin="0,0,0,12" Background="#1a1a2e">
                             <Canvas x:Name="PositionCanvas" MouseLeftButtonDown="Canvas_MouseDown"
@@ -114,8 +108,7 @@
                             </Canvas>
                         </Border>
 
-                        <!-- Font size -->
-                        <TextBlock Text="Размер шрифта" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="FontSizeSectionLabel" Text="Font size" Style="{StaticResource SectionLabel}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <Slider x:Name="FontSizeSlider" Minimum="12" Maximum="72" Value="24"
                                     Width="280" VerticalAlignment="Center"
@@ -124,8 +117,7 @@
                                        VerticalAlignment="Center" Width="50"/>
                         </StackPanel>
 
-                        <!-- Opacity -->
-                        <TextBlock Text="Прозрачность" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="OpacitySectionLabel" Text="Opacity" Style="{StaticResource SectionLabel}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <Slider x:Name="OpacitySlider" Minimum="20" Maximum="100" Value="70"
                                     Width="280" VerticalAlignment="Center"
@@ -134,35 +126,32 @@
                                        VerticalAlignment="Center" Width="50"/>
                         </StackPanel>
 
-                        <!-- Background toggle -->
-                        <CheckBox x:Name="ShowBackgroundCheck" Content="Фон за текстом"
+                        <CheckBox x:Name="ShowBackgroundCheck" Content="Background behind text"
                                   IsChecked="True" Margin="0,4,0,12"
                                   Checked="DisplaySetting_Changed" Unchecked="DisplaySetting_Changed"/>
 
-                        <!-- Color thresholds -->
-                        <TextBlock Text="Пороги (минуты)" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="ThresholdsLabel" Text="Thresholds (minutes)" Style="{StaticResource SectionLabel}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="Внимание с:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="WarningFromLabel" Text="Warning:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <ui:TextBox x:Name="YellowThreshold" Width="55" Text="30"
                                      TextChanged="Threshold_Changed"/>
-                            <TextBlock Text="мин" VerticalAlignment="Center" Margin="4,0,16,0"
+                            <TextBlock x:Name="MinLabel1" Text="min" VerticalAlignment="Center" Margin="4,0,16,0"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                            <TextBlock Text="Тревога с:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="AlertFromLabel" Text="Alert:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <ui:TextBox x:Name="RedThreshold" Width="55" Text="10"
                                      TextChanged="Threshold_Changed"/>
-                            <TextBlock Text="мин" VerticalAlignment="Center" Margin="4,0,0,0"
+                            <TextBlock x:Name="MinLabel2" Text="min" VerticalAlignment="Center" Margin="4,0,0,0"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>
 
-                        <!-- Colors -->
-                        <TextBlock Text="Цвета зон (нажмите для выбора)" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="ZoneColorsLabel" Text="Zone colors (click to choose)" Style="{StaticResource SectionLabel}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <StackPanel Margin="0,0,16,0">
                                 <Border x:Name="GreenPreview" Width="40" Height="32" CornerRadius="4"
                                         Background="#4CAF50" Cursor="Hand"
                                         MouseLeftButtonUp="ColorPicker_Click"
                                         BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1"/>
-                                <TextBlock Text="Норма" FontSize="11" Margin="0,2,0,0"
+                                <TextBlock x:Name="NormalZoneLabel" Text="Normal" FontSize="11" Margin="0,2,0,0"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
                             </StackPanel>
                             <StackPanel Margin="0,0,16,0">
@@ -170,7 +159,7 @@
                                         Background="#FFC107" Cursor="Hand"
                                         MouseLeftButtonUp="ColorPicker_Click"
                                         BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1"/>
-                                <TextBlock Text="Внимание" FontSize="11" Margin="0,2,0,0"
+                                <TextBlock x:Name="WarningZoneLabel" Text="Warning" FontSize="11" Margin="0,2,0,0"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
                             </StackPanel>
                             <StackPanel>
@@ -178,7 +167,7 @@
                                         Background="#F44336" Cursor="Hand"
                                         MouseLeftButtonUp="ColorPicker_Click"
                                         BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1"/>
-                                <TextBlock Text="Тревога" FontSize="11" Margin="0,2,0,0"
+                                <TextBlock x:Name="AlertZoneLabel" Text="Alert" FontSize="11" Margin="0,2,0,0"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </StackPanel>
@@ -191,12 +180,12 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <ui:SymbolIcon Symbol="Alert24" Margin="0,0,6,0"/>
-                        <TextBlock Text="Уведомления"/>
+                        <TextBlock x:Name="TabNotificationsText" Text="Notifications"/>
                     </StackPanel>
                 </TabItem.Header>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="16">
-                        <TextBlock Text="Точки звуковых уведомлений" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="AlertPointsLabel" Text="Sound alert points" Style="{StaticResource SectionLabel}"/>
 
                         <Border BorderBrush="{DynamicResource ControlElevationBorderBrush}"
                                 BorderThickness="1" CornerRadius="6"
@@ -213,15 +202,12 @@
                                             </Grid.ColumnDefinitions>
                                             <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}" Margin="0,0,8,0"
                                                       Checked="AlertEnabled_Changed" Unchecked="AlertEnabled_Changed"/>
-                                            <TextBlock Grid.Column="1" VerticalAlignment="Center">
-                                                <Run Text="{Binding Minutes}"/>
-                                                <Run Text=" мин до таймера"/>
-                                            </TextBlock>
+                                            <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                                       Text="{Binding DisplayText}"/>
                                             <ui:Button Grid.Column="2" Appearance="Secondary"
                                                        Width="30" Height="30" Padding="0"
                                                        Click="RemoveAlert_Click"
-                                                       Tag="{Binding}"
-                                                       ToolTip="Удалить">
+                                                       Tag="{Binding}">
                                                 <ui:SymbolIcon Symbol="Delete24" FontSize="14"/>
                                             </ui:Button>
                                         </Grid>
@@ -232,26 +218,26 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                             <ui:TextBox x:Name="NewAlertMinutes" Width="60" Margin="0,0,8,0"
-                                        PlaceholderText="мин"/>
-                            <ui:Button Content="Добавить" Width="120" Click="AddAlert_Click"
+                                        PlaceholderText="min"/>
+                            <ui:Button x:Name="AddButton" Content="Add" Width="120" Click="AddAlert_Click"
                                        Icon="{ui:SymbolIcon Add24}"/>
                         </StackPanel>
 
-                        <TextBlock Text="Звуковой файл" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="SoundFileLabel" Text="Sound file" Style="{StaticResource SectionLabel}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <RadioButton x:Name="SoundBuiltIn" Content="Встроенный" IsChecked="True"
+                            <RadioButton x:Name="SoundBuiltIn" Content="Built-in" IsChecked="True"
                                          Checked="SoundSource_Changed" Margin="0,0,16,0"/>
-                            <RadioButton x:Name="SoundCustom" Content="Свой файл"
+                            <RadioButton x:Name="SoundCustom" Content="Custom file"
                                          Checked="SoundSource_Changed"/>
                         </StackPanel>
 
                         <StackPanel x:Name="CustomSoundPanel" Orientation="Horizontal" Visibility="Collapsed"
                                     Margin="0,0,0,8">
                             <ui:TextBox x:Name="CustomSoundPath" Width="220" IsReadOnly="True" Margin="0,0,8,0"/>
-                            <ui:Button Content="Обзор..." Width="80" Margin="0,0,8,0" Click="BrowseSound_Click"/>
+                            <ui:Button x:Name="BrowseButton" Content="Browse..." Width="80" Margin="0,0,8,0" Click="BrowseSound_Click"/>
                         </StackPanel>
 
-                        <ui:Button Content="Прослушать" Width="140" HorizontalAlignment="Left"
+                        <ui:Button x:Name="PreviewButton" Content="Preview" Width="140" HorizontalAlignment="Left"
                                 Margin="0,8,0,0" Click="PreviewSound_Click"
                                 Icon="{ui:SymbolIcon Speaker224}"/>
                     </StackPanel>
@@ -263,28 +249,37 @@
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <ui:SymbolIcon Symbol="Settings24" Margin="0,0,6,0"/>
-                        <TextBlock Text="Настройки"/>
+                        <TextBlock x:Name="TabSettingsText" Text="Settings"/>
                     </StackPanel>
                 </TabItem.Header>
-                <StackPanel Margin="16">
-                    <TextBlock Text="Действие по истечении таймера" Style="{StaticResource SectionLabel}"/>
-                    <ComboBox x:Name="ActionCombo" Width="220" HorizontalAlignment="Left"
-                              Margin="0,0,0,16" SelectionChanged="Action_Changed">
-                        <ComboBoxItem Content="Выключение компьютера"/>
-                        <ComboBoxItem Content="Блокировка экрана"/>
-                        <ComboBoxItem Content="Выход из учётной записи"/>
-                    </ComboBox>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16">
+                        <TextBlock x:Name="LanguageLabel" Text="Language" Style="{StaticResource SectionLabel}"/>
+                        <ComboBox x:Name="LanguageCombo" Width="200" HorizontalAlignment="Left"
+                                  Margin="0,0,0,16" SelectionChanged="Language_Changed">
+                            <ComboBoxItem Content="English" Tag="en"/>
+                            <ComboBoxItem Content="Русский" Tag="ru"/>
+                        </ComboBox>
 
-                    <ui:InfoBar Title="Защита" IsOpen="True" IsClosable="False"
-                                Severity="Informational"
-                                Message="Управление таймером защищено Windows Hello (PIN / отпечаток / лицо)."/>
+                        <TextBlock x:Name="ActionLabel" Text="Action when timer expires" Style="{StaticResource SectionLabel}"/>
+                        <ComboBox x:Name="ActionCombo" Width="220" HorizontalAlignment="Left"
+                                  Margin="0,0,0,16" SelectionChanged="Action_Changed">
+                            <ComboBoxItem x:Name="ActionShutdown" Content="Shut down computer"/>
+                            <ComboBoxItem x:Name="ActionLock" Content="Lock screen"/>
+                            <ComboBoxItem x:Name="ActionLogoff" Content="Log off"/>
+                        </ComboBox>
 
-                    <TextBlock Text="О программе" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
-                    <TextBlock Text="GameTimer v1.0" FontSize="12"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                    <TextBlock Text="Таймер игрового времени для Windows" FontSize="12"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
+                        <ui:InfoBar x:Name="ProtectionInfo" Title="Protection" IsOpen="True" IsClosable="False"
+                                    Severity="Informational"
+                                    Message="Timer controls are protected by Windows Hello (PIN / fingerprint / face)."/>
+
+                        <TextBlock x:Name="AboutLabel" Text="About" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
+                        <TextBlock Text="GameTimer v1.0" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock x:Name="AppDescriptionText" Text="Game time limiter for Windows" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </Grid>

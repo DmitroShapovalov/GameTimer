@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="Tab_Timer" xml:space="preserve">
+    <value>Таймер</value>
+  </data>
+  <data name="Mode" xml:space="preserve">
+    <value>Режим</value>
+  </data>
+  <data name="Mode_Interval" xml:space="preserve">
+    <value>Интервал</value>
+  </data>
+  <data name="Mode_TimeOfDay" xml:space="preserve">
+    <value>Время дня</value>
+  </data>
+  <data name="Hours" xml:space="preserve">
+    <value>Часы:</value>
+  </data>
+  <data name="Minutes" xml:space="preserve">
+    <value>Минуты:</value>
+  </data>
+  <data name="Hour" xml:space="preserve">
+    <value>Час:</value>
+  </data>
+  <data name="Timer_NotStarted" xml:space="preserve">
+    <value>Таймер не запущен</value>
+  </data>
+  <data name="Timer_Started" xml:space="preserve">
+    <value>Таймер запущен</value>
+  </data>
+  <data name="Timer_Stopped" xml:space="preserve">
+    <value>Таймер остановлен</value>
+  </data>
+  <data name="Timer_Expired" xml:space="preserve">
+    <value>Время вышло!</value>
+  </data>
+  <data name="Start" xml:space="preserve">
+    <value>Старт</value>
+  </data>
+  <data name="Stop" xml:space="preserve">
+    <value>Стоп</value>
+  </data>
+  <data name="Reset" xml:space="preserve">
+    <value>Сброс</value>
+  </data>
+  <data name="Tab_Display" xml:space="preserve">
+    <value>Отображение</value>
+  </data>
+  <data name="OverlayPosition" xml:space="preserve">
+    <value>Позиция оверлея (перетащите маркер)</value>
+  </data>
+  <data name="FontSize" xml:space="preserve">
+    <value>Размер шрифта</value>
+  </data>
+  <data name="Opacity" xml:space="preserve">
+    <value>Прозрачность</value>
+  </data>
+  <data name="ShowBackground" xml:space="preserve">
+    <value>Фон за текстом</value>
+  </data>
+  <data name="Thresholds" xml:space="preserve">
+    <value>Пороги (минуты)</value>
+  </data>
+  <data name="WarningFrom" xml:space="preserve">
+    <value>Внимание с:</value>
+  </data>
+  <data name="AlertFrom" xml:space="preserve">
+    <value>Тревога с:</value>
+  </data>
+  <data name="Min" xml:space="preserve">
+    <value>мин</value>
+  </data>
+  <data name="ZoneColors" xml:space="preserve">
+    <value>Цвета зон (нажмите для выбора)</value>
+  </data>
+  <data name="Zone_Normal" xml:space="preserve">
+    <value>Норма</value>
+  </data>
+  <data name="Zone_Warning" xml:space="preserve">
+    <value>Внимание</value>
+  </data>
+  <data name="Zone_Alert" xml:space="preserve">
+    <value>Тревога</value>
+  </data>
+  <data name="Tab_Notifications" xml:space="preserve">
+    <value>Уведомления</value>
+  </data>
+  <data name="AlertPoints" xml:space="preserve">
+    <value>Точки звуковых уведомлений</value>
+  </data>
+  <data name="MinBeforeTimer" xml:space="preserve">
+    <value>мин до таймера</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Добавить</value>
+  </data>
+  <data name="SoundFile" xml:space="preserve">
+    <value>Звуковой файл</value>
+  </data>
+  <data name="BuiltIn" xml:space="preserve">
+    <value>Встроенный</value>
+  </data>
+  <data name="CustomFile" xml:space="preserve">
+    <value>Свой файл</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>Обзор...</value>
+  </data>
+  <data name="Preview" xml:space="preserve">
+    <value>Прослушать</value>
+  </data>
+  <data name="MinPlaceholder" xml:space="preserve">
+    <value>мин</value>
+  </data>
+  <data name="Tab_Settings" xml:space="preserve">
+    <value>Настройки</value>
+  </data>
+  <data name="ActionOnExpiry" xml:space="preserve">
+    <value>Действие по истечении таймера</value>
+  </data>
+  <data name="Action_Shutdown" xml:space="preserve">
+    <value>Выключение компьютера</value>
+  </data>
+  <data name="Action_Lock" xml:space="preserve">
+    <value>Блокировка экрана</value>
+  </data>
+  <data name="Action_Logoff" xml:space="preserve">
+    <value>Выход из учётной записи</value>
+  </data>
+  <data name="Protection" xml:space="preserve">
+    <value>Защита</value>
+  </data>
+  <data name="ProtectionInfo" xml:space="preserve">
+    <value>Управление таймером защищено Windows Hello (PIN / отпечаток / лицо).</value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>О программе</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Таймер игрового времени для Windows</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>Язык</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Ошибка</value>
+  </data>
+  <data name="InvalidTime" xml:space="preserve">
+    <value>Введите корректное время.</value>
+  </data>
+  <data name="InvalidTimeRange" xml:space="preserve">
+    <value>Введите корректное время (0-23 : 0-59).</value>
+  </data>
+  <data name="AlertExists" xml:space="preserve">
+    <value>Такая точка уже существует.</value>
+  </data>
+  <data name="SelectSoundFile" xml:space="preserve">
+    <value>Выберите звуковой файл</value>
+  </data>
+  <data name="AuthPrompt" xml:space="preserve">
+    <value>GameTimer: подтвердите вашу личность</value>
+  </data>
+  <data name="TrayOpen" xml:space="preserve">
+    <value>Открыть</value>
+  </data>
+  <data name="TrayExit" xml:space="preserve">
+    <value>Выход</value>
+  </data>
+  <data name="EnterWindowsPassword" xml:space="preserve">
+    <value>Введите пароль Windows:</value>
+  </data>
+  <data name="PasswordTitle" xml:space="preserve">
+    <value>Аутентификация</value>
+  </data>
+  <data name="WAVFilter" xml:space="preserve">
+    <value>Звуковые файлы|*.wav;*.mp3</value>
+  </data>
+</root>

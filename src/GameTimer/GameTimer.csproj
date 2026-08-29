@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>SystemMonitor</AssemblyName>
-    <ApplicationIcon />
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -25,6 +25,13 @@
     <PackageReference Include="WPF-UI" Version="3.0.5" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\Strings.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Localization\Strings.ru.resx" />
+  </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\notification.mp3" />

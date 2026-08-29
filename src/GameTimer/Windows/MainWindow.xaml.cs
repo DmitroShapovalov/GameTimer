@@ -6,6 +6,7 @@ using System.Windows.Media;
 using Microsoft.Win32;
 using GameTimer.Models;
 using GameTimer.Services;
+using GameTimer.Localization;
 
 namespace GameTimer.Windows;
 
@@ -28,20 +29,112 @@ public partial class MainWindow : FluentWindow
     // Track the last action combo index to revert on failed password
     private int _lastActionIndex;
 
+    // Track timer state for localization
+    private string _timerStateKey = "Timer_NotStarted";
+
     public MainWindow()
     {
         InitializeComponent();
         _settings = _settingsService.Load();
+
+        // Set language before loading UI
+        Loc.SetLanguage(_settings.Language);
+
         _timerService = new TimerService(_settings);
         _timerService.Tick += OnTimerTick;
         _timerService.AlertTriggered += OnAlertTriggered;
         _timerService.TimerExpired += OnTimerExpired;
 
         LoadSettingsToUI();
+        ApplyLocalization();
         SetupTrayIcon();
 
         _isLoading = false;
     }
+
+    #region Localization
+
+    private void ApplyLocalization()
+    {
+        // Tab headers
+        TabTimerText.Text = Loc.Get("Tab_Timer");
+        TabDisplayText.Text = Loc.Get("Tab_Display");
+        TabNotificationsText.Text = Loc.Get("Tab_Notifications");
+        TabSettingsText.Text = Loc.Get("Tab_Settings");
+
+        // Timer tab
+        ModeLabel.Text = Loc.Get("Mode");
+        ModeInterval.Content = Loc.Get("Mode_Interval");
+        ModeAbsolute.Content = Loc.Get("Mode_TimeOfDay");
+        HoursLabel.Text = Loc.Get("Hours");
+        MinutesLabel.Text = Loc.Get("Minutes");
+        HourLabel.Text = Loc.Get("Hour");
+        StartButton.Content = Loc.Get("Start");
+        StopButton.Content = Loc.Get("Stop");
+        ResetButton.Content = Loc.Get("Reset");
+        StatusText.Text = Loc.Get(_timerStateKey);
+
+        // Display tab
+        OverlayPositionLabel.Text = Loc.Get("OverlayPosition");
+        FontSizeSectionLabel.Text = Loc.Get("FontSize");
+        OpacitySectionLabel.Text = Loc.Get("Opacity");
+        ShowBackgroundCheck.Content = Loc.Get("ShowBackground");
+        ThresholdsLabel.Text = Loc.Get("Thresholds");
+        WarningFromLabel.Text = Loc.Get("WarningFrom");
+        AlertFromLabel.Text = Loc.Get("AlertFrom");
+        MinLabel1.Text = Loc.Get("Min");
+        MinLabel2.Text = Loc.Get("Min");
+        ZoneColorsLabel.Text = Loc.Get("ZoneColors");
+        NormalZoneLabel.Text = Loc.Get("Zone_Normal");
+        WarningZoneLabel.Text = Loc.Get("Zone_Warning");
+        AlertZoneLabel.Text = Loc.Get("Zone_Alert");
+
+        // Notifications tab
+        AlertPointsLabel.Text = Loc.Get("AlertPoints");
+        AddButton.Content = Loc.Get("Add");
+        SoundFileLabel.Text = Loc.Get("SoundFile");
+        SoundBuiltIn.Content = Loc.Get("BuiltIn");
+        SoundCustom.Content = Loc.Get("CustomFile");
+        BrowseButton.Content = Loc.Get("Browse");
+        PreviewButton.Content = Loc.Get("Preview");
+        NewAlertMinutes.PlaceholderText = Loc.Get("MinPlaceholder");
+
+        // Refresh alerts list to update "min before timer" text
+        RefreshAlertsList();
+
+        // Settings tab
+        LanguageLabel.Text = Loc.Get("Language");
+        ActionLabel.Text = Loc.Get("ActionOnExpiry");
+        ActionShutdown.Content = Loc.Get("Action_Shutdown");
+        ActionLock.Content = Loc.Get("Action_Lock");
+        ActionLogoff.Content = Loc.Get("Action_Logoff");
+        ProtectionInfo.Title = Loc.Get("Protection");
+        ProtectionInfo.Message = Loc.Get("ProtectionInfo");
+        AboutLabel.Text = Loc.Get("About");
+        AppDescriptionText.Text = Loc.Get("AppDescription");
+
+        // Tray menu
+        UpdateTrayMenu();
+    }
+
+    private void RefreshAlertsList()
+    {
+        AlertsList.ItemsSource = null;
+        AlertsList.ItemsSource = _settings.AlertPoints;
+    }
+
+    private void Language_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading || LanguageCombo.SelectedItem is not ComboBoxItem item) return;
+
+        var lang = item.Tag?.ToString() ?? "en";
+        _settings.Language = lang;
+        Loc.SetLanguage(lang);
+        ApplyLocalization();
+        SaveSettings();
+    }
+
+    #endregion
 
     #region Settings ↔ UI
 
@@ -76,7 +169,6 @@ public partial class MainWindow : FluentWindow
         };
 
         // Notifications tab
-        AlertsList.ItemsSource = null;
         AlertsList.ItemsSource = _settings.AlertPoints;
 
         if (string.IsNullOrEmpty(_settings.CustomSoundPath))
@@ -92,7 +184,18 @@ public partial class MainWindow : FluentWindow
             _soundService.SetCustomSound(_settings.CustomSoundPath);
         }
 
-        // Settings tab
+        // Settings tab - language
+        var langTag = _settings.Language;
+        for (int i = 0; i < LanguageCombo.Items.Count; i++)
+        {
+            if (LanguageCombo.Items[i] is ComboBoxItem ci && ci.Tag?.ToString() == langTag)
+            {
+                LanguageCombo.SelectedIndex = i;
+                break;
+            }
+        }
+
+        // Settings tab - action
         _lastActionIndex = (int)_settings.Action;
         ActionCombo.SelectedIndex = _lastActionIndex;
     }
@@ -139,7 +242,8 @@ public partial class MainWindow : FluentWindow
             if (!int.TryParse(IntervalHours.Text, out var h) || !int.TryParse(IntervalMinutes.Text, out var m)
                 || (h == 0 && m == 0))
             {
-                System.Windows.MessageBox.Show("Введите корректное время.", "Ошибка", System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
+                System.Windows.MessageBox.Show(Loc.Get("InvalidTime"), Loc.Get("Error"),
+                    System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             _timerService.StartInterval(h, m);
@@ -149,7 +253,7 @@ public partial class MainWindow : FluentWindow
             if (!int.TryParse(AbsoluteHour.Text, out var h) || !int.TryParse(AbsoluteMinute.Text, out var m)
                 || h < 0 || h > 23 || m < 0 || m > 59)
             {
-                System.Windows.MessageBox.Show("Введите корректное время (0-23 : 0-59).", "Ошибка",
+                System.Windows.MessageBox.Show(Loc.Get("InvalidTimeRange"), Loc.Get("Error"),
                     System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -158,7 +262,8 @@ public partial class MainWindow : FluentWindow
 
         ShowOverlay();
         UpdateButtonStates(running: true);
-        StatusText.Text = "Таймер запущен";
+        _timerStateKey = "Timer_Started";
+        StatusText.Text = Loc.Get(_timerStateKey);
     }
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
@@ -169,7 +274,8 @@ public partial class MainWindow : FluentWindow
         ShutdownService.CancelShutdown();
         HideOverlay();
         UpdateButtonStates(running: false);
-        StatusText.Text = "Таймер остановлен";
+        _timerStateKey = "Timer_Stopped";
+        StatusText.Text = Loc.Get(_timerStateKey);
         RemainingText.Text = "";
     }
 
@@ -181,7 +287,8 @@ public partial class MainWindow : FluentWindow
         ShutdownService.CancelShutdown();
         HideOverlay();
         UpdateButtonStates(running: false);
-        StatusText.Text = "Таймер не запущен";
+        _timerStateKey = "Timer_NotStarted";
+        StatusText.Text = Loc.Get(_timerStateKey);
         RemainingText.Text = "";
     }
 
@@ -216,7 +323,8 @@ public partial class MainWindow : FluentWindow
     {
         HideOverlay();
         UpdateButtonStates(running: false);
-        StatusText.Text = "Время вышло!";
+        _timerStateKey = "Timer_Expired";
+        StatusText.Text = Loc.Get(_timerStateKey);
         RemainingText.Text = "00:00";
 
         ShutdownService.Execute(_settings.Action);
@@ -354,7 +462,6 @@ public partial class MainWindow : FluentWindow
         _isDragging = false;
         PositionCanvas.ReleaseMouseCapture();
 
-        // Save as percentage (0 = left/top edge, 1 = right/bottom edge)
         var rangeX = PositionCanvas.ActualWidth - PositionMarker.ActualWidth;
         var rangeY = PositionCanvas.ActualHeight - PositionMarker.ActualHeight;
         if (rangeX > 0 && rangeY > 0)
@@ -380,17 +487,16 @@ public partial class MainWindow : FluentWindow
     {
         if (int.TryParse(NewAlertMinutes.Text, out var minutes) && minutes > 0)
         {
-            // Check for duplicates
             if (_settings.AlertPoints.Any(a => a.Minutes == minutes))
             {
-                System.Windows.MessageBox.Show("Такая точка уже существует.", "Ошибка", System.Windows.MessageBoxButton.OK);
+                System.Windows.MessageBox.Show(Loc.Get("AlertExists"), Loc.Get("Error"),
+                    System.Windows.MessageBoxButton.OK);
                 return;
             }
 
             _settings.AlertPoints.Add(new AlertPoint { Minutes = minutes, Enabled = true });
             _settings.AlertPoints = _settings.AlertPoints.OrderByDescending(a => a.Minutes).ToList();
-            AlertsList.ItemsSource = null;
-            AlertsList.ItemsSource = _settings.AlertPoints;
+            RefreshAlertsList();
             NewAlertMinutes.Clear();
             SaveSettings();
         }
@@ -401,8 +507,7 @@ public partial class MainWindow : FluentWindow
         if (sender is FrameworkElement fe && fe.Tag is AlertPoint alert)
         {
             _settings.AlertPoints.Remove(alert);
-            AlertsList.ItemsSource = null;
-            AlertsList.ItemsSource = _settings.AlertPoints;
+            RefreshAlertsList();
             SaveSettings();
         }
     }
@@ -426,8 +531,8 @@ public partial class MainWindow : FluentWindow
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Filter = "WAV files (*.wav)|*.wav",
-            Title = "Выберите звуковой файл"
+            Filter = Loc.Get("WAVFilter"),
+            Title = Loc.Get("SelectSoundFile")
         };
 
         if (dialog.ShowDialog() == true)
@@ -457,7 +562,6 @@ public partial class MainWindow : FluentWindow
 
         if (!await RequireAuth())
         {
-            // Revert selection
             _isLoading = true;
             ActionCombo.SelectedIndex = _lastActionIndex;
             _isLoading = false;
@@ -486,26 +590,28 @@ public partial class MainWindow : FluentWindow
         using var g = System.Drawing.Graphics.FromImage(bitmap);
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(System.Drawing.Color.Transparent);
-        // Bell legs
         var legPen = new System.Drawing.Pen(System.Drawing.Color.White, 2f);
         g.DrawLine(legPen, 7, 5, 10, 8);
         g.DrawLine(legPen, 25, 5, 22, 8);
-        // Clock body
         g.FillEllipse(new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(0, 120, 212)), 6, 6, 20, 20);
         g.DrawEllipse(new System.Drawing.Pen(System.Drawing.Color.White, 1.5f), 6, 6, 20, 20);
-        // Clock hands
         var handPen = new System.Drawing.Pen(System.Drawing.Color.White, 2f);
-        g.DrawLine(handPen, 16, 16, 16, 10); // hour
-        g.DrawLine(handPen, 16, 16, 21, 16); // minute
-        // Clapper
+        g.DrawLine(handPen, 16, 16, 16, 10);
+        g.DrawLine(handPen, 16, 16, 21, 16);
         g.FillEllipse(System.Drawing.Brushes.White, 14, 26, 4, 4);
         _trayIcon.Icon = System.Drawing.Icon.FromHandle(bitmap.GetHicon());
 
-        var menu = new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add("Открыть", null, (_, _) => ShowFromTray());
-        menu.Items.Add("Выход", null, (_, _) => TrayExit());
-        _trayIcon.ContextMenuStrip = menu;
+        UpdateTrayMenu();
         _trayIcon.DoubleClick += (_, _) => ShowFromTray();
+    }
+
+    private void UpdateTrayMenu()
+    {
+        if (_trayIcon == null) return;
+        var menu = new System.Windows.Forms.ContextMenuStrip();
+        menu.Items.Add(Loc.Get("TrayOpen"), null, (_, _) => ShowFromTray());
+        menu.Items.Add(Loc.Get("TrayExit"), null, (_, _) => TrayExit());
+        _trayIcon.ContextMenuStrip = menu;
     }
 
     private void ShowFromTray()
@@ -540,7 +646,6 @@ public partial class MainWindow : FluentWindow
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
-        // Always minimize to tray — exit only via tray menu
         e.Cancel = true;
         Hide();
         if (_trayIcon != null) _trayIcon.Visible = true;
@@ -558,13 +663,12 @@ public partial class MainWindow : FluentWindow
             if (availability == global::Windows.Security.Credentials.UI.UserConsentVerifierAvailability.Available)
             {
                 var result = await global::Windows.Security.Credentials.UI.UserConsentVerifier.RequestVerificationAsync(
-                    "GameTimer: подтвердите вашу личность");
+                    Loc.Get("AuthPrompt"));
                 return result == global::Windows.Security.Credentials.UI.UserConsentVerificationResult.Verified;
             }
         }
         catch { }
 
-        // Fallback: password dialog with Windows account validation
         var dialog = new PasswordDialog { Owner = this };
         return dialog.ShowDialog() == true;
     }

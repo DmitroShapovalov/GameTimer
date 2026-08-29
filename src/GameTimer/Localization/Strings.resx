@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="Tab_Timer" xml:space="preserve">
+    <value>Timer</value>
+  </data>
+  <data name="Mode" xml:space="preserve">
+    <value>Mode</value>
+  </data>
+  <data name="Mode_Interval" xml:space="preserve">
+    <value>Interval</value>
+  </data>
+  <data name="Mode_TimeOfDay" xml:space="preserve">
+    <value>Time of day</value>
+  </data>
+  <data name="Hours" xml:space="preserve">
+    <value>Hours:</value>
+  </data>
+  <data name="Minutes" xml:space="preserve">
+    <value>Minutes:</value>
+  </data>
+  <data name="Hour" xml:space="preserve">
+    <value>Hour:</value>
+  </data>
+  <data name="Timer_NotStarted" xml:space="preserve">
+    <value>Timer not started</value>
+  </data>
+  <data name="Timer_Started" xml:space="preserve">
+    <value>Timer running</value>
+  </data>
+  <data name="Timer_Stopped" xml:space="preserve">
+    <value>Timer stopped</value>
+  </data>
+  <data name="Timer_Expired" xml:space="preserve">
+    <value>Time's up!</value>
+  </data>
+  <data name="Start" xml:space="preserve">
+    <value>Start</value>
+  </data>
+  <data name="Stop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="Reset" xml:space="preserve">
+    <value>Reset</value>
+  </data>
+  <data name="Tab_Display" xml:space="preserve">
+    <value>Display</value>
+  </data>
+  <data name="OverlayPosition" xml:space="preserve">
+    <value>Overlay position (drag the marker)</value>
+  </data>
+  <data name="FontSize" xml:space="preserve">
+    <value>Font size</value>
+  </data>
+  <data name="Opacity" xml:space="preserve">
+    <value>Opacity</value>
+  </data>
+  <data name="ShowBackground" xml:space="preserve">
+    <value>Background behind text</value>
+  </data>
+  <data name="Thresholds" xml:space="preserve">
+    <value>Thresholds (minutes)</value>
+  </data>
+  <data name="WarningFrom" xml:space="preserve">
+    <value>Warning:</value>
+  </data>
+  <data name="AlertFrom" xml:space="preserve">
+    <value>Alert:</value>
+  </data>
+  <data name="Min" xml:space="preserve">
+    <value>min</value>
+  </data>
+  <data name="ZoneColors" xml:space="preserve">
+    <value>Zone colors (click to choose)</value>
+  </data>
+  <data name="Zone_Normal" xml:space="preserve">
+    <value>Normal</value>
+  </data>
+  <data name="Zone_Warning" xml:space="preserve">
+    <value>Warning</value>
+  </data>
+  <data name="Zone_Alert" xml:space="preserve">
+    <value>Alert</value>
+  </data>
+  <data name="Tab_Notifications" xml:space="preserve">
+    <value>Notifications</value>
+  </data>
+  <data name="AlertPoints" xml:space="preserve">
+    <value>Sound alert points</value>
+  </data>
+  <data name="MinBeforeTimer" xml:space="preserve">
+    <value>min before timer</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="SoundFile" xml:space="preserve">
+    <value>Sound file</value>
+  </data>
+  <data name="BuiltIn" xml:space="preserve">
+    <value>Built-in</value>
+  </data>
+  <data name="CustomFile" xml:space="preserve">
+    <value>Custom file</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>Browse...</value>
+  </data>
+  <data name="Preview" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="MinPlaceholder" xml:space="preserve">
+    <value>min</value>
+  </data>
+  <data name="Tab_Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="ActionOnExpiry" xml:space="preserve">
+    <value>Action when timer expires</value>
+  </data>
+  <data name="Action_Shutdown" xml:space="preserve">
+    <value>Shut down computer</value>
+  </data>
+  <data name="Action_Lock" xml:space="preserve">
+    <value>Lock screen</value>
+  </data>
+  <data name="Action_Logoff" xml:space="preserve">
+    <value>Log off</value>
+  </data>
+  <data name="Protection" xml:space="preserve">
+    <value>Protection</value>
+  </data>
+  <data name="ProtectionInfo" xml:space="preserve">
+    <value>Timer controls are protected by Windows Hello (PIN / fingerprint / face).</value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Game time limiter for Windows</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="InvalidTime" xml:space="preserve">
+    <value>Please enter a valid time.</value>
+  </data>
+  <data name="InvalidTimeRange" xml:space="preserve">
+    <value>Please enter a valid time (0-23 : 0-59).</value>
+  </data>
+  <data name="AlertExists" xml:space="preserve">
+    <value>This alert point already exists.</value>
+  </data>
+  <data name="SelectSoundFile" xml:space="preserve">
+    <value>Select a sound file</value>
+  </data>
+  <data name="AuthPrompt" xml:space="preserve">
+    <value>GameTimer: confirm your identity</value>
+  </data>
+  <data name="TrayOpen" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="TrayExit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="EnterWindowsPassword" xml:space="preserve">
+    <value>Enter Windows password:</value>
+  </data>
+  <data name="PasswordTitle" xml:space="preserve">
+    <value>Authentication</value>
+  </data>
+  <data name="WAVFilter" xml:space="preserve">
+    <value>Sound files|*.wav;*.mp3</value>
+  </data>
+</root>

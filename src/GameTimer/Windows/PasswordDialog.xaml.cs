@@ -3,6 +3,7 @@ using Wpf.Ui.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using GameTimer.Helpers;
+using GameTimer.Localization;
 
 namespace GameTimer.Windows;
 
@@ -13,8 +14,17 @@ public partial class PasswordDialog : FluentWindow
     public PasswordDialog()
     {
         InitializeComponent();
+        ApplyLocalization();
         Loaded += (_, _) => PasswordInput.Focus();
         CheckLockout();
+    }
+
+    private void ApplyLocalization()
+    {
+        Title = Loc.Get("PasswordTitle");
+        DialogTitleBar.Title = Loc.Get("PasswordTitle");
+        PromptText.Text = Loc.Get("EnterWindowsPassword");
+        CancelButton.Content = Loc.CurrentLanguage == "ru" ? "Отмена" : "Cancel";
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e) => TryValidate();
@@ -55,7 +65,8 @@ public partial class PasswordDialog : FluentWindow
             }
             else
             {
-                ShowError("Неверный пароль");
+                var msg = Loc.CurrentLanguage == "ru" ? "Неверный пароль" : "Wrong password";
+                ShowError(msg);
             }
         }
     }
@@ -65,7 +76,10 @@ public partial class PasswordDialog : FluentWindow
         if (PasswordHelper.IsLockedOut)
         {
             var seconds = (int)PasswordHelper.LockoutRemaining.TotalSeconds;
-            ShowError($"Слишком много попыток. Подождите {seconds} сек.");
+            var msg = Loc.CurrentLanguage == "ru"
+                ? $"Слишком много попыток. Подождите {seconds} сек."
+                : $"Too many attempts. Wait {seconds} sec.";
+            ShowError(msg);
             PasswordInput.IsEnabled = false;
         }
         else
@@ -88,8 +102,7 @@ public partial class PasswordDialog : FluentWindow
             }
             else
             {
-                var seconds = (int)PasswordHelper.LockoutRemaining.TotalSeconds;
-                ShowError($"Слишком много попыток. Подождите {seconds} сек.");
+                CheckLockout();
             }
         };
         _lockoutTimer.Start();
