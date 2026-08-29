@@ -1,0 +1,45 @@
+<Window x:Class="GameTimer.Windows.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <Storyboard x:Key="PulseAnimation">
+            <DoubleAnimation Storyboard.TargetName="TimerScale"
+                             Storyboard.TargetProperty="ScaleX"
+                             From="1.0" To="1.3" Duration="0:0:0.3"
+                             AutoReverse="True" RepeatBehavior="2x"/>
+            <DoubleAnimation Storyboard.TargetName="TimerScale"
+                             Storyboard.TargetProperty="ScaleY"
+                             From="1.0" To="1.3" Duration="0:0:0.3"
+                             AutoReverse="True" RepeatBehavior="2x"/>
+            <DoubleAnimation Storyboard.TargetName="TimerContainer"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0.7" To="1.0" Duration="0:0:0.3"
+                             AutoReverse="True" RepeatBehavior="2x"/>
+        </Storyboard>
+    </Window.Resources>
+
+    <Border x:Name="TimerContainer"
+            CornerRadius="6"
+            Padding="10,4,10,4"
+            RenderTransformOrigin="0.5,0.5">
+        <Border.RenderTransform>
+            <ScaleTransform x:Name="TimerScale" ScaleX="1" ScaleY="1"/>
+        </Border.RenderTransform>
+
+        <TextBlock x:Name="TimerText"
+                   Text="00:00"
+                   FontFamily="Consolas, Courier New"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"/>
+    </Border>
+</Window>
