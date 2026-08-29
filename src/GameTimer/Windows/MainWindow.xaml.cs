@@ -1,4 +1,5 @@
 using System.Windows;
+using Wpf.Ui.Controls;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -8,7 +9,7 @@ using GameTimer.Services;
 
 namespace GameTimer.Windows;
 
-public partial class MainWindow : Window
+public partial class MainWindow : FluentWindow
 {
     private readonly SettingsService _settingsService = new();
     private readonly SoundService _soundService = new();
@@ -63,9 +64,6 @@ public partial class MainWindow : Window
         ShowBackgroundCheck.IsChecked = _settings.ShowBackground;
         YellowThreshold.Text = _settings.YellowThreshold.ToString();
         RedThreshold.Text = _settings.RedThreshold.ToString();
-        GreenColor.Text = _settings.ColorGreen;
-        YellowColor.Text = _settings.ColorYellow;
-        RedColor.Text = _settings.ColorRed;
         UpdateColorPreviews();
 
         // Position marker (deferred until canvas has actual size)
@@ -141,7 +139,7 @@ public partial class MainWindow : Window
             if (!int.TryParse(IntervalHours.Text, out var h) || !int.TryParse(IntervalMinutes.Text, out var m)
                 || (h == 0 && m == 0))
             {
-                System.Windows.MessageBox.Show("Введите корректное время.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                System.Windows.MessageBox.Show("Введите корректное время.", "Ошибка", System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             _timerService.StartInterval(h, m);
@@ -152,7 +150,7 @@ public partial class MainWindow : Window
                 || h < 0 || h > 23 || m < 0 || m > 59)
             {
                 System.Windows.MessageBox.Show("Введите корректное время (0-23 : 0-59).", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                    System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             _timerService.StartAbsolute(h, m);
@@ -163,9 +161,9 @@ public partial class MainWindow : Window
         StatusText.Text = "Таймер запущен";
     }
 
-    private void Stop_Click(object sender, RoutedEventArgs e)
+    private async void Stop_Click(object sender, RoutedEventArgs e)
     {
-        if (!RequirePassword()) return;
+        if (!await RequireAuth()) return;
 
         _timerService.Stop();
         ShutdownService.CancelShutdown();
@@ -175,9 +173,9 @@ public partial class MainWindow : Window
         RemainingText.Text = "";
     }
 
-    private void Reset_Click(object sender, RoutedEventArgs e)
+    private async void Reset_Click(object sender, RoutedEventArgs e)
     {
-        if (!RequirePassword()) return;
+        if (!await RequireAuth()) return;
 
         _timerService.Stop();
         ShutdownService.CancelShutdown();
@@ -281,21 +279,11 @@ public partial class MainWindow : Window
         SaveSettings();
     }
 
-    private void Color_Changed(object sender, TextChangedEventArgs e)
-    {
-        if (_isLoading) return;
-        _settings.ColorGreen = GreenColor.Text;
-        _settings.ColorYellow = YellowColor.Text;
-        _settings.ColorRed = RedColor.Text;
-        UpdateColorPreviews();
-        SaveSettings();
-    }
-
     private void UpdateColorPreviews()
     {
-        TrySetBackground(GreenPreview, GreenColor.Text);
-        TrySetBackground(YellowPreview, YellowColor.Text);
-        TrySetBackground(RedPreview, RedColor.Text);
+        TrySetBackground(GreenPreview, _settings.ColorGreen);
+        TrySetBackground(YellowPreview, _settings.ColorYellow);
+        TrySetBackground(RedPreview, _settings.ColorRed);
     }
 
     private static void TrySetBackground(Border border, string hex)
@@ -306,6 +294,37 @@ public partial class MainWindow : Window
             border.Background = new SolidColorBrush(color);
         }
         catch { }
+    }
+
+    private void ColorPicker_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_isLoading || sender is not Border border) return;
+
+        string currentHex;
+        if (border == GreenPreview) currentHex = _settings.ColorGreen;
+        else if (border == YellowPreview) currentHex = _settings.ColorYellow;
+        else currentHex = _settings.ColorRed;
+
+        var dialog = new System.Windows.Forms.ColorDialog();
+        try
+        {
+            var c = (Color)ColorConverter.ConvertFromString(currentHex);
+            dialog.Color = System.Drawing.Color.FromArgb(c.R, c.G, c.B);
+        }
+        catch { }
+        dialog.FullOpen = true;
+
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        {
+            var hex = $"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}";
+            if (border == GreenPreview) _settings.ColorGreen = hex;
+            else if (border == YellowPreview) _settings.ColorYellow = hex;
+            else _settings.ColorRed = hex;
+
+            UpdateColorPreviews();
+            _overlay?.ApplySettings(_settings);
+            SaveSettings();
+        }
     }
 
     // Position marker drag
@@ -364,7 +383,7 @@ public partial class MainWindow : Window
             // Check for duplicates
             if (_settings.AlertPoints.Any(a => a.Minutes == minutes))
             {
-                System.Windows.MessageBox.Show("Такая точка уже существует.", "Ошибка", MessageBoxButton.OK);
+                System.Windows.MessageBox.Show("Такая точка уже существует.", "Ошибка", System.Windows.MessageBoxButton.OK);
                 return;
             }
 
@@ -379,9 +398,9 @@ public partial class MainWindow : Window
 
     private void RemoveAlert_Click(object sender, RoutedEventArgs e)
     {
-        if (AlertsList.SelectedItem is AlertPoint selected)
+        if (sender is FrameworkElement fe && fe.Tag is AlertPoint alert)
         {
-            _settings.AlertPoints.Remove(selected);
+            _settings.AlertPoints.Remove(alert);
             AlertsList.ItemsSource = null;
             AlertsList.ItemsSource = _settings.AlertPoints;
             SaveSettings();
@@ -429,14 +448,14 @@ public partial class MainWindow : Window
 
     #region Settings Tab
 
-    private void Action_Changed(object sender, SelectionChangedEventArgs e)
+    private async void Action_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_isLoading || ActionCombo.SelectedIndex < 0) return;
 
         int newIndex = ActionCombo.SelectedIndex;
         if (newIndex == _lastActionIndex) return;
 
-        if (!RequirePassword())
+        if (!await RequireAuth())
         {
             // Revert selection
             _isLoading = true;
@@ -462,11 +481,24 @@ public partial class MainWindow : Window
             Visible = false
         };
 
-        // Create a simple icon programmatically
-        using var bitmap = new System.Drawing.Bitmap(16, 16);
+        // Draw alarm clock icon
+        using var bitmap = new System.Drawing.Bitmap(32, 32);
         using var g = System.Drawing.Graphics.FromImage(bitmap);
-        g.Clear(System.Drawing.Color.FromArgb(76, 175, 80));
-        g.FillEllipse(System.Drawing.Brushes.White, 3, 3, 10, 10);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(System.Drawing.Color.Transparent);
+        // Bell legs
+        var legPen = new System.Drawing.Pen(System.Drawing.Color.White, 2f);
+        g.DrawLine(legPen, 7, 5, 10, 8);
+        g.DrawLine(legPen, 25, 5, 22, 8);
+        // Clock body
+        g.FillEllipse(new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(0, 120, 212)), 6, 6, 20, 20);
+        g.DrawEllipse(new System.Drawing.Pen(System.Drawing.Color.White, 1.5f), 6, 6, 20, 20);
+        // Clock hands
+        var handPen = new System.Drawing.Pen(System.Drawing.Color.White, 2f);
+        g.DrawLine(handPen, 16, 16, 16, 10); // hour
+        g.DrawLine(handPen, 16, 16, 21, 16); // minute
+        // Clapper
+        g.FillEllipse(System.Drawing.Brushes.White, 14, 26, 4, 4);
         _trayIcon.Icon = System.Drawing.Icon.FromHandle(bitmap.GetHicon());
 
         var menu = new System.Windows.Forms.ContextMenuStrip();
@@ -484,11 +516,11 @@ public partial class MainWindow : Window
         if (_trayIcon != null) _trayIcon.Visible = false;
     }
 
-    private void TrayExit()
+    private async void TrayExit()
     {
         if (_timerService.IsRunning)
         {
-            if (!RequirePassword()) return;
+            if (!await RequireAuth()) return;
             _timerService.Stop();
             ShutdownService.CancelShutdown();
         }
@@ -508,36 +540,31 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_timerService.IsRunning)
-        {
-            // If timer is running, minimize to tray instead of closing
-            e.Cancel = true;
-            Hide();
-            if (_trayIcon != null) _trayIcon.Visible = true;
-            return;
-        }
-
-        // If timer is not running, require password to close
-        if (!RequirePassword())
-        {
-            e.Cancel = true;
-            return;
-        }
-
-        HideOverlay();
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = false;
-            _trayIcon.Dispose();
-        }
+        // Always minimize to tray — exit only via tray menu
+        e.Cancel = true;
+        Hide();
+        if (_trayIcon != null) _trayIcon.Visible = true;
     }
 
     #endregion
 
-    #region Password
+    #region Authentication
 
-    private bool RequirePassword()
+    private async Task<bool> RequireAuth()
     {
+        try
+        {
+            var availability = await global::Windows.Security.Credentials.UI.UserConsentVerifier.CheckAvailabilityAsync();
+            if (availability == global::Windows.Security.Credentials.UI.UserConsentVerifierAvailability.Available)
+            {
+                var result = await global::Windows.Security.Credentials.UI.UserConsentVerifier.RequestVerificationAsync(
+                    "GameTimer: подтвердите вашу личность");
+                return result == global::Windows.Security.Credentials.UI.UserConsentVerificationResult.Verified;
+            }
+        }
+        catch { }
+
+        // Fallback: password dialog with Windows account validation
         var dialog = new PasswordDialog { Owner = this };
         return dialog.ShowDialog() == true;
     }

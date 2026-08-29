@@ -1,11 +1,12 @@
 using System.Windows;
+using Wpf.Ui.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using GameTimer.Helpers;
 
 namespace GameTimer.Windows;
 
-public partial class PasswordDialog : Window
+public partial class PasswordDialog : FluentWindow
 {
     private DispatcherTimer? _lockoutTimer;
 
