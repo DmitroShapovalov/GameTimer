@@ -27,10 +27,9 @@
 
 
   <ItemGroup>
-    <EmbeddedResource Include="Localization\Strings.resx">
+    <EmbeddedResource Update="Localization\Strings.resx">
       <Generator>PublicResXFileCodeGenerator</Generator>
     </EmbeddedResource>
-    <EmbeddedResource Include="Localization\Strings.ru.resx" />
   </ItemGroup>
 
   <ItemGroup>

@@ -50,6 +50,7 @@ public partial class MainWindow : FluentWindow
         SetupTrayIcon();
 
         _isLoading = false;
+        ValidateTimerInput();
     }
 
     #region Localization
@@ -208,6 +209,49 @@ public partial class MainWindow : FluentWindow
 
     #endregion
 
+
+    private static int ParseInt(string text, int fallback = 0)
+    {
+        return int.TryParse(text, out var val) ? val : fallback;
+    }
+
+    private void ValidateTimerInput()
+    {
+        if (_isLoading) return;
+
+        string? error = null;
+        bool isInterval = ModeInterval.IsChecked == true;
+
+        if (isInterval)
+        {
+            int h = ParseInt(IntervalHours.Text);
+            int m = ParseInt(IntervalMinutes.Text);
+            if (h < 0 || m < 0 || m > 59)
+                error = Loc.Get("InvalidTime");
+            else if (h == 0 && m == 0)
+                error = Loc.Get("InvalidTime");
+        }
+        else
+        {
+            int h = ParseInt(AbsoluteHour.Text, -1);
+            int m = ParseInt(AbsoluteMinute.Text, -1);
+            if (h < 0 || h > 23 || m < 0 || m > 59)
+                error = Loc.Get("InvalidTimeRange");
+        }
+
+        if (error != null)
+        {
+            ValidationText.Text = error;
+            ValidationText.Visibility = Visibility.Visible;
+            StartButton.IsEnabled = false;
+        }
+        else
+        {
+            ValidationText.Visibility = Visibility.Collapsed;
+            if (!_timerService.IsRunning)
+                StartButton.IsEnabled = true;
+        }
+    }
     #region Timer Tab
 
     private void Mode_Changed(object sender, RoutedEventArgs e)
@@ -220,17 +264,19 @@ public partial class MainWindow : FluentWindow
 
         _settings.LastMode = isInterval ? TimerMode.Interval : TimerMode.Absolute;
         SaveSettings();
+        ValidateTimerInput();
     }
 
     private void TimerInput_Changed(object sender, TextChangedEventArgs e)
     {
         if (_isLoading) return;
 
-        if (int.TryParse(IntervalHours.Text, out var ih)) _settings.LastIntervalHours = ih;
-        if (int.TryParse(IntervalMinutes.Text, out var im)) _settings.LastIntervalMinutes = im;
-        if (int.TryParse(AbsoluteHour.Text, out var ah)) _settings.LastAbsoluteHour = ah;
-        if (int.TryParse(AbsoluteMinute.Text, out var am)) _settings.LastAbsoluteMinute = am;
+        _settings.LastIntervalHours = ParseInt(IntervalHours.Text);
+        _settings.LastIntervalMinutes = ParseInt(IntervalMinutes.Text);
+        _settings.LastAbsoluteHour = ParseInt(AbsoluteHour.Text);
+        _settings.LastAbsoluteMinute = ParseInt(AbsoluteMinute.Text);
         SaveSettings();
+        ValidateTimerInput();
     }
 
     private void Start_Click(object sender, RoutedEventArgs e)
@@ -239,27 +285,20 @@ public partial class MainWindow : FluentWindow
 
         if (ModeInterval.IsChecked == true)
         {
-            if (!int.TryParse(IntervalHours.Text, out var h) || !int.TryParse(IntervalMinutes.Text, out var m)
-                || (h == 0 && m == 0))
-            {
-                System.Windows.MessageBox.Show(Loc.Get("InvalidTime"), Loc.Get("Error"),
-                    System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+            int h = ParseInt(IntervalHours.Text);
+            int m = ParseInt(IntervalMinutes.Text);
+            if (h == 0 && m == 0) { ValidateTimerInput(); return; }
             _timerService.StartInterval(h, m);
         }
         else
         {
-            if (!int.TryParse(AbsoluteHour.Text, out var h) || !int.TryParse(AbsoluteMinute.Text, out var m)
-                || h < 0 || h > 23 || m < 0 || m > 59)
-            {
-                System.Windows.MessageBox.Show(Loc.Get("InvalidTimeRange"), Loc.Get("Error"),
-                    System.Windows.MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+            int h = ParseInt(AbsoluteHour.Text, -1);
+            int m = ParseInt(AbsoluteMinute.Text, -1);
+            if (h < 0 || h > 23 || m < 0 || m > 59) { ValidateTimerInput(); return; }
             _timerService.StartAbsolute(h, m);
         }
 
+        ValidationText.Visibility = Visibility.Collapsed;
         ShowOverlay();
         UpdateButtonStates(running: true);
         _timerStateKey = "Timer_Started";

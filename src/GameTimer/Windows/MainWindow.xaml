@@ -46,22 +46,25 @@
 
                     <StackPanel x:Name="IntervalPanel" Orientation="Horizontal" Margin="0,0,0,12">
                         <TextBlock x:Name="HoursLabel" Text="Hours:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ui:TextBox x:Name="IntervalHours" Width="60" Text="1" VerticalAlignment="Center"
+                        <ui:TextBox x:Name="IntervalHours" Width="80" Text="1" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                         <TextBlock x:Name="MinutesLabel" Text="Minutes:" VerticalAlignment="Center" Margin="16,0,6,0"/>
-                        <ui:TextBox x:Name="IntervalMinutes" Width="60" Text="0" VerticalAlignment="Center"
+                        <ui:TextBox x:Name="IntervalMinutes" Width="80" Text="0" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                     </StackPanel>
 
                     <StackPanel x:Name="AbsolutePanel" Orientation="Horizontal" Margin="0,0,0,12"
                                 Visibility="Collapsed">
                         <TextBlock x:Name="HourLabel" Text="Hour:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ui:TextBox x:Name="AbsoluteHour" Width="60" Text="20" VerticalAlignment="Center"
+                        <ui:TextBox x:Name="AbsoluteHour" Width="80" Text="20" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                         <TextBlock Text=":" VerticalAlignment="Center" Margin="4,0,4,0" FontWeight="Bold"/>
-                        <ui:TextBox x:Name="AbsoluteMinute" Width="60" Text="00" VerticalAlignment="Center"
+                        <ui:TextBox x:Name="AbsoluteMinute" Width="80" Text="00" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                     </StackPanel>
+
+                    <TextBlock x:Name="ValidationText" Text="" FontSize="12"
+                               Foreground="#FF6B6B" Margin="0,0,0,4" Visibility="Collapsed"/>
 
                     <ui:Card Margin="0,4,0,12">
                         <StackPanel>
