@@ -51,6 +51,9 @@ public partial class MainWindow : FluentWindow
 
         _isLoading = false;
         ValidateTimerInput();
+
+        Loaded += (_, _) => FocusTimeInput();
+        StartButton.ToolTip = "Enter";
     }
 
     #region Localization
@@ -252,6 +255,123 @@ public partial class MainWindow : FluentWindow
                 StartButton.IsEnabled = true;
         }
     }
+    #region Keyboard
+
+    private void FocusTimeInput()
+    {
+        if (MainTabs.SelectedIndex != 0 || _timerService.IsRunning) return;
+        var target = ModeInterval.IsChecked == true ? IntervalHours : AbsoluteHour;
+        Dispatcher.BeginInvoke(() => { target.Focus(); Keyboard.Focus(target); target.SelectAll(); },
+            System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+
+        // Ctrl+1..4 — switch tabs
+        if (ctrl)
+        {
+            int tab = e.Key switch
+            {
+                Key.D1 or Key.NumPad1 => 0,
+                Key.D2 or Key.NumPad2 => 1,
+                Key.D3 or Key.NumPad3 => 2,
+                Key.D4 or Key.NumPad4 => 3,
+                _ => -1
+            };
+            if (tab >= 0)
+            {
+                MainTabs.SelectedIndex = tab;
+                if (tab == 0) FocusTimeInput();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // Esc — hide to tray (unless a dropdown is open: then Esc just closes it)
+        if (e.Key == Key.Escape && !LanguageCombo.IsDropDownOpen && !ActionCombo.IsDropDownOpen)
+        {
+            Close(); // Window_Closing turns this into "minimize to tray"
+            e.Handled = true;
+            return;
+        }
+
+        // Enter on the Timer tab — start the timer.
+        // Buttons keep their own Enter behaviour, so focus on Stop/Reset isn't hijacked.
+        if (e.Key == Key.Enter && MainTabs.SelectedIndex == 0
+            && Keyboard.FocusedElement is not System.Windows.Controls.Button)
+        {
+            if (StartButton.IsEnabled)
+                Start_Click(StartButton, new RoutedEventArgs());
+            else
+                ValidateTimerInput();
+            e.Handled = true;
+        }
+    }
+
+    private (int min, int max, bool wrap) GetRange(object sender)
+    {
+        if (sender == IntervalHours) return (0, 23, false);
+        if (sender == AbsoluteHour) return (0, 23, true);
+        return (0, 59, true); // minutes
+    }
+
+    // Up/Down — change value by 1, Shift+Up/Down — by 10
+    private void TimeInput_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.TextBox box) return;
+        if (e.Key != Key.Up && e.Key != Key.Down) return;
+
+        var (min, max, wrap) = GetRange(sender);
+        int step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
+        int value = ParseInt(box.Text) + (e.Key == Key.Up ? step : -step);
+
+        if (wrap)
+        {
+            int span = max - min + 1;
+            value = ((value - min) % span + span) % span + min;
+        }
+        else
+        {
+            value = Math.Clamp(value, min, max);
+        }
+
+        box.Text = sender == AbsoluteMinute ? value.ToString("D2") : value.ToString();
+        box.SelectAll();
+        e.Handled = true;
+    }
+
+    // Digits only. In "time of day" mode typing ":" in the hour field jumps to minutes.
+    private void TimeInput_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (e.Text is ":" or "." or ",")
+        {
+            if (sender == AbsoluteHour) { AbsoluteMinute.Focus(); AbsoluteMinute.SelectAll(); }
+            else if (sender == IntervalHours) { IntervalMinutes.Focus(); IntervalMinutes.SelectAll(); }
+            e.Handled = true;
+            return;
+        }
+        e.Handled = !e.Text.All(char.IsDigit);
+    }
+
+    // Selecting all on focus lets the user just type a new value over the old one
+    private void TimeInput_GotFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.TextBox box)
+            Dispatcher.BeginInvoke(box.SelectAll, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    // Enter in the "new alert" field — add the alert point
+    private void NewAlertMinutes_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        AddAlert_Click(sender, new RoutedEventArgs());
+        e.Handled = true;
+    }
+
+    #endregion
+
     #region Timer Tab
 
     private void Mode_Changed(object sender, RoutedEventArgs e)
@@ -265,6 +385,7 @@ public partial class MainWindow : FluentWindow
         _settings.LastMode = isInterval ? TimerMode.Interval : TimerMode.Absolute;
         SaveSettings();
         ValidateTimerInput();
+        FocusTimeInput();
     }
 
     private void TimerInput_Changed(object sender, TextChangedEventArgs e)
@@ -653,12 +774,27 @@ public partial class MainWindow : FluentWindow
         _trayIcon.ContextMenuStrip = menu;
     }
 
-    private void ShowFromTray()
+    private void ShowFromTray() => BringToFront();
+
+    /// <summary>
+    /// Shows the window from the tray / minimized state and brings it to the foreground.
+    /// Called when the user launches a second copy of the app.
+    /// </summary>
+    public void BringToFront()
     {
         Show();
-        WindowState = WindowState.Normal;
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+
+        // Windows refuses a plain Activate() from a background process;
+        // a short topmost flip reliably brings the window forward.
+        Topmost = true;
         Activate();
+        Topmost = false;
+        Focus();
+
         if (_trayIcon != null) _trayIcon.Visible = false;
+        FocusTimeInput();
     }
 
     private async void TrayExit()

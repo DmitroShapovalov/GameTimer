@@ -7,7 +7,8 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         ExtendsContentIntoTitleBar="True"
-        Closing="Window_Closing">
+        Closing="Window_Closing"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
         <Style x:Key="SectionLabel" TargetType="TextBlock">
@@ -25,7 +26,7 @@
 
         <ui:TitleBar Grid.Row="0" Title="GameTimer"/>
 
-        <TabControl Grid.Row="1" Margin="16,0,16,12">
+        <TabControl x:Name="MainTabs" Grid.Row="1" Margin="16,0,16,12">
 
             <!-- TAB: Timer -->
             <TabItem>
@@ -46,20 +47,28 @@
 
                     <StackPanel x:Name="IntervalPanel" Orientation="Horizontal" Margin="0,0,0,12">
                         <TextBlock x:Name="HoursLabel" Text="Hours:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ui:TextBox x:Name="IntervalHours" Width="80" Text="1" VerticalAlignment="Center"
+                        <ui:TextBox x:Name="IntervalHours" Width="80"
+                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
+                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="1" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                         <TextBlock x:Name="MinutesLabel" Text="Minutes:" VerticalAlignment="Center" Margin="16,0,6,0"/>
-                        <ui:TextBox x:Name="IntervalMinutes" Width="80" Text="0" VerticalAlignment="Center"
+                        <ui:TextBox x:Name="IntervalMinutes" Width="80"
+                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
+                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="0" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                     </StackPanel>
 
                     <StackPanel x:Name="AbsolutePanel" Orientation="Horizontal" Margin="0,0,0,12"
                                 Visibility="Collapsed">
                         <TextBlock x:Name="HourLabel" Text="Hour:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ui:TextBox x:Name="AbsoluteHour" Width="80" Text="20" VerticalAlignment="Center"
+                        <ui:TextBox x:Name="AbsoluteHour" Width="80"
+                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
+                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="20" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                         <TextBlock Text=":" VerticalAlignment="Center" Margin="4,0,4,0" FontWeight="Bold"/>
-                        <ui:TextBox x:Name="AbsoluteMinute" Width="80" Text="00" VerticalAlignment="Center"
+                        <ui:TextBox x:Name="AbsoluteMinute" Width="80"
+                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
+                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="00" VerticalAlignment="Center"
                                  TextChanged="TimerInput_Changed"/>
                     </StackPanel>
 
@@ -221,6 +230,7 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                             <ui:TextBox x:Name="NewAlertMinutes" Width="60" Margin="0,0,8,0"
+                                        KeyDown="NewAlertMinutes_KeyDown" PreviewTextInput="TimeInput_PreviewTextInput" MaxLength="3"
                                         PlaceholderText="min"/>
                             <ui:Button x:Name="AddButton" Content="Add" Width="120" Click="AddAlert_Click"
                                        Icon="{ui:SymbolIcon Add24}"/>

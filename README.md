@@ -51,6 +51,19 @@ The output will be in `bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/`.
 5. When the timer expires, the configured action executes (shutdown / lock / logoff)
 6. To stop or modify the timer, Windows Hello or Windows password authentication is required
 
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `Enter` | Start the timer (Timer tab) / add an alert point (Notifications tab) |
+| `↑` / `↓` | Increase / decrease the focused time value by 1 |
+| `Shift` + `↑` / `↓` | Increase / decrease by 10 |
+| `:` | Jump from the hours field to the minutes field |
+| `Ctrl` + `1`…`4` | Switch tabs |
+| `Esc` | Hide the window to the system tray |
+
+Only one copy of the app can run at a time — launching it again just brings the existing window to the front.
+
 ## Tech stack
 
 - .NET 8, WPF
