@@ -16,7 +16,7 @@ Owner: Dmytro (GitHub: DmitroShapovalov/GameTimer). The app is used at home on t
 ## Working agreements
 
 - Talk to the owner in **Russian**. Code, comments, commit messages, README and docs in **English**.
-- The owner builds and tests on his Windows PC. Agent environments usually have **no .NET SDK**: write the code, then ask him to run `dotnet build` and paste errors.
+- The agent compiles the code itself (see "Agent environment notes"), but can't run the WPF app: the owner tests behaviour on his Windows PC.
 - Commit only when asked ("коммить"). Push and tags are done by the owner (agent has no GitHub credentials).
 - Keep UI text localized: every user-visible string goes to both `.resx` files (see Localization).
 - Before larger features, propose the approach briefly; for UI changes he usually sends screenshots with feedback.
@@ -35,7 +35,8 @@ src/GameTimer/
   App.xaml(.cs)            Single-instance guard (named mutex + show event), creates MainWindow manually
   Models/AppSettings.cs    All settings (JSON), AlertPoint, enums TimerAction / TimerMode
   Services/
-    TimerService.cs        DispatcherTimer countdown; events Tick, AlertTriggered, TimerExpired
+    TimerController.cs     Single source of truth: Start/Stop/Reset/Extend, State, StateChanged; runs the expiry action
+    TimerService.cs        DispatcherTimer countdown on a monotonic clock (TickCount64); events Tick, AlertTriggered, TimerExpired
     SettingsService.cs     settings.json next to the exe
     ShutdownService.cs     shutdown / lock / logoff, CancelShutdown
     SoundService.cs        MediaPlayer; built-in Resources/notification.mp3 (embedded) or custom file
@@ -54,7 +55,7 @@ installer/setup.iss        Inno Setup script (per-user install, optional autosta
 .github/workflows/release.yml   On tag v*: publish + build installer + GitHub Release
 ```
 
-Note: timer start/stop logic currently lives in `MainWindow.xaml.cs` code-behind. Extract it into a service before adding a second control surface (see ROADMAP, phone remote).
+`App` creates `SettingsService`, `AppSettings` and `TimerController` and passes them to `MainWindow`. The window is only a client of `TimerController`: it calls its methods and updates the UI in `OnTimerStateChanged`. Every control surface (window, phone API) must go through the controller, on the UI thread (`Dispatcher.InvokeAsync` from background threads; the controller calls `VerifyAccess`).
 
 ## Key behaviours
 
@@ -63,6 +64,8 @@ Note: timer start/stop logic currently lives in `MainWindow.xaml.cs` code-behind
 - **Single instance:** second launch signals the first (`Local\SystemMonitor_7F3A2C1E_*`) and exits; first calls `MainWindow.BringToFront()`.
 - **Overlay position:** stored as 0..1 fractions mapped to `[0, screen - overlaySize]`.
 - **Keyboard:** Enter = start / add alert, ↑↓ (+Shift) adjust, `:` jumps to minutes, Ctrl+1..4 tabs, Esc = tray.
+- **Clock:** remaining time is monotonic (`Environment.TickCount64`): system clock changes don't affect it, sleep time still counts. Time-of-day mode reads the wall clock once at start.
+- **Debug-only hotkeys:** Ctrl+Shift+Plus / Minus = `Extend(±1)` (temporary, for testing).
 - **Validation:** empty time field = 0; inline error text under inputs disables Start.
 
 ## Localization
@@ -91,3 +94,12 @@ Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTime
 - The repo lives on the owner's PC at `D:\Projects\GameTimer`, reached through the connected folder (`device_bash`, path `$HOME/mnt/Projects/GameTimer`).
 - Git leaves stale `.git/index.lock` / `HEAD.lock` from the sandbox: request delete permission for `D:\Projects`, then `rm -f` them before committing.
 - Commit message attribution lines come from the session's system instructions.
+- **Building from the agent (compile check).** `device_bash` runs in a Linux VM, not Windows, with network access. Install the .NET 8 SDK into the session home (it does not persist between sessions, ~1 min), then build a copy outside the repo so Linux `bin/obj` never mix with the owner's Windows build:
+  ```bash
+  curl -sSL https://dot.net/v1/dotnet-install.sh -o ~/di.sh && bash ~/di.sh --channel 8.0 --install-dir ~/.dotnet
+  export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
+  rm -rf ~/build && mkdir -p ~/build && cd ~/mnt/Projects/GameTimer/src \
+    && tar --exclude=bin --exclude=obj -cf - GameTimer | tar -xf - -C ~/build
+  cd ~/build/GameTimer && ~/.dotnet/dotnet build -p:EnableWindowsTargeting=true -v q
+  ```
+  `EnableWindowsTargeting` lets Linux compile `net8.0-windows` (WPF + WinForms). The app can't run there: behaviour is tested by the owner on Windows.

@@ -3,10 +3,16 @@ using GameTimer.Models;
 
 namespace GameTimer.Services;
 
+/// <summary>
+/// Low-level countdown. Remaining time is measured with a monotonic clock
+/// (<see cref="Environment.TickCount64"/>), so changing the system clock does not affect it.
+/// GetTickCount64 keeps counting while the PC sleeps, so time spent asleep still counts down.
+/// Must be used from the UI thread (it is driven by a <see cref="DispatcherTimer"/>).
+/// </summary>
 public class TimerService
 {
     private readonly DispatcherTimer _timer;
-    private DateTime _targetTime;
+    private long _deadlineMs;
     private readonly HashSet<int> _firedAlerts = new();
 
     public event Action<TimeSpan>? Tick;
@@ -14,7 +20,16 @@ public class TimerService
     public event Action? TimerExpired;
 
     public bool IsRunning => _timer.IsEnabled;
-    public TimeSpan Remaining => _targetTime - DateTime.Now;
+
+    public TimeSpan Remaining
+    {
+        get
+        {
+            if (!IsRunning) return TimeSpan.Zero;
+            var ms = _deadlineMs - Environment.TickCount64;
+            return ms > 0 ? TimeSpan.FromMilliseconds(ms) : TimeSpan.Zero;
+        }
+    }
 
     public AppSettings Settings { get; set; }
 
@@ -25,32 +40,36 @@ public class TimerService
         {
             Interval = TimeSpan.FromSeconds(1)
         };
-        _timer.Tick += OnTick;
+        _timer.Tick += (_, _) => Evaluate();
     }
 
-    public void Start(DateTime targetTime)
+    public void Start(TimeSpan duration)
     {
-        _targetTime = targetTime;
+        _deadlineMs = Environment.TickCount64 + (long)duration.TotalMilliseconds;
         _firedAlerts.Clear();
         _timer.Start();
     }
 
-    public void StartAbsolute(int hour, int minute)
+    /// <summary>
+    /// Adds (or, if negative, removes) time on a running timer. Never goes below zero;
+    /// reaching zero expires the timer immediately.
+    /// </summary>
+    public void Extend(TimeSpan delta)
     {
-        var now = DateTime.Now;
-        var target = new DateTime(now.Year, now.Month, now.Day, hour, minute, 0);
+        if (!IsRunning) return;
 
-        // If the time has already passed today, set for tomorrow
-        if (target <= now)
-            target = target.AddDays(1);
+        var newRemaining = Remaining + delta;
+        if (newRemaining < TimeSpan.Zero) newRemaining = TimeSpan.Zero;
+        _deadlineMs = Environment.TickCount64 + (long)newRemaining.TotalMilliseconds;
 
-        Start(target);
-    }
+        // Alerts that are now ahead of us again can fire again
+        var minutesLeft = (int)Math.Ceiling(newRemaining.TotalMinutes);
+        _firedAlerts.RemoveWhere(m => m < minutesLeft);
 
-    public void StartInterval(int hours, int minutes)
-    {
-        var target = DateTime.Now.AddHours(hours).AddMinutes(minutes);
-        Start(target);
+        // Restart the interval so the next tick is a full second away, and update listeners now
+        _timer.Stop();
+        _timer.Start();
+        Evaluate();
     }
 
     public void Stop()
@@ -59,9 +78,9 @@ public class TimerService
         _firedAlerts.Clear();
     }
 
-    private void OnTick(object? sender, EventArgs e)
+    private void Evaluate()
     {
-        var remaining = _targetTime - DateTime.Now;
+        var remaining = Remaining;
 
         if (remaining <= TimeSpan.Zero)
         {

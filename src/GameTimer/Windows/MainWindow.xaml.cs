@@ -12,9 +12,9 @@ namespace GameTimer.Windows;
 
 public partial class MainWindow : FluentWindow
 {
-    private readonly SettingsService _settingsService = new();
+    private readonly SettingsService _settingsService;
     private readonly SoundService _soundService = new();
-    private readonly TimerService _timerService;
+    private readonly TimerController _timer;
     private AppSettings _settings;
     private OverlayWindow? _overlay;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -32,18 +32,17 @@ public partial class MainWindow : FluentWindow
     // Track timer state for localization
     private string _timerStateKey = "Timer_NotStarted";
 
-    public MainWindow()
+    public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer)
     {
         InitializeComponent();
-        _settings = _settingsService.Load();
+        _settingsService = settingsService;
+        _settings = settings;
 
-        // Set language before loading UI
-        Loc.SetLanguage(_settings.Language);
-
-        _timerService = new TimerService(_settings);
-        _timerService.Tick += OnTimerTick;
-        _timerService.AlertTriggered += OnAlertTriggered;
-        _timerService.TimerExpired += OnTimerExpired;
+        // The window is only a client of the controller: it sends commands and reacts to events
+        _timer = timer;
+        _timer.Tick += OnTimerTick;
+        _timer.AlertTriggered += OnAlertTriggered;
+        _timer.StateChanged += OnTimerStateChanged;
 
         LoadSettingsToUI();
         ApplyLocalization();
@@ -251,7 +250,7 @@ public partial class MainWindow : FluentWindow
         else
         {
             ValidationText.Visibility = Visibility.Collapsed;
-            if (!_timerService.IsRunning)
+            if (!_timer.IsRunning)
                 StartButton.IsEnabled = true;
         }
     }
@@ -259,7 +258,7 @@ public partial class MainWindow : FluentWindow
 
     private void FocusTimeInput()
     {
-        if (MainTabs.SelectedIndex != 0 || _timerService.IsRunning) return;
+        if (MainTabs.SelectedIndex != 0 || _timer.IsRunning) return;
         var target = ModeInterval.IsChecked == true ? IntervalHours : AbsoluteHour;
         Dispatcher.BeginInvoke(() => { target.Focus(); Keyboard.Focus(target); target.SelectAll(); },
             System.Windows.Threading.DispatcherPriority.Input);
@@ -268,6 +267,25 @@ public partial class MainWindow : FluentWindow
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+
+#if DEBUG
+        // Temporary debug hotkeys for TimerController.Extend: Ctrl+Shift+Plus / Ctrl+Shift+Minus = ±1 min
+        if (ctrl && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            int delta = e.Key switch
+            {
+                Key.OemPlus or Key.Add => 1,
+                Key.OemMinus or Key.Subtract => -1,
+                _ => 0
+            };
+            if (delta != 0)
+            {
+                _timer.Extend(delta);
+                e.Handled = true;
+                return;
+            }
+        }
+#endif
 
         // Ctrl+1..4 — switch tabs
         if (ctrl)
@@ -402,54 +420,33 @@ public partial class MainWindow : FluentWindow
 
     private void Start_Click(object sender, RoutedEventArgs e)
     {
-        if (_timerService.IsRunning) return;
+        if (_timer.IsRunning) return;
 
         if (ModeInterval.IsChecked == true)
         {
             int h = ParseInt(IntervalHours.Text);
             int m = ParseInt(IntervalMinutes.Text);
-            if (h == 0 && m == 0) { ValidateTimerInput(); return; }
-            _timerService.StartInterval(h, m);
+            if (!_timer.StartInterval(h, m)) ValidateTimerInput();
         }
         else
         {
             int h = ParseInt(AbsoluteHour.Text, -1);
             int m = ParseInt(AbsoluteMinute.Text, -1);
-            if (h < 0 || h > 23 || m < 0 || m > 59) { ValidateTimerInput(); return; }
-            _timerService.StartAbsolute(h, m);
+            if (!_timer.StartAbsolute(h, m)) ValidateTimerInput();
         }
-
-        ValidationText.Visibility = Visibility.Collapsed;
-        ShowOverlay();
-        UpdateButtonStates(running: true);
-        _timerStateKey = "Timer_Started";
-        StatusText.Text = Loc.Get(_timerStateKey);
+        // UI updates happen in OnTimerStateChanged
     }
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
     {
         if (!await RequireAuth()) return;
-
-        _timerService.Stop();
-        ShutdownService.CancelShutdown();
-        HideOverlay();
-        UpdateButtonStates(running: false);
-        _timerStateKey = "Timer_Stopped";
-        StatusText.Text = Loc.Get(_timerStateKey);
-        RemainingText.Text = "";
+        _timer.Stop();
     }
 
     private async void Reset_Click(object sender, RoutedEventArgs e)
     {
         if (!await RequireAuth()) return;
-
-        _timerService.Stop();
-        ShutdownService.CancelShutdown();
-        HideOverlay();
-        UpdateButtonStates(running: false);
-        _timerStateKey = "Timer_NotStarted";
-        StatusText.Text = Loc.Get(_timerStateKey);
-        RemainingText.Text = "";
+        _timer.Reset();
     }
 
     private void UpdateButtonStates(bool running)
@@ -479,15 +476,42 @@ public partial class MainWindow : FluentWindow
         _overlay?.PlayPulse();
     }
 
-    private void OnTimerExpired()
+    // Fires for every transition, whoever caused it (this window now, the phone API later).
+    // The shutdown / lock / logoff on expiry is executed by TimerController itself.
+    private void OnTimerStateChanged(TimerState state)
     {
-        HideOverlay();
-        UpdateButtonStates(running: false);
-        _timerStateKey = "Timer_Expired";
-        StatusText.Text = Loc.Get(_timerStateKey);
-        RemainingText.Text = "00:00";
+        switch (state)
+        {
+            case TimerState.Running:
+                ValidationText.Visibility = Visibility.Collapsed;
+                ShowOverlay();
+                UpdateButtonStates(running: true);
+                _timerStateKey = "Timer_Started";
+                break;
 
-        ShutdownService.Execute(_settings.Action);
+            case TimerState.Stopped:
+                HideOverlay();
+                UpdateButtonStates(running: false);
+                _timerStateKey = "Timer_Stopped";
+                RemainingText.Text = "";
+                break;
+
+            case TimerState.NotStarted:
+                HideOverlay();
+                UpdateButtonStates(running: false);
+                _timerStateKey = "Timer_NotStarted";
+                RemainingText.Text = "";
+                break;
+
+            case TimerState.Expired:
+                HideOverlay();
+                UpdateButtonStates(running: false);
+                _timerStateKey = "Timer_Expired";
+                RemainingText.Text = "00:00";
+                break;
+        }
+
+        StatusText.Text = Loc.Get(_timerStateKey);
     }
 
     #endregion
@@ -799,11 +823,10 @@ public partial class MainWindow : FluentWindow
 
     private async void TrayExit()
     {
-        if (_timerService.IsRunning)
+        if (_timer.IsRunning)
         {
             if (!await RequireAuth()) return;
-            _timerService.Stop();
-            ShutdownService.CancelShutdown();
+            _timer.Stop();
         }
 
         HideOverlay();

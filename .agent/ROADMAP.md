@@ -20,7 +20,7 @@ Each step ends with a building, working app. Do not start the next step until th
 
 | # | Step | Spec | Status |
 |---|---|---|---|
-| 1 | `TimerController` refactor + monotonic clock + `Extend` | RMT-01 | ☐ |
+| 1 | `TimerController` refactor + monotonic clock + `Extend` | RMT-01 | ☑ |
 | 2 | Embedded Kestrel host, settings toggle, LAN-only binding | RMT-02 | ☐ |
 | 3 | Pairing, device tokens, auth middleware, rate limiting | RMT-04 | ☐ |
 | 4 | REST API endpoints | RMT-03 | ☐ |
@@ -118,7 +118,7 @@ For reliable background push notifications ("time is up", "timer was stopped"). 
 Tamper resistance (the child uses the same Windows account):
 - The process can be killed from Task Manager. Ideas: watchdog second process, or run the enforcer as a Windows service with the UI as a client.
 - `settings.json` sits in a user-writable folder and can be edited. Ideas: move to `%ProgramData%` with ACLs, or sign/encrypt it. Note: from Phase 1 it also holds device token hashes.
-- ~~Changing the system clock shifts the time-of-day target.~~ Scheduled in Phase 1, step 1 (monotonic clock).
+- ~~Changing the system clock shifts the time-of-day target.~~ Fixed in Phase 1, step 1 (monotonic clock).
 - No usage log. Idea: history of sessions (start, stop, who stopped, extensions), later visible on the phone.
 
 Other:

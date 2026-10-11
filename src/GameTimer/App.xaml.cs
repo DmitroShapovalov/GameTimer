@@ -1,6 +1,8 @@
 using System.Threading;
 using System.Windows.Media;
 using Wpf.Ui.Appearance;
+using GameTimer.Localization;
+using GameTimer.Services;
 using GameTimer.Windows;
 
 namespace GameTimer;
@@ -38,7 +40,14 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         ApplicationAccentColorManager.Apply(Color.FromRgb(0x00, 0x78, 0xD4));
 
-        var mainWindow = new MainWindow();
+        // Core services live here, not in the window, so other control surfaces
+        // (the phone API from Phase 1) can share the same TimerController.
+        var settingsService = new SettingsService();
+        var settings = settingsService.Load();
+        Loc.SetLanguage(settings.Language);
+        var timerController = new TimerController(settings);
+
+        var mainWindow = new MainWindow(settingsService, settings, timerController);
         MainWindow = mainWindow;
         mainWindow.Show();
 
