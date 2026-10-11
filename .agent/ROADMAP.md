@@ -14,8 +14,51 @@
 
 **Goal:** the parent sees the timer and controls it from a phone on the same Wi-Fi. No cloud, no app store: the PC app serves a mobile web UI (PWA) itself.
 
+### Implementation order
+
+Each step ends with a building, working app. Do not start the next step until the "Done when" check passes.
+
+| # | Step | Spec | Status |
+|---|---|---|---|
+| 1 | `TimerController` refactor + monotonic clock + `Extend` | RMT-01 | ☐ |
+| 2 | Embedded Kestrel host, settings toggle, LAN-only binding | RMT-02 | ☐ |
+| 3 | Pairing, device tokens, auth middleware, rate limiting | RMT-04 | ☐ |
+| 4 | REST API endpoints | RMT-03 | ☐ |
+| 5 | WebSocket push events | RMT-03 (`/ws`) | ☐ |
+| 6 | Mobile web UI (PWA) | RMT-05 | ☐ |
+| 7 | Firewall rule, optional mDNS | RMT-06 | ☐ |
+| 8 | Acceptance pass | Acceptance | ☐ |
+
+**Step 1 — TimerController.** Move start/stop/reset/expiry out of `MainWindow.xaml.cs` into `TimerController` with a `StateChanged` event; the window only subscribes. Track remaining time with `Stopwatch` / `Environment.TickCount64` instead of `DateTime.Now` (closes the "system clock change" backlog item). Add `Extend(minutes)` (negative allowed, never below zero; in time-of-day mode it shifts the target).
+*Done when:* desktop behaviour is unchanged; changing the system clock does not affect the remaining time; `Extend` works from a temporary debug hotkey or unit test.
+
+**Step 2 — Embedded server.** Add `<FrameworkReference Include="Microsoft.AspNetCore.App" />`. New settings `RemoteEnabled` (default `false`) and `RemotePort` (default `5123`). "Phone control" toggle in the Settings tab, protected by Windows Hello. Host starts/stops with the toggle and binds only to private-network addresses. A single unauthenticated `GET /health` returning 200 is allowed temporarily for this step only, bound to `localhost`.
+*Done when:* toggle off → nothing listens on the port; toggle on → host reachable from the PC; app exit stops the host cleanly.
+
+**Step 3 — Pairing and security** (before any real API, so no endpoint is ever open). `DeviceStore` (device id, name, SHA-256 token hash, created, last-seen) persisted with settings. "Connect phone" dialog (Windows Hello) shows a QR with a one-time code valid for 2 minutes. `POST /pair` exchanges the code for a ≥ 256-bit random token. Bearer auth middleware with constant-time comparison on every route except `/pair` and static files. Rate limiting via built-in `Microsoft.AspNetCore.RateLimiting` on `/pair` and auth failures. Remove the temporary `/health`.
+*Done when:* unpaired requests get 401; an expired or reused code fails; a paired token works; revoking a device makes its next request fail.
+
+**Step 4 — REST API.** Implement the RMT-03 table. Every handler marshals to the UI thread with `Dispatcher.InvokeAsync` and goes through `TimerController` / `SettingsService`, never through the window.
+*Done when:* all endpoints work from `curl`/HTTP file with a valid token, and actions are visible on the PC overlay.
+
+**Step 5 — WebSocket.** `/ws` authenticated with the same token (header or first message). Events: `tick` (every 5 s), `alert`, `expired`, `started`, `stopped`, `settingsChanged`, driven by `TimerController` / `SettingsService` events.
+*Done when:* a change made on the PC appears in a connected WS client within 1 s.
+
+**Step 6 — Mobile web UI.** Static files embedded in the exe, served at `/`. Screens: status, start, settings, paired devices. PWA manifest + icon, EN/RU following the desktop language, "PC offline" state with WS auto-reconnect.
+*Done when:* the full flow works on a real phone and the page can be added to the home screen.
+
+**Step 7 — Network plumbing.** Decide: installer adds the Private-profile firewall rule (requires `PrivilegesRequired=admin`) or the app explains the first-run firewall prompt. Optional mDNS announce `_gametimer._tcp`.
+*Done when:* a fresh install on a second machine can be reached from a phone without manual firewall setup (or with clear in-app instructions).
+
+**Step 8 — Acceptance.** Run the checklist under "Acceptance" below and release as v1.2.0.
+
+### Decisions and notes
+- Referencing ASP.NET Core increases the self-contained single-file exe noticeably (tens of MB). Accepted for this project.
+- No new third-party packages except a QR generator (e.g. `QRCoder`, MIT) if needed for step 3.
+- The `TimerController` is the single source of truth for timer state; UI, API and WS are all clients of it.
+
 ### RMT-01 Prerequisite refactor
-Move start/stop/reset/expiry logic out of `MainWindow.xaml.cs` into a `TimerController` service used by both the window and the API. The window subscribes to its state changes instead of owning the logic. `TimerService` runs on the UI dispatcher, so API handlers must marshal calls with `Dispatcher.InvokeAsync`.
+Move start/stop/reset/expiry logic out of `MainWindow.xaml.cs` into a `TimerController` service used by both the window and the API. The window subscribes to its state changes instead of owning the logic. `TimerService` runs on the UI dispatcher, so API handlers must marshal calls with `Dispatcher.InvokeAsync`. Remaining time is computed from a monotonic clock, not `DateTime.Now`.
 
 ### RMT-02 Embedded server
 - Kestrel via `<FrameworkReference Include="Microsoft.AspNetCore.App" />` (binds to LAN without admin; `HttpListener` would need `netsh urlacl` as admin).
@@ -57,6 +100,7 @@ The child is on the same network, so the API must never be open.
 - Start / stop / extend from the phone reflects on the PC overlay within 1 s, and vice versa.
 - Revoking a device cuts it off immediately.
 - With the toggle off, nothing listens on the port.
+- Changing the PC system clock does not change the remaining time.
 
 ---
 
@@ -73,8 +117,8 @@ For reliable background push notifications ("time is up", "timer was stopped"). 
 
 Tamper resistance (the child uses the same Windows account):
 - The process can be killed from Task Manager. Ideas: watchdog second process, or run the enforcer as a Windows service with the UI as a client.
-- `settings.json` sits in a user-writable folder and can be edited. Ideas: move to `%ProgramData%` with ACLs, or sign/encrypt it.
-- Changing the system clock shifts the time-of-day target. Ideas: track elapsed time with `Stopwatch`/`Environment.TickCount64` instead of `DateTime.Now`.
+- `settings.json` sits in a user-writable folder and can be edited. Ideas: move to `%ProgramData%` with ACLs, or sign/encrypt it. Note: from Phase 1 it also holds device token hashes.
+- ~~Changing the system clock shifts the time-of-day target.~~ Scheduled in Phase 1, step 1 (monotonic clock).
 - No usage log. Idea: history of sessions (start, stop, who stopped, extensions), later visible on the phone.
 
 Other:
