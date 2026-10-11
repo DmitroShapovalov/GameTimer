@@ -1,3 +1,5 @@
+> **Historical:** original v1.0 plan, fully implemented. Current state: `CLAUDE.md`; what is next: `.agent/ROADMAP.md`.
+
 # GameTimer — План реализации v1.0
 
 ## Структура проекта
