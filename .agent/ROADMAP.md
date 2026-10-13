@@ -23,7 +23,7 @@ Each step ends with a building, working app. Do not start the next step until th
 | 1 | `TimerController` refactor + monotonic clock + `Extend` | RMT-01 | ☑ |
 | 2 | Embedded Kestrel host, settings toggle, LAN-only binding | RMT-02 | ☑ |
 | 3 | Pairing, device tokens, auth middleware, rate limiting | RMT-04 | ☑ |
-| 4 | REST API endpoints | RMT-03 | ☐ |
+| 4 | REST API endpoints | RMT-03 | ☑ |
 | 5 | WebSocket push events | RMT-03 (`/ws`) | ☐ |
 | 6 | Mobile web UI (PWA) | RMT-05 | ☐ |
 | 7 | Firewall rule, optional mDNS | RMT-06 | ☐ |
@@ -39,6 +39,7 @@ Each step ends with a building, working app. Do not start the next step until th
 *Done when:* unpaired requests get 401; an expired or reused code fails; a paired token works; revoking a device makes its next request fail.
 
 **Step 4 — REST API.** Implement the RMT-03 table. Every handler marshals to the UI thread with `Dispatcher.InvokeAsync` and goes through `TimerController` / `SettingsService`, never through the window.
+Requests and examples: `docs/remote-api.http`.
 *Done when:* all endpoints work from `curl`/HTTP file with a valid token, and actions are visible on the PC overlay.
 
 **Step 5 — WebSocket.** `/ws` authenticated with the same token (header or first message). Events: `tick` (every 5 s), `alert`, `expired`, `started`, `stopped`, `settingsChanged`, driven by `TimerController` / `SettingsService` events.

@@ -52,6 +52,7 @@ public partial class MainWindow : FluentWindow
         _devices = devices;
         _pairing = pairing;
         _devices.Changed += RefreshDevicesList;
+        _settingsService.SettingsChanged += OnSettingsChanged;
 
         LoadSettingsToUI();
         ApplyLocalization();
@@ -208,15 +209,7 @@ public partial class MainWindow : FluentWindow
         }
 
         // Settings tab - language
-        var langTag = _settings.Language;
-        for (int i = 0; i < LanguageCombo.Items.Count; i++)
-        {
-            if (LanguageCombo.Items[i] is ComboBoxItem ci && ci.Tag?.ToString() == langTag)
-            {
-                LanguageCombo.SelectedIndex = i;
-                break;
-            }
-        }
+        SelectLanguageInCombo(_settings.Language);
 
         // Settings tab - action
         _lastActionIndex = (int)_settings.Action;
@@ -230,6 +223,46 @@ public partial class MainWindow : FluentWindow
     {
         if (_isLoading) return;
         _settingsService.Save(_settings);
+        _settingsService.NotifyChanged(this);
+    }
+
+    // Settings changed by another client (the phone API): refresh the controls it can change
+    private void OnSettingsChanged(object source)
+    {
+        if (source == this) return;
+
+        _isLoading = true;
+        try
+        {
+            YellowThreshold.Text = _settings.YellowThreshold.ToString();
+            RedThreshold.Text = _settings.RedThreshold.ToString();
+            UpdateColorPreviews();
+
+            _lastActionIndex = (int)_settings.Action;
+            ActionCombo.SelectedIndex = _lastActionIndex;
+
+            SelectLanguageInCombo(_settings.Language);
+            Loc.SetLanguage(_settings.Language);
+            ApplyLocalization(); // also refreshes the alerts list
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+
+        _overlay?.ApplySettings(_settings);
+    }
+
+    private void SelectLanguageInCombo(string langTag)
+    {
+        for (int i = 0; i < LanguageCombo.Items.Count; i++)
+        {
+            if (LanguageCombo.Items[i] is ComboBoxItem ci && ci.Tag?.ToString() == langTag)
+            {
+                LanguageCombo.SelectedIndex = i;
+                break;
+            }
+        }
     }
 
     #endregion

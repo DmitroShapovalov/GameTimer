@@ -52,7 +52,7 @@ public partial class App : System.Windows.Application
         var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
         var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
         var pairing = new PairingService();
-        _remoteServer = new RemoteServer(deviceStore, pairing, ui);
+        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService);
 
         var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing);
         MainWindow = mainWindow;

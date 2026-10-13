@@ -39,7 +39,8 @@ src/GameTimer/
     TimerController.cs     Single source of truth: Start/Stop/Reset/Extend, State, StateChanged; runs the expiry action
     TimerService.cs        DispatcherTimer countdown on a monotonic clock (TickCount64); events Tick, AlertTriggered, TimerExpired
     SettingsService.cs     settings.json next to the exe
-    RemoteServer.cs        Embedded Kestrel for the phone remote: LAN filter, rate limits, bearer auth, endpoints
+    RemoteServer.cs        Embedded Kestrel for the phone remote: LAN filter, rate limits, bearer auth, pairing, devices
+    RemoteServer.Api.cs    Timer and settings endpoints, DTOs, validation (partial class)
     NetworkFilter.cs       Allows only loopback / private LAN remote addresses; finds the PC's LAN IP for the QR
     DeviceStore.cs         Paired devices: Add/Revoke on UI thread, thread-safe token lookup (snapshot)
     PairingService.cs      One-time 8-char pairing code, 2-minute lifetime, single active code
@@ -60,6 +61,7 @@ src/GameTimer/
     ConnectPhoneDialog     QR code with the one-time pairing link, countdown, "connected" state
   Remote/                  Web files served to the phone, embedded by LogicalName ("Remote/pair.html")
 installer/setup.iss        Inno Setup script (per-user install, optional autostart)
+docs/remote-api.http       Every phone API request with examples (REST Client format)
 .github/workflows/release.yml   On tag v*: publish + build installer + GitHub Release
 ```
 
@@ -74,6 +76,7 @@ installer/setup.iss        Inno Setup script (per-user install, optional autosta
 - **Keyboard:** Enter = start / add alert, ↑↓ (+Shift) adjust, `:` jumps to minutes, Ctrl+1..4 tabs, Esc = tray.
 - **Phone control:** toggle in the Settings tab (auth required) starts/stops `RemoteServer` on `RemotePort` (5123); `RemoteEnabled` is restored at launch without a prompt. `App.OnExit` stops the host.
 - **Phone pairing & auth:** "Connect phone" (auth) shows a QR for `http://<lan-ip>:<port>/pair?code=…`. `POST /pair {code, name}` → `{deviceId, name, token}`; the token is 256-bit base64url, stored on the PC only as a SHA-256 hash. Everything under `/api` and `/ws` needs `Authorization: Bearer <token>` (401; 429 after 10 failures/min per IP). `/pair` is limited to 5 POSTs/min per IP. Any paired phone can list / revoke devices; the PC can revoke from the Settings tab (auth).
+- **Phone API:** see `docs/remote-api.http`. JSON camelCase, enums as camelCase strings (numbers rejected). Handlers run on the UI thread via `UiThread.InvokeAsync` and only use `TimerController` / `SettingsService`. `PUT /api/settings` is partial and validated, then `SettingsService.NotifyChanged(server)`; `MainWindow` refreshes its controls for any change whose source isn't itself. Color zone logic lives in `AppSettings.GetZone` (overlay and API).
 - **Clock:** remaining time is monotonic (`Environment.TickCount64`): system clock changes don't affect it, sleep time still counts. Time-of-day mode reads the wall clock once at start.
 - **Debug-only hotkeys:** Ctrl+Shift+Plus / Minus = `Extend(±1)` (temporary, for testing).
 - **Validation:** empty time field = 0; inline error text under inputs disables Start.

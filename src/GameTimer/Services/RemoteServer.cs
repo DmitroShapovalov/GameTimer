@@ -1,4 +1,6 @@
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using GameTimer.Models;
 using Microsoft.AspNetCore.Builder;
@@ -20,7 +22,7 @@ namespace GameTimer.Services;
 /// 3. Bearer token auth on everything under <c>/api</c> and <c>/ws</c>.
 ///    Only <c>/pair</c> (and, from step 6, static files) are reachable without a token.
 /// </summary>
-public sealed class RemoteServer
+public sealed partial class RemoteServer
 {
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(3);
     private const string PairPolicy = "pair";
@@ -30,15 +32,22 @@ public sealed class RemoteServer
     private readonly DeviceStore _devices;
     private readonly PairingService _pairing;
     private readonly UiThread _ui;
+    private readonly TimerController _timer;
+    private readonly AppSettings _settings;
+    private readonly SettingsService _settingsService;
 
     private WebApplication? _app;
     private PartitionedRateLimiter<string>? _authFailures;
 
-    public RemoteServer(DeviceStore devices, PairingService pairing, UiThread ui)
+    public RemoteServer(DeviceStore devices, PairingService pairing, UiThread ui,
+        TimerController timer, AppSettings settings, SettingsService settingsService)
     {
         _devices = devices;
         _pairing = pairing;
         _ui = ui;
+        _timer = timer;
+        _settings = settings;
+        _settingsService = settingsService;
     }
 
     public bool IsRunning => _app != null;
@@ -62,6 +71,11 @@ public sealed class RemoteServer
             });
             builder.Logging.ClearProviders();
             builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port));
+
+            // Enums as camelCase strings ("running", "interval", "lock"); numbers are rejected
+            builder.Services.ConfigureHttpJsonOptions(options =>
+                options.SerializerOptions.Converters.Add(
+                    new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false)));
 
             builder.Services.AddRateLimiter(options =>
             {
@@ -127,6 +141,8 @@ public sealed class RemoteServer
 
             MapPairing(app);
             MapDevices(app);
+            MapTimer(app);
+            MapSettings(app);
 
             await app.StartAsync();
 
