@@ -47,9 +47,11 @@ Also added: `hello` (status + settings right after auth) and `extended` (so +/- 
 *Done when:* a change made on the PC appears in a connected WS client within 1 s.
 
 **Step 6 — Mobile web UI.** Static files embedded in the exe, served at `/`. Screens: status, start, settings, paired devices. PWA manifest + icon, EN/RU following the desktop language, "PC offline" state with WS auto-reconnect.
+Built as plain JS (no framework/build). Status and the start form share the Timer tab; Settings and Phones are the other tabs. No service worker (needs HTTPS), so no offline cache; home-screen shortcut works.
 *Done when:* the full flow works on a real phone and the page can be added to the home screen.
 
 **Step 7 — Network plumbing.** Decide: installer adds the Private-profile firewall rule (requires `PrivilegesRequired=admin`) or the app explains the first-run firewall prompt. Optional mDNS announce `_gametimer._tcp`.
+Also (public app, many installs): when the PC's LAN IP changes, the phone's home-screen shortcut points to the old address. At least: the phone's "PC unreachable" banner suggests scanning a new QR after a while, and README suggests a DHCP reservation. mDNS (`<pc>.local`) would fix it where phones resolve `.local` (iOS yes; Android Chrome unreliable), so treat it as a bonus.
 *Done when:* a fresh install on a second machine can be reached from a phone without manual firewall setup (or with clear in-app instructions).
 
 **Step 8 — Acceptance.** Run the checklist under "Acceptance" below and release as v1.2.0.
@@ -106,9 +108,35 @@ The child is on the same network, so the API must never be open.
 
 ---
 
-## Phase 2 — Control from outside home
-Preferred: **Tailscale** on the PC and the phone (free personal plan). Phase 1 then works from anywhere with no code changes; only allow binding to the Tailscale interface too.
-Alternative if needed: MQTT broker (e.g. HiveMQ Cloud free tier) with both sides connecting outbound, end-to-end encrypted payloads.
+## Phase 2 — Control from outside home, installable app
+
+Context: GameTimer is public (other families install it), so every PC has its own address and nothing may
+require per-family network setup. The home-network mode over plain HTTP (Phase 1) stays the default:
+it works right after install. HTTPS is what Chrome needs for "Install app" (`beforeinstallprompt`), and a
+certificate can't be issued for a LAN IP.
+
+### 2a. Tailscale — tried, dropped (decision 2026-10-13)
+- `tailscale serve --bg 5123` gives `https://<pc>.<tailnet>.ts.net` with a real certificate (installable app, control from
+  anywhere). Implemented during step 6 and removed again: every family would need a Tailscale account, the app on the PC
+  and the phone (a VPN slot on Android), a sign-in and an HTTPS consent click. Too much for the target users; adding
+  the plain-HTTP page to the home screen by hand is simpler.
+- The removed code (TailscaleInfo, QR address choice, wss CSP) is kept as git tree `794ffcd` (`git read-tree` /
+  `git checkout 794ffcd -- <path>`) in case it is wanted again.
+
+### 2b. Cloud relay (the real solution for everyone) — ☐ separate project, not started
+One public HTTPS origin (e.g. `https://gametimer.<domain>`) hosts the phone PWA; each PC keeps an outbound
+WebSocket to a relay; the phone talks to its PC through the relay. One URL for all installations, installable,
+works anywhere, no router / firewall / VPN setup.
+Draft design:
+- The QR carries the PC id and a pairing secret; phone and PC derive a shared key, and all commands / events are
+  **end-to-end encrypted and authenticated** (the relay only forwards opaque messages, so a compromised relay can't
+  read or forge "stop" / "extend"). Device tokens stay as today, inside the encrypted channel.
+- PC side: the existing API / WS handlers behind a transport abstraction (LAN Kestrel and relay connection both
+  feed `TimerController`). The LAN mode keeps working when the relay is down.
+- Relay: tiny stateless forwarder keyed by PC id, rate limited; hosting and cost to be chosen (small VPS or a
+  serverless WebSocket platform). Needs a domain, monitoring, a privacy note.
+- Open questions: account-less vs. accounts, abuse protection, how long to keep supporting it.
+Estimate: a larger effort than all of Phase 1; decide after v1.2.0 is released and used.
 
 ## Phase 3 — Native app (only if needed)
 For reliable background push notifications ("time is up", "timer was stopped"). .NET MAUI (shared C# models) or Flutter.

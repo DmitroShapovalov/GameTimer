@@ -16,11 +16,13 @@ namespace GameTimer.Services;
 /// Embedded Kestrel host for the phone remote (Phase 1). Off by default; started and stopped
 /// from the Settings tab.
 ///
+/// Also serves the phone UI (embedded Remote/ files) at "/" without auth.
+///
 /// Security layers, in pipeline order:
 /// 1. <see cref="NetworkFilter"/>: connections from outside this PC / the home LAN are aborted.
 /// 2. Rate limiting: <c>POST /pair</c> per client IP, and failed authentications per client IP.
 /// 3. Bearer token auth on everything under <c>/api</c> and <c>/ws</c>.
-///    Only <c>/pair</c> (and, from step 6, static files) are reachable without a token.
+///    Only <c>/pair</c> and the static phone UI files are reachable without a token.
 /// </summary>
 public sealed partial class RemoteServer
 {
@@ -163,6 +165,7 @@ public sealed partial class RemoteServer
                 await next(context);
             });
 
+            MapStatic(app);
             MapPairing(app);
             MapDevices(app);
             MapTimer(app);
@@ -218,12 +221,8 @@ public sealed partial class RemoteServer
 
     private void MapPairing(WebApplication app)
     {
-        // Page the QR code opens on the phone. Temporary until the full mobile UI (step 6).
-        app.MapGet("/pair", (HttpContext context) =>
-        {
-            context.Response.Headers.CacheControl = "no-store";
-            return Results.Content(PairPage.Value, "text/html; charset=utf-8");
-        });
+        // The QR link opens the phone app itself; it reads ?code= and shows the pairing form
+        app.MapGet("/pair", (HttpContext context) => ServeFile(context, StaticFiles.Value["/index.html"]));
 
         // Exchange a one-time code for a long-lived device token
         app.MapPost("/pair", async (PairRequest? request) =>
@@ -241,6 +240,14 @@ public sealed partial class RemoteServer
 
             return Results.Json(new { deviceId = device.Id, name = device.Name, token });
         }).RequireRateLimiting(PairPolicy);
+    }
+
+    // Phone UI: static files at their own paths, index.html also at "/"
+    private void MapStatic(WebApplication app)
+    {
+        foreach (var (path, file) in StaticFiles.Value)
+            app.MapGet(path, (HttpContext context) => ServeFile(context, file));
+        app.MapGet("/", (HttpContext context) => ServeFile(context, StaticFiles.Value["/index.html"]));
     }
 
     private void MapDevices(WebApplication app)
@@ -270,13 +277,51 @@ public sealed partial class RemoteServer
 
     public sealed record PairRequest(string? Code, string? Name);
 
-    private static readonly Lazy<string> PairPage = new(() =>
+    /// <summary>Phone UI files embedded from Remote/ (LogicalName "Remote/&lt;path&gt;"), keyed by URL path.</summary>
+    private static readonly Lazy<Dictionary<string, (byte[] Content, string ContentType)>> StaticFiles = new(() =>
     {
-        using var stream = typeof(RemoteServer).Assembly.GetManifestResourceStream("Remote/pair.html")
-            ?? throw new InvalidOperationException("Embedded resource Remote/pair.html not found.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        const string prefix = "Remote/";
+        var assembly = typeof(RemoteServer).Assembly;
+        var files = new Dictionary<string, (byte[], string)>(StringComparer.Ordinal);
+        foreach (var name in assembly.GetManifestResourceNames().Where(n => n.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            using var stream = assembly.GetManifestResourceStream(name)!;
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer);
+            var path = "/" + name[prefix.Length..].Replace('\\', '/');
+            files[path] = (buffer.ToArray(), ContentTypeFor(path));
+        }
+        if (!files.ContainsKey("/index.html"))
+            throw new InvalidOperationException("Embedded phone UI (Remote/index.html) not found.");
+        return files;
     });
+
+    private static string ContentTypeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".html" => "text/html; charset=utf-8",
+        ".js" => "text/javascript; charset=utf-8",
+        ".css" => "text/css; charset=utf-8",
+        ".webmanifest" => "application/manifest+json",
+        ".svg" => "image/svg+xml",
+        ".png" => "image/png",
+        _ => "application/octet-stream"
+    };
+
+    private static IResult ServeFile(HttpContext context, (byte[] Content, string ContentType) file)
+    {
+        var headers = context.Response.Headers;
+        headers.CacheControl = "no-cache"; // revalidate, so an app update reaches the phone
+        headers.XContentTypeOptions = "nosniff";
+        headers["Referrer-Policy"] = "no-referrer";
+        if (file.ContentType.StartsWith("text/html", StringComparison.Ordinal))
+        {
+            // Only our own files; the WebSocket goes to the same host
+            headers.ContentSecurityPolicy =
+                $"default-src 'self'; connect-src 'self' ws://{context.Request.Host}; img-src 'self' data:; " +
+                "style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+        }
+        return Results.Bytes(file.Content, file.ContentType);
+    }
 
     private static PairedDevice CurrentDevice(HttpContext context) =>
         (PairedDevice)context.Items[DeviceItemKey]!;

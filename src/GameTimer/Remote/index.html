@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#202020">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GameTimer">
+<meta name="referrer" content="no-referrer">
+<title>GameTimer</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="banner" class="banner" role="status" hidden></div>
+
+<main>
+  <!-- Not paired yet / pairing via the QR link -->
+  <section id="screen-pair" class="screen" hidden>
+    <div class="brand">
+      <img src="/icon.svg" alt="" width="56" height="56">
+      <h1>GameTimer</h1>
+    </div>
+    <p id="pair-text" class="muted"></p>
+    <div id="pair-form" class="card" hidden>
+      <label class="field">
+        <span data-t="phoneName"></span>
+        <input id="pair-name" maxlength="40" autocomplete="off">
+      </label>
+      <button id="pair-btn" class="btn primary wide" data-t="connect"></button>
+    </div>
+    <p id="pair-error" class="error" role="alert"></p>
+  </section>
+
+  <!-- Timer: status + start form -->
+  <section id="screen-timer" class="screen" hidden>
+    <div class="card status">
+      <div id="state" class="state"></div>
+      <div id="countdown" class="countdown idle">00:00</div>
+      <div id="target" class="muted target"></div>
+      <div id="running-actions" class="actions" hidden>
+        <button id="minus" class="btn secondary needs-online">−15</button>
+        <button id="plus" class="btn secondary needs-online">+15</button>
+        <button id="stop" class="btn danger wide needs-online" data-t="stop"></button>
+      </div>
+    </div>
+
+    <form id="start-form" class="card" hidden novalidate>
+      <div class="segmented" role="radiogroup">
+        <button type="button" role="radio" data-mode="interval" data-t="modeInterval"></button>
+        <button type="button" role="radio" data-mode="absolute" data-t="modeAbsolute"></button>
+      </div>
+      <div class="time-inputs">
+        <label class="field">
+          <span id="h-label"></span>
+          <input id="start-h" type="number" inputmode="numeric" min="0" max="23">
+        </label>
+        <span class="colon">:</span>
+        <label class="field">
+          <span data-t="minutes"></span>
+          <input id="start-m" type="number" inputmode="numeric" min="0" max="59">
+        </label>
+      </div>
+      <div id="presets" class="presets">
+        <button type="button" class="chip" data-h="0" data-m="30">0:30</button>
+        <button type="button" class="chip" data-h="1" data-m="0">1:00</button>
+        <button type="button" class="chip" data-h="1" data-m="30">1:30</button>
+        <button type="button" class="chip" data-h="2" data-m="0">2:00</button>
+      </div>
+      <p id="start-error" class="error" role="alert"></p>
+      <button type="submit" class="btn primary wide needs-online" data-t="start"></button>
+    </form>
+  </section>
+
+  <!-- Settings -->
+  <section id="screen-settings" class="screen" hidden>
+    <form id="settings-form" novalidate>
+      <div class="card">
+        <label class="field">
+          <span data-t="action"></span>
+          <select id="set-action">
+            <option value="shutdown" data-t="action_shutdown"></option>
+            <option value="lock" data-t="action_lock"></option>
+            <option value="logoff" data-t="action_logoff"></option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-t="language"></span>
+          <select id="set-language">
+            <option value="en">English</option>
+            <option value="ru">Русский</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="card">
+        <h2 data-t="colors"></h2>
+        <p class="hint muted" data-t="colorsHint"></p>
+        <div class="zone-row">
+          <input id="set-green" type="color" aria-labelledby="zone-normal">
+          <span id="zone-normal" data-t="zoneNormal"></span>
+        </div>
+        <div class="zone-row">
+          <input id="set-yellow" type="color" aria-labelledby="zone-warning">
+          <span id="zone-warning" data-t="zoneWarning"></span>
+          <input id="set-yellow-min" class="mini" type="number" inputmode="numeric" min="1" max="1440" aria-labelledby="zone-warning">
+          <span class="muted" data-t="minLeft"></span>
+        </div>
+        <div class="zone-row">
+          <input id="set-red" type="color" aria-labelledby="zone-alert">
+          <span id="zone-alert" data-t="zoneAlert"></span>
+          <input id="set-red-min" class="mini" type="number" inputmode="numeric" min="1" max="1440" aria-labelledby="zone-alert">
+          <span class="muted" data-t="minLeft"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 data-t="alerts"></h2>
+        <ul id="alerts" class="list"></ul>
+        <div class="add-row">
+          <input id="alert-new" class="mini" type="number" inputmode="numeric" min="1" max="1440">
+          <span class="muted" data-t="minBeforeEnd"></span>
+          <button type="button" id="alert-add" class="btn secondary small" data-t="add"></button>
+        </div>
+      </div>
+
+      <p id="settings-msg" class="msg" role="status"></p>
+      <button type="submit" class="btn primary wide needs-online" data-t="save"></button>
+    </form>
+  </section>
+
+  <!-- Paired phones -->
+  <section id="screen-devices" class="screen" hidden>
+    <div id="install-card" class="card" hidden>
+      <h2 data-t="installTitle"></h2>
+      <button id="install" class="btn primary wide" data-t="install" hidden></button>
+      <p id="install-hint" class="hint muted"></p>
+    </div>
+    <ul id="devices" class="card list"></ul>
+    <button id="forget" class="btn secondary wide danger-text" data-t="disconnectThis"></button>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="alert" hidden></div>
+
+<nav id="tabs" class="tabs" hidden>
+  <button data-tab="timer">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
+    <span data-t="tabTimer"></span>
+  </button>
+  <button data-tab="settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+    <span data-t="tabSettings"></span>
+  </button>
+  <button data-tab="devices">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/></svg>
+    <span data-t="tabDevices"></span>
+  </button>
+</nav>
+
+<script src="/app.js"></script>
+</body>
+</html>

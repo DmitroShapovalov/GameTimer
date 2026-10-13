@@ -7,7 +7,7 @@ namespace GameTimer.Services;
 /// <summary>
 /// Decides which remote addresses may talk to the embedded server: this PC and the home LAN only.
 /// The server listens on all interfaces (so a new DHCP address doesn't break it) and relies on this filter.
-/// Phase 2 (Tailscale) would add 100.64.0.0/10 here.
+/// A VPN option (e.g. Tailscale, 100.64.0.0/10) would be added here if ever supported.
 /// </summary>
 public static class NetworkFilter
 {

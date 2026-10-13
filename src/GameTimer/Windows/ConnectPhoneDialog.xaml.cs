@@ -11,8 +11,8 @@ using Wpf.Ui.Controls;
 namespace GameTimer.Windows;
 
 /// <summary>
-/// Shows a QR code with a one-time pairing link. The caller has already checked Windows Hello.
-/// Closing the window cancels the code.
+/// Shows a QR code with a one-time pairing link to the PC's LAN address. The caller has already
+/// checked Windows Hello. Closing the window cancels the code.
 /// </summary>
 public partial class ConnectPhoneDialog : FluentWindow
 {
@@ -30,8 +30,7 @@ public partial class ConnectPhoneDialog : FluentWindow
         InstructionsText.Text = Loc.Get("ConnectPhone_Instructions");
         CloseButton.Content = Loc.Get("Close");
 
-        var code = _pairing.Begin();
-        var url = $"http://{lanAddress}:{port}/pair?code={code}";
+        var url = $"http://{lanAddress}:{port}/pair?code={_pairing.Begin()}";
         UrlText.Text = url;
         QrImage.Source = RenderQr(url);
 

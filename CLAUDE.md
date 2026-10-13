@@ -61,7 +61,8 @@ src/GameTimer/
     OverlayWindow          Countdown overlay, color zones, pulse animation
     PasswordDialog         Fallback when Windows Hello is unavailable
     ConnectPhoneDialog     QR code with the one-time pairing link, countdown, "connected" state
-  Remote/                  Web files served to the phone, embedded by LogicalName ("Remote/pair.html")
+  Remote/                  Phone UI (plain HTML/CSS/JS, no build step), embedded by LogicalName ("Remote/app.js"):
+                           index.html, app.js (EN/RU strings inside), app.css, manifest.webmanifest, icons
 installer/setup.iss        Inno Setup script (per-user install, optional autostart)
 docs/remote-api.http       Every phone API request and WebSocket message, with examples (REST Client format)
 docs/ws-watch.ps1          PowerShell: pair with a code and print /ws events with timestamps
@@ -81,6 +82,8 @@ docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API an
 - **Phone control:** toggle in the Settings tab (auth required) starts/stops `RemoteServer` on `RemotePort` (5123); `RemoteEnabled` is restored at launch without a prompt. `App.OnExit` stops the host.
 - **Phone pairing & auth:** "Connect phone" (auth) shows a QR for `http://<lan-ip>:<port>/pair?code=…`. `POST /pair {code, name}` → `{deviceId, name, token}`; the token is 256-bit base64url, stored on the PC only as a SHA-256 hash. Everything under `/api` and `/ws` needs `Authorization: Bearer <token>` (401; 429 after 10 failures/min per IP). `/pair` is limited to 5 POSTs/min per IP. Any paired phone can list / revoke devices; the PC can revoke from the Settings tab (auth).
 - **Phone API:** see `docs/remote-api.http`. JSON camelCase, enums as camelCase strings (numbers rejected). Handlers run on the UI thread via `UiThread.InvokeAsync` and only use `TimerController` / `SettingsService`. `PUT /api/settings` is partial and validated, then `SettingsService.NotifyChanged(server)`; `MainWindow` refreshes its controls for any change whose source isn't itself. Color zone logic lives in `AppSettings.GetZone` (overlay and API).
+- **Phone UI:** served at `/` (and `/pair?code=…` from the QR) with CSP `script-src 'self'` (no inline scripts/styles), `no-cache`, `nosniff`. Token in `localStorage` (`gametimer.token`). The countdown runs locally between 5 s ticks; language follows the PC setting; on close 1008 `revoked`/`unauthorized` or HTTP 401 it forgets the token and shows the pairing screen. No service worker (not needed for installing; no offline cache).
+- **No HTTPS (decided):** the phone UI is plain HTTP on the LAN. Chrome's install prompt needs HTTPS, so the Phones tab shows manual "Add to Home screen" steps (Android / iOS) instead; the `beforeinstallprompt` button only shows up if the UI is ever served over HTTPS. Tailscale (`tailscale serve`) was tried and dropped as too complex for the target users; a snapshot is kept as git tree `794ffcd` (see ROADMAP Phase 2).
 - **Extend event order:** `Extended` is raised first, then `TimerService.EvaluateNow()` may raise an alert or the expiry.
 - **WebSocket `/ws`:** auth by bearer header or first message `{"type":"auth","token"}` (5 s). Events come from `TimerController` (`StateChanged`, `Tick` throttled to 5 s, `AlertTriggered`, `Extended`), `SettingsService.SettingsChanged` (sent only if the settings DTO changed) and `DeviceStore.Changed` (revoked devices are disconnected). Subscribed while the server runs.
 - **Clock:** remaining time is monotonic (`Environment.TickCount64`): system clock changes don't affect it, sleep time still counts. Time-of-day mode reads the wall clock once at start.
