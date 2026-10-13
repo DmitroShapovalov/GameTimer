@@ -79,13 +79,7 @@ public partial class OverlayWindow : Window
             TimerText.Text = $"{remaining.Minutes:D2}:{remaining.Seconds:D2}";
 
         // Color based on thresholds
-        string colorHex;
-        if (remaining.TotalMinutes <= _settings.RedThreshold)
-            colorHex = _settings.ColorRed;
-        else if (remaining.TotalMinutes <= _settings.YellowThreshold)
-            colorHex = _settings.ColorYellow;
-        else
-            colorHex = _settings.ColorGreen;
+        var colorHex = _settings.GetZoneColor(_settings.GetZone(remaining));
 
         try
         {

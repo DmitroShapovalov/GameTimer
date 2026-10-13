@@ -12,9 +12,13 @@ namespace GameTimer.Windows;
 
 public partial class MainWindow : FluentWindow
 {
-    private readonly SettingsService _settingsService = new();
+    private readonly SettingsService _settingsService;
     private readonly SoundService _soundService = new();
-    private readonly TimerService _timerService;
+    private readonly TimerController _timer;
+    private readonly RemoteServer _remote;
+    private readonly DeviceStore _devices;
+    private readonly PairingService _pairing;
+    private bool _isRemoteBusy;
     private AppSettings _settings;
     private OverlayWindow? _overlay;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -32,18 +36,23 @@ public partial class MainWindow : FluentWindow
     // Track timer state for localization
     private string _timerStateKey = "Timer_NotStarted";
 
-    public MainWindow()
+    public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer,
+        RemoteServer remote, DeviceStore devices, PairingService pairing)
     {
         InitializeComponent();
-        _settings = _settingsService.Load();
+        _settingsService = settingsService;
+        _settings = settings;
 
-        // Set language before loading UI
-        Loc.SetLanguage(_settings.Language);
-
-        _timerService = new TimerService(_settings);
-        _timerService.Tick += OnTimerTick;
-        _timerService.AlertTriggered += OnAlertTriggered;
-        _timerService.TimerExpired += OnTimerExpired;
+        // The window is only a client of the controller: it sends commands and reacts to events
+        _timer = timer;
+        _timer.Tick += OnTimerTick;
+        _timer.AlertTriggered += OnAlertTriggered;
+        _timer.StateChanged += OnTimerStateChanged;
+        _remote = remote;
+        _devices = devices;
+        _pairing = pairing;
+        _devices.Changed += RefreshDevicesList;
+        _settingsService.SettingsChanged += OnSettingsChanged;
 
         LoadSettingsToUI();
         ApplyLocalization();
@@ -54,6 +63,10 @@ public partial class MainWindow : FluentWindow
 
         Loaded += (_, _) => FocusTimeInput();
         StartButton.ToolTip = "Enter";
+
+        // The setting was approved (Windows Hello) when it was turned on, so no prompt at launch
+        if (_settings.RemoteEnabled)
+            _ = StartRemoteOnLaunchAsync();
     }
 
     #region Localization
@@ -112,6 +125,13 @@ public partial class MainWindow : FluentWindow
         ActionShutdown.Content = Loc.Get("Action_Shutdown");
         ActionLock.Content = Loc.Get("Action_Lock");
         ActionLogoff.Content = Loc.Get("Action_Logoff");
+        PhoneControlLabel.Text = Loc.Get("PhoneControl");
+        RemoteToggle.Content = Loc.Get("Remote_Toggle");
+        ConnectPhoneButton.Content = Loc.Get("ConnectPhone");
+        PairedDevicesLabel.Text = Loc.Get("PairedDevices");
+        NoDevicesText.Text = Loc.Get("PairedDevices_None");
+        UpdateRemoteStatus();
+        RefreshDevicesList();
         ProtectionInfo.Title = Loc.Get("Protection");
         ProtectionInfo.Message = Loc.Get("ProtectionInfo");
         AboutLabel.Text = Loc.Get("About");
@@ -189,7 +209,52 @@ public partial class MainWindow : FluentWindow
         }
 
         // Settings tab - language
-        var langTag = _settings.Language;
+        SelectLanguageInCombo(_settings.Language);
+
+        // Settings tab - action
+        _lastActionIndex = (int)_settings.Action;
+        ActionCombo.SelectedIndex = _lastActionIndex;
+
+        // Settings tab - phone control
+        RemoteToggle.IsChecked = _settings.RemoteEnabled;
+    }
+
+    private void SaveSettings()
+    {
+        if (_isLoading) return;
+        _settingsService.Save(_settings);
+        _settingsService.NotifyChanged(this);
+    }
+
+    // Settings changed by another client (the phone API): refresh the controls it can change
+    private void OnSettingsChanged(object source)
+    {
+        if (source == this) return;
+
+        _isLoading = true;
+        try
+        {
+            YellowThreshold.Text = _settings.YellowThreshold.ToString();
+            RedThreshold.Text = _settings.RedThreshold.ToString();
+            UpdateColorPreviews();
+
+            _lastActionIndex = (int)_settings.Action;
+            ActionCombo.SelectedIndex = _lastActionIndex;
+
+            SelectLanguageInCombo(_settings.Language);
+            Loc.SetLanguage(_settings.Language);
+            ApplyLocalization(); // also refreshes the alerts list
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+
+        _overlay?.ApplySettings(_settings);
+    }
+
+    private void SelectLanguageInCombo(string langTag)
+    {
         for (int i = 0; i < LanguageCombo.Items.Count; i++)
         {
             if (LanguageCombo.Items[i] is ComboBoxItem ci && ci.Tag?.ToString() == langTag)
@@ -198,16 +263,6 @@ public partial class MainWindow : FluentWindow
                 break;
             }
         }
-
-        // Settings tab - action
-        _lastActionIndex = (int)_settings.Action;
-        ActionCombo.SelectedIndex = _lastActionIndex;
-    }
-
-    private void SaveSettings()
-    {
-        if (_isLoading) return;
-        _settingsService.Save(_settings);
     }
 
     #endregion
@@ -251,7 +306,7 @@ public partial class MainWindow : FluentWindow
         else
         {
             ValidationText.Visibility = Visibility.Collapsed;
-            if (!_timerService.IsRunning)
+            if (!_timer.IsRunning)
                 StartButton.IsEnabled = true;
         }
     }
@@ -259,7 +314,7 @@ public partial class MainWindow : FluentWindow
 
     private void FocusTimeInput()
     {
-        if (MainTabs.SelectedIndex != 0 || _timerService.IsRunning) return;
+        if (MainTabs.SelectedIndex != 0 || _timer.IsRunning) return;
         var target = ModeInterval.IsChecked == true ? IntervalHours : AbsoluteHour;
         Dispatcher.BeginInvoke(() => { target.Focus(); Keyboard.Focus(target); target.SelectAll(); },
             System.Windows.Threading.DispatcherPriority.Input);
@@ -268,6 +323,25 @@ public partial class MainWindow : FluentWindow
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+
+#if DEBUG
+        // Temporary debug hotkeys for TimerController.Extend: Ctrl+Shift+Plus / Ctrl+Shift+Minus = ±1 min
+        if (ctrl && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            int delta = e.Key switch
+            {
+                Key.OemPlus or Key.Add => 1,
+                Key.OemMinus or Key.Subtract => -1,
+                _ => 0
+            };
+            if (delta != 0)
+            {
+                _timer.Extend(delta);
+                e.Handled = true;
+                return;
+            }
+        }
+#endif
 
         // Ctrl+1..4 — switch tabs
         if (ctrl)
@@ -402,54 +476,33 @@ public partial class MainWindow : FluentWindow
 
     private void Start_Click(object sender, RoutedEventArgs e)
     {
-        if (_timerService.IsRunning) return;
+        if (_timer.IsRunning) return;
 
         if (ModeInterval.IsChecked == true)
         {
             int h = ParseInt(IntervalHours.Text);
             int m = ParseInt(IntervalMinutes.Text);
-            if (h == 0 && m == 0) { ValidateTimerInput(); return; }
-            _timerService.StartInterval(h, m);
+            if (!_timer.StartInterval(h, m)) ValidateTimerInput();
         }
         else
         {
             int h = ParseInt(AbsoluteHour.Text, -1);
             int m = ParseInt(AbsoluteMinute.Text, -1);
-            if (h < 0 || h > 23 || m < 0 || m > 59) { ValidateTimerInput(); return; }
-            _timerService.StartAbsolute(h, m);
+            if (!_timer.StartAbsolute(h, m)) ValidateTimerInput();
         }
-
-        ValidationText.Visibility = Visibility.Collapsed;
-        ShowOverlay();
-        UpdateButtonStates(running: true);
-        _timerStateKey = "Timer_Started";
-        StatusText.Text = Loc.Get(_timerStateKey);
+        // UI updates happen in OnTimerStateChanged
     }
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
     {
         if (!await RequireAuth()) return;
-
-        _timerService.Stop();
-        ShutdownService.CancelShutdown();
-        HideOverlay();
-        UpdateButtonStates(running: false);
-        _timerStateKey = "Timer_Stopped";
-        StatusText.Text = Loc.Get(_timerStateKey);
-        RemainingText.Text = "";
+        _timer.Stop();
     }
 
     private async void Reset_Click(object sender, RoutedEventArgs e)
     {
         if (!await RequireAuth()) return;
-
-        _timerService.Stop();
-        ShutdownService.CancelShutdown();
-        HideOverlay();
-        UpdateButtonStates(running: false);
-        _timerStateKey = "Timer_NotStarted";
-        StatusText.Text = Loc.Get(_timerStateKey);
-        RemainingText.Text = "";
+        _timer.Reset();
     }
 
     private void UpdateButtonStates(bool running)
@@ -479,15 +532,42 @@ public partial class MainWindow : FluentWindow
         _overlay?.PlayPulse();
     }
 
-    private void OnTimerExpired()
+    // Fires for every transition, whoever caused it (this window now, the phone API later).
+    // The shutdown / lock / logoff on expiry is executed by TimerController itself.
+    private void OnTimerStateChanged(TimerState state)
     {
-        HideOverlay();
-        UpdateButtonStates(running: false);
-        _timerStateKey = "Timer_Expired";
-        StatusText.Text = Loc.Get(_timerStateKey);
-        RemainingText.Text = "00:00";
+        switch (state)
+        {
+            case TimerState.Running:
+                ValidationText.Visibility = Visibility.Collapsed;
+                ShowOverlay();
+                UpdateButtonStates(running: true);
+                _timerStateKey = "Timer_Started";
+                break;
 
-        ShutdownService.Execute(_settings.Action);
+            case TimerState.Stopped:
+                HideOverlay();
+                UpdateButtonStates(running: false);
+                _timerStateKey = "Timer_Stopped";
+                RemainingText.Text = "";
+                break;
+
+            case TimerState.NotStarted:
+                HideOverlay();
+                UpdateButtonStates(running: false);
+                _timerStateKey = "Timer_NotStarted";
+                RemainingText.Text = "";
+                break;
+
+            case TimerState.Expired:
+                HideOverlay();
+                UpdateButtonStates(running: false);
+                _timerStateKey = "Timer_Expired";
+                RemainingText.Text = "00:00";
+                break;
+        }
+
+        StatusText.Text = Loc.Get(_timerStateKey);
     }
 
     #endregion
@@ -733,6 +813,97 @@ public partial class MainWindow : FluentWindow
         SaveSettings();
     }
 
+    // Turning phone control on or off requires auth, like other protected settings
+    private async void RemoteToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading || _isRemoteBusy) return;
+
+        bool enable = RemoteToggle.IsChecked == true;
+        if (enable == _settings.RemoteEnabled) return;
+
+        _isRemoteBusy = true; // reverting IsChecked below re-enters this handler
+        RemoteToggle.IsEnabled = false;
+        try
+        {
+            if (!await RequireAuth())
+            {
+                RemoteToggle.IsChecked = _settings.RemoteEnabled;
+                return;
+            }
+
+            if (enable)
+            {
+                if (!await _remote.StartAsync(_settings.RemotePort))
+                {
+                    RemoteToggle.IsChecked = false;
+                    return;
+                }
+            }
+            else
+            {
+                await _remote.StopAsync();
+            }
+
+            _settings.RemoteEnabled = enable;
+            SaveSettings();
+        }
+        finally
+        {
+            _isRemoteBusy = false;
+            RemoteToggle.IsEnabled = true;
+            UpdateRemoteStatus();
+        }
+    }
+
+    private async Task StartRemoteOnLaunchAsync()
+    {
+        // On failure (e.g. port busy) the setting stays on, so the next launch tries again
+        await _remote.StartAsync(_settings.RemotePort);
+        UpdateRemoteStatus();
+    }
+
+    private async void ConnectPhone_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_remote.IsRunning || _remote.Port is not int port) return;
+        if (!await RequireAuth()) return;
+
+        var address = NetworkFilter.GetLanAddress();
+        if (address == null)
+        {
+            System.Windows.MessageBox.Show(Loc.Get("ConnectPhone_NoNetwork"), Loc.Get("Error"),
+                System.Windows.MessageBoxButton.OK);
+            return;
+        }
+
+        new ConnectPhoneDialog(_pairing, address.ToString(), port) { Owner = this }.ShowDialog();
+    }
+
+    private async void RevokeDevice_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: PairedDevice device }) return;
+        if (!await RequireAuth()) return;
+        _devices.Revoke(device.Id); // its next request gets 401
+    }
+
+    private void RefreshDevicesList()
+    {
+        DevicesList.ItemsSource = null;
+        DevicesList.ItemsSource = _devices.Devices;
+        NoDevicesText.Visibility = _devices.Devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateRemoteStatus()
+    {
+        ConnectPhoneButton.IsEnabled = _remote.IsRunning;
+
+        if (_remote.IsRunning)
+            RemoteStatusText.Text = string.Format(Loc.Get("Remote_Running"), _remote.Port);
+        else if (_remote.LastError != null)
+            RemoteStatusText.Text = string.Format(Loc.Get("Remote_StartFailed"), _settings.RemotePort, _remote.LastError);
+        else
+            RemoteStatusText.Text = Loc.Get("Remote_Off");
+    }
+
     #endregion
 
     #region Tray Icon
@@ -799,11 +970,10 @@ public partial class MainWindow : FluentWindow
 
     private async void TrayExit()
     {
-        if (_timerService.IsRunning)
+        if (_timer.IsRunning)
         {
             if (!await RequireAuth()) return;
-            _timerService.Stop();
-            ShutdownService.CancelShutdown();
+            _timer.Stop();
         }
 
         HideOverlay();

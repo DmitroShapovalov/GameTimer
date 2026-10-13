@@ -1,6 +1,8 @@
 using System.Threading;
 using System.Windows.Media;
 using Wpf.Ui.Appearance;
+using GameTimer.Localization;
+using GameTimer.Services;
 using GameTimer.Windows;
 
 namespace GameTimer;
@@ -14,6 +16,8 @@ public partial class App : System.Windows.Application
     // Kept as fields so the GC never releases them while the app runs
     private Mutex? _instanceMutex;
     private EventWaitHandle? _showEvent;
+
+    private RemoteServer? _remoteServer;
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
@@ -38,7 +42,19 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         ApplicationAccentColorManager.Apply(Color.FromRgb(0x00, 0x78, 0xD4));
 
-        var mainWindow = new MainWindow();
+        // Core services live here, not in the window, so other control surfaces
+        // (the phone API from Phase 1) can share the same TimerController.
+        var settingsService = new SettingsService();
+        var settings = settingsService.Load();
+        Loc.SetLanguage(settings.Language);
+        var timerController = new TimerController(settings);
+
+        var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
+        var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
+        var pairing = new PairingService();
+        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService);
+
+        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing);
         MainWindow = mainWindow;
         mainWindow.Show();
 
@@ -54,6 +70,10 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(System.Windows.ExitEventArgs e)
     {
+        // Stop the embedded server off the UI thread so its shutdown can't wait on the dispatcher
+        if (_remoteServer is { IsRunning: true } server)
+            Task.Run(server.StopAsync).Wait(TimeSpan.FromSeconds(5));
+
         if (_instanceMutex != null)
         {
             _instanceMutex.ReleaseMutex();

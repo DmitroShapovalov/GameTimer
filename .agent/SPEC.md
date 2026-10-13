@@ -1,3 +1,5 @@
+> **Historical:** original v1.0 spec. Implemented with some changes (WPF UI, Windows Hello instead of a password, MP3 sound, localization). Current state: `CLAUDE.md`.
+
 # GameTimer — Техническое задание v1.0
 
 > Десктопное WPF-приложение для родительского контроля: визуальный таймер поверх игр с обратным отсчётом, звуковыми уведомлениями и защитой паролем.

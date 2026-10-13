@@ -50,6 +50,28 @@ public class AppSettings
 
     // UI language (en, ru)
     public string Language { get; set; } = "en";
+
+    // Phone remote over home Wi-Fi (embedded server). Off by default.
+    public bool RemoteEnabled { get; set; } = false;
+    public int RemotePort { get; set; } = 5123;
+
+    // Paired phones (token hashes only)
+    public List<PairedDevice> Devices { get; set; } = new();
+
+    /// <summary>Color zone for the given remaining time. Shared by the overlay and the phone API.</summary>
+    public TimerZone GetZone(TimeSpan remaining)
+    {
+        if (remaining.TotalMinutes <= RedThreshold) return TimerZone.Red;
+        if (remaining.TotalMinutes <= YellowThreshold) return TimerZone.Yellow;
+        return TimerZone.Green;
+    }
+
+    public string GetZoneColor(TimerZone zone) => zone switch
+    {
+        TimerZone.Red => ColorRed,
+        TimerZone.Yellow => ColorYellow,
+        _ => ColorGreen
+    };
 }
 
 public class AlertPoint
@@ -72,4 +94,11 @@ public enum TimerMode
 {
     Absolute,
     Interval
+}
+
+public enum TimerZone
+{
+    Green,
+    Yellow,
+    Red
 }

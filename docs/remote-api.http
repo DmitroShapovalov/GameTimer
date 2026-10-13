@@ -1,0 +1,67 @@
+# GameTimer phone API (Phase 1). Works with the VS / Rider / VS Code REST Client .http format.
+# 1. Settings tab: turn on "Phone control", click "Connect phone", copy the code from the URL.
+# 2. Run the pairing request below, then paste the returned token into @token.
+# Errors: { "error": "<code>" } with 400 (bad input) or 409 (wrong timer state); 401 without a valid token.
+
+@host = http://localhost:5123
+@token = PASTE_TOKEN_HERE
+
+### Pair (one-time code from the QR link, valid 2 minutes)
+POST {{host}}/pair
+Content-Type: application/json
+
+{ "code": "ABCD2345", "name": "PowerShell" }
+
+### Status: state (notStarted|running|stopped|expired), mode, remainingSeconds, targetTime, action, zone
+GET {{host}}/api/status
+Authorization: Bearer {{token}}
+
+### Start: mode "interval" (hours 0-23, minutes 0-59) or "absolute" (time of day)
+POST {{host}}/api/timer/start
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "mode": "interval", "hours": 0, "minutes": 30 }
+
+### Extend: positive adds, negative removes; never below zero (zero expires the timer)
+POST {{host}}/api/timer/extend
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "minutes": 15 }
+
+### Stop (also cancels a pending shutdown)
+POST {{host}}/api/timer/stop
+Authorization: Bearer {{token}}
+
+### Settings
+GET {{host}}/api/settings
+Authorization: Bearer {{token}}
+
+### Update settings: every field optional; action shutdown|lock|logoff, thresholds 1-1440 min,
+### colors #RRGGBB, language en|ru, alertPoints replaces the whole list
+PUT {{host}}/api/settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "action": "lock", "redThreshold": 5, "alertPoints": [ { "minutes": 5, "enabled": true }, { "minutes": 1, "enabled": true } ] }
+
+### WebSocket push events: ws://localhost:5123/ws  (watch them with docs/ws-watch.ps1)
+# Auth: "Authorization: Bearer <token>" on the upgrade request, or (browsers) a first message
+#   { "type": "auth", "token": "<token>" } within 5 s. Failure: close 1008 "unauthorized" / "auth_timeout".
+# Server messages (JSON, field "type"):
+#   hello {status, settings}                once, right after auth
+#   started | stopped | expired {status}     timer state changes (stopped also covers reset)
+#   tick {status}                           every 5 s while running
+#   alert {minutes, status}                 an alert point was reached
+#   extended {minutes, status}              time added / removed
+#   settingsChanged {settings}              only when the API-visible settings changed
+# Server closes: 1008 "revoked" (device removed), 1001 "server_stopping". Max 10 connections (503).
+
+### Paired devices
+GET {{host}}/api/devices
+Authorization: Bearer {{token}}
+
+### Revoke a device
+DELETE {{host}}/api/devices/DEVICE_ID
+Authorization: Bearer {{token}}

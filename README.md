@@ -12,6 +12,7 @@ A game time limiter for Windows — designed for parents who want to manage thei
 - **Parental protection** — all controls are protected by Windows Hello (PIN / fingerprint / face recognition) with Windows password fallback
 - **System tray** — minimizes to tray on close; exit only from the tray menu (also protected)
 - **Draggable overlay position** — position the timer anywhere on screen via a visual preview
+- **Phone control over home Wi-Fi** — see and control the timer from a phone (start, stop, ±15 min, settings); no cloud, no app store, paired by QR code
 - **Bilingual UI** — English (default) and Russian, switchable at runtime
 - **Modern look** — Fluent Design (WPF UI) with dark theme
 
@@ -51,6 +52,31 @@ The output will be in `bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/`.
 5. When the timer expires, the configured action executes (shutdown / lock / logoff)
 6. To stop or modify the timer, Windows Hello or Windows password authentication is required
 
+## Phone control (home Wi-Fi)
+
+The PC app can serve a small web app to your phone. It works only inside your home network and is **off by default**.
+
+1. In **Settings**, turn on **Phone control** (Windows Hello). The first time, Windows asks whether to allow network access: allow it for **private networks** only.
+2. Click **Connect phone** (Windows Hello) and scan the QR code with the phone camera. The phone must be on the same Wi-Fi. The code is valid for 2 minutes and works once.
+3. Give the phone a name and tap **Connect**.
+
+On the phone you can now:
+
+- see the countdown in the same colors as on the PC, with the end time and what happens then;
+- start a timer (duration or time of day), stop it, add or remove 15 minutes;
+- change the expiry action, colors and thresholds, sound alerts and the language;
+- see and remove paired phones.
+
+Changes made on the PC show up on the phone immediately, and the other way round.
+
+**Add it to the home screen** (once): Android — Chrome menu ⋮ → *Add to Home screen*; iPhone — Safari → *Share* → *Add to Home Screen*.
+
+**Security.** Only paired phones can control the timer: each gets its own random token, and the PC stores only a hash of it. Requests from outside the home network are refused, and repeated failed attempts are rate-limited. Remove a phone in **Settings** (or from another phone) to cut it off at once. The connection is plain HTTP inside your home network.
+
+**If the phone shows "PC unreachable":** check that the phone is on the same Wi-Fi and that the PC is on. If the router gave the PC a new address, connect the phone again with a new QR code — or reserve a fixed address for the PC in the router (DHCP reservation).
+
+Developers: the API and WebSocket messages are documented in [`docs/remote-api.http`](docs/remote-api.http).
+
 ## Keyboard shortcuts
 
 | Key | Action |
@@ -69,6 +95,8 @@ Only one copy of the app can run at a time — launching it again just brings th
 - .NET 8, WPF
 - [WPF UI](https://github.com/lepoco/wpfui) 3.0.5 (Fluent Design)
 - Windows Hello (`UserConsentVerifier` API)
+- ASP.NET Core (embedded Kestrel) for the phone remote; plain HTML/CSS/JS phone UI
+- [QRCoder](https://github.com/codebude/QRCoder) for the pairing QR code
 - Single-file self-contained deployment
 
 ## License
