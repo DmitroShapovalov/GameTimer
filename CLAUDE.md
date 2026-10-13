@@ -17,7 +17,7 @@ Owner: Dmytro (GitHub: DmitroShapovalov/GameTimer). The app is used at home on t
 
 - Talk to the owner in **Russian**. Code, comments, commit messages, README and docs in **English**.
 - The agent compiles the code itself (see "Agent environment notes"), but can't run the WPF app: the owner tests behaviour on his Windows PC.
-- Commit only when asked ("коммить"). Push and tags are done by the owner (agent has no GitHub credentials).
+- Commit only when asked ("коммить"). Tags and releases are done by the owner. Feature work goes to a branch and a PR to `master`.
 - Keep UI text localized: every user-visible string goes to both `.resx` files (see Localization).
 - Before larger features, propose the approach briefly; for UI changes he usually sends screenshots with feedback.
 
@@ -119,6 +119,8 @@ Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTime
 - The repo lives on the owner's PC at `D:\Projects\GameTimer`, reached through the connected folder (`device_bash`, path `$HOME/mnt/Projects/GameTimer`).
 - Git leaves stale `.git/index.lock` / `HEAD.lock` from the sandbox: request delete permission for `D:\Projects`, then `rm -f` them before committing.
 - Commit message attribution lines come from the session's system instructions.
+- **Push / PR:** the agent's git (Linux VM) has no GitHub credentials, but the GitKraken MCP `git_push` runs on the owner's Windows and uses his git credentials, so pushing a branch works (set `branch.<name>.remote/merge` first). Creating a PR through GitKraken needs the owner to run `gk auth login` once; otherwise give him the compare link `https://github.com/DmitroShapovalov/GameTimer/compare/master...<branch>?expand=1`.
+- After a git command that left `.lock` files (no delete permission yet), request delete permission for `D:\Projects` and remove them before the next git command.
 - **Building from the agent (compile check).** `device_bash` runs in a Linux VM, not Windows, with network access. Install the .NET 8 SDK into the session home (it does not persist between sessions, ~1 min), then build a copy outside the repo so Linux `bin/obj` never mix with the owner's Windows build:
   ```bash
   curl -sSL https://dot.net/v1/dotnet-install.sh -o ~/di.sh && bash ~/di.sh --channel 8.0 --install-dir ~/.dotnet
