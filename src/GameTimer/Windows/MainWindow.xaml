@@ -327,7 +327,7 @@
                                     Message="Timer controls are protected by Windows Hello (PIN / fingerprint / face)."/>
 
                         <TextBlock x:Name="AboutLabel" Text="About" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
-                        <TextBlock Text="GameTimer v1.0" FontSize="12"
+                        <TextBlock x:Name="VersionText" Text="GameTimer" FontSize="12"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                         <TextBlock x:Name="AppDescriptionText" Text="Game time limiter for Windows" FontSize="12"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>

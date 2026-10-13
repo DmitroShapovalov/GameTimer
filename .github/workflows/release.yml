@@ -21,7 +21,9 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Publish
-        run: dotnet publish src/GameTimer/GameTimer.csproj -c Release -r win-x64 --self-contained -o publish
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v',''
+          dotnet publish src/GameTimer/GameTimer.csproj -c Release -r win-x64 --self-contained -o publish -p:Version=$version
 
       - name: Install Inno Setup
         run: choco install innosetup -y
