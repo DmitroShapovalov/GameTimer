@@ -25,7 +25,7 @@ Each step ends with a building, working app. Do not start the next step until th
 | 3 | Pairing, device tokens, auth middleware, rate limiting | RMT-04 | ☑ |
 | 4 | REST API endpoints | RMT-03 | ☑ |
 | 5 | WebSocket push events | RMT-03 (`/ws`) | ☑ |
-| 6 | Mobile web UI (PWA) | RMT-05 | ☐ |
+| 6 | Mobile web UI (PWA) | RMT-05 | ☑ |
 | 7 | Firewall rule, optional mDNS | RMT-06 | ☐ |
 | 8 | Acceptance pass | Acceptance | ☐ |
 
