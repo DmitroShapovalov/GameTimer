@@ -7,10 +7,11 @@
 | v1.0.0 | Overlay countdown, interval / time-of-day modes, color zones, sound alerts, shutdown/lock/logoff, tray, Fluent UI, Windows Hello auth, EN/RU localization, installer + CI |
 | v1.0.1 | Overlay re-asserts topmost every 2 s (fixes games that steal z-order) |
 | v1.1.0 | Single-instance guard; keyboard controls (Enter, arrows, Ctrl+1..4, Esc) |
+| v1.2.0 | Phone remote over home Wi-Fi (QR pairing, REST + WebSocket, mobile web UI), automatic firewall rule, monotonic clock (system clock changes no longer affect the timer), version in About |
 
 ---
 
-## Next: Phase 1 — Phone remote over home Wi-Fi
+## Phase 1 — Phone remote over home Wi-Fi (released in v1.2.0)
 
 **Goal:** the parent sees the timer and controls it from a phone on the same Wi-Fi. No cloud, no app store: the PC app serves a mobile web UI (PWA) itself.
 
@@ -27,7 +28,7 @@ Each step ends with a building, working app. Do not start the next step until th
 | 5 | WebSocket push events | RMT-03 (`/ws`) | ☑ |
 | 6 | Mobile web UI (PWA) | RMT-05 | ☑ |
 | 7 | Firewall rule, optional mDNS | RMT-06 | ☑ |
-| 8 | Acceptance pass | Acceptance | ☐ |
+| 8 | Acceptance pass | Acceptance | ☑ |
 
 **Step 1 — TimerController.** Move start/stop/reset/expiry out of `MainWindow.xaml.cs` into `TimerController` with a `StateChanged` event; the window only subscribes. Track remaining time with `Stopwatch` / `Environment.TickCount64` instead of `DateTime.Now` (closes the "system clock change" backlog item). Add `Extend(minutes)` (negative allowed, never below zero; in time-of-day mode it shifts the target).
 *Done when:* desktop behaviour is unchanged; changing the system clock does not affect the remaining time; `Extend` works from a temporary debug hotkey or unit test.
@@ -55,10 +56,10 @@ Also (public app, many installs): when the PC's LAN IP changes, the phone's home
 Implemented: turning on "Phone control" checks our firewall rule (`netsh ... show rule`, no admin) and, if missing, runs the exe elevated with `--configure-firewall <port>` (one UAC prompt) to delete stale rules for this exe (including block rules from Windows' own prompt) and add `SystemMonitor-Remote`: TCP on the port, this exe only, `remoteip=localsubnet`, private + public profiles (Windows 11 often marks home Wi-Fi public). Declined UAC → warning + "Allow in firewall" button; at launch only the warning (no prompt). The Settings status shows the phone URL. The phone banner switches to a "PC may have a new address, scan a new QR" hint after 20 s offline. mDNS skipped (Android Chrome doesn't resolve `.local` reliably). Known gap: the per-user uninstaller can't remove the rule (needs admin); it only allows this exe path, so a leftover is harmless.
 *Done when:* a fresh install on a second machine can be reached from a phone without manual firewall setup (or with clear in-app instructions).
 
-**Step 8 — Acceptance.** Run the checklist under "Acceptance" below and release as v1.2.0.
+**Step 8 — Acceptance.** Run the checklist under "Acceptance" below and release as v1.2.0. Done: every acceptance item was verified on the real PC and phone while finishing steps 1–7 (clock change in 1, toggle off in 2, 401 / revoke in 3–5, phone ↔ PC sync in 5–6, `ws-selftest.ps1` ALL PASSED); the Release `dotnet publish` builds cleanly. The version now comes from `<Version>` in the csproj (CI passes `-p:Version=<tag>` to `dotnet publish`), and Settings → About shows it.
 
 ### Decisions and notes
-- Referencing ASP.NET Core increases the self-contained single-file exe noticeably (tens of MB). Accepted for this project.
+- Referencing ASP.NET Core increases the self-contained single-file exe: measured 183 → 209 MB (installer ≈ 53 → 61 MB compressed). Accepted for this project.
 - No new third-party packages except a QR generator (e.g. `QRCoder`, MIT) if needed for step 3.
 - The `TimerController` is the single source of truth for timer state; UI, API and WS are all clients of it.
 

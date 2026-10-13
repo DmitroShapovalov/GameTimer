@@ -139,10 +139,18 @@ public partial class MainWindow : FluentWindow
         ProtectionInfo.Message = Loc.Get("ProtectionInfo");
         AboutLabel.Text = Loc.Get("About");
         AppDescriptionText.Text = Loc.Get("AppDescription");
+        VersionText.Text = $"GameTimer v{AppVersion}";
 
         // Tray menu
         UpdateTrayMenu();
     }
+
+    // From <Version> (CI passes the tag: -p:Version=1.2.0); drop the "+commit" suffix the SDK appends
+    private static string AppVersion =>
+        (typeof(MainWindow).Assembly
+             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+             .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute)?
+        .InformationalVersion.Split('+')[0] ?? "?";
 
     private void RefreshAlertsList()
     {
