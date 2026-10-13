@@ -26,7 +26,7 @@ Each step ends with a building, working app. Do not start the next step until th
 | 4 | REST API endpoints | RMT-03 | ☑ |
 | 5 | WebSocket push events | RMT-03 (`/ws`) | ☑ |
 | 6 | Mobile web UI (PWA) | RMT-05 | ☑ |
-| 7 | Firewall rule, optional mDNS | RMT-06 | ☐ |
+| 7 | Firewall rule, optional mDNS | RMT-06 | ☑ |
 | 8 | Acceptance pass | Acceptance | ☐ |
 
 **Step 1 — TimerController.** Move start/stop/reset/expiry out of `MainWindow.xaml.cs` into `TimerController` with a `StateChanged` event; the window only subscribes. Track remaining time with `Stopwatch` / `Environment.TickCount64` instead of `DateTime.Now` (closes the "system clock change" backlog item). Add `Extend(minutes)` (negative allowed, never below zero; in time-of-day mode it shifts the target).
@@ -52,6 +52,7 @@ Built as plain JS (no framework/build). Status and the start form share the Time
 
 **Step 7 — Network plumbing.** Decide: installer adds the Private-profile firewall rule (requires `PrivilegesRequired=admin`) or the app explains the first-run firewall prompt. Optional mDNS announce `_gametimer._tcp`.
 Also (public app, many installs): when the PC's LAN IP changes, the phone's home-screen shortcut points to the old address. At least: the phone's "PC unreachable" banner suggests scanning a new QR after a while, and README suggests a DHCP reservation. mDNS (`<pc>.local`) would fix it where phones resolve `.local` (iOS yes; Android Chrome unreliable), so treat it as a bonus.
+Implemented: turning on "Phone control" checks our firewall rule (`netsh ... show rule`, no admin) and, if missing, runs the exe elevated with `--configure-firewall <port>` (one UAC prompt) to delete stale rules for this exe (including block rules from Windows' own prompt) and add `SystemMonitor-Remote`: TCP on the port, this exe only, `remoteip=localsubnet`, private + public profiles (Windows 11 often marks home Wi-Fi public). Declined UAC → warning + "Allow in firewall" button; at launch only the warning (no prompt). The Settings status shows the phone URL. The phone banner switches to a "PC may have a new address, scan a new QR" hint after 20 s offline. mDNS skipped (Android Chrome doesn't resolve `.local` reliably). Known gap: the per-user uninstaller can't remove the rule (needs admin); it only allows this exe path, so a leftover is harmless.
 *Done when:* a fresh install on a second machine can be reached from a phone without manual firewall setup (or with clear in-app instructions).
 
 **Step 8 — Acceptance.** Run the checklist under "Acceptance" below and release as v1.2.0.
@@ -67,7 +68,7 @@ Move start/stop/reset/expiry logic out of `MainWindow.xaml.cs` into a `TimerCont
 ### RMT-02 Embedded server
 - Kestrel via `<FrameworkReference Include="Microsoft.AspNetCore.App" />` (binds to LAN without admin; `HttpListener` would need `netsh urlacl` as admin).
 - Port `5123` by default, configurable. **Off by default**; toggle "Phone control" in the Settings tab (toggling requires auth).
-- LAN-only by remote-address filter (decided in step 2): Kestrel listens on all interfaces, `NetworkFilter` aborts every connection not from loopback, 10/8, 172.16/12, 192.168/16, 169.254/16, fe80::/10 or fc00::/7. Survives DHCP address changes without restarting the host; Phase 2 adds Tailscale's 100.64/10 in one place.
+- LAN-only by remote-address filter (decided in step 2): Kestrel listens on all interfaces, `NetworkFilter` aborts every connection not from loopback, 10/8, 172.16/12, 192.168/16, 169.254/16, fe80::/10 or fc00::/7. Survives DHCP address changes without restarting the host; a VPN option would add its range in this one place.
 
 ### RMT-03 API (JSON)
 

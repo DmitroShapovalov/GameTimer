@@ -47,6 +47,7 @@ src/GameTimer/
     DeviceStore.cs         Paired devices: Add/Revoke on UI thread, thread-safe token lookup (snapshot)
     PairingService.cs      One-time 8-char pairing code, 2-minute lifetime, single active code
     UiThread.cs            SynchronizationContext wrapper: InvokeAsync/Post to the UI thread, VerifyAccess
+    FirewallHelper.cs      Windows Firewall rule `SystemMonitor-Remote`: check via netsh (no admin), apply elevated
     ShutdownService.cs     shutdown / lock / logoff, CancelShutdown
     SoundService.cs        MediaPlayer; built-in Resources/notification.mp3 (embedded) or custom file
   Helpers/
@@ -79,7 +80,8 @@ docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API an
 - **Single instance:** second launch signals the first (`Local\SystemMonitor_7F3A2C1E_*`) and exits; first calls `MainWindow.BringToFront()`.
 - **Overlay position:** stored as 0..1 fractions mapped to `[0, screen - overlaySize]`.
 - **Keyboard:** Enter = start / add alert, ↑↓ (+Shift) adjust, `:` jumps to minutes, Ctrl+1..4 tabs, Esc = tray.
-- **Phone control:** toggle in the Settings tab (auth required) starts/stops `RemoteServer` on `RemotePort` (5123); `RemoteEnabled` is restored at launch without a prompt. `App.OnExit` stops the host.
+- **Phone control:** toggle in the Settings tab (auth required) starts/stops `RemoteServer` on `RemotePort` (5123); `RemoteEnabled` is restored at launch without a prompt. `App.OnExit` stops the host. The status line shows the phone URL (`http://<lan-ip>:<port>`).
+- **Firewall:** enabling phone control adds the rule first (one UAC prompt) by running this exe with `--configure-firewall <port>`; `App.OnStartup` handles that switch before the single-instance mutex, calls `FirewallHelper.Apply` and exits with its code. netsh output is localized: only the exit code, port and path are parsed.
 - **Phone pairing & auth:** "Connect phone" (auth) shows a QR for `http://<lan-ip>:<port>/pair?code=…`. `POST /pair {code, name}` → `{deviceId, name, token}`; the token is 256-bit base64url, stored on the PC only as a SHA-256 hash. Everything under `/api` and `/ws` needs `Authorization: Bearer <token>` (401; 429 after 10 failures/min per IP). `/pair` is limited to 5 POSTs/min per IP. Any paired phone can list / revoke devices; the PC can revoke from the Settings tab (auth).
 - **Phone API:** see `docs/remote-api.http`. JSON camelCase, enums as camelCase strings (numbers rejected). Handlers run on the UI thread via `UiThread.InvokeAsync` and only use `TimerController` / `SettingsService`. `PUT /api/settings` is partial and validated, then `SettingsService.NotifyChanged(server)`; `MainWindow` refreshes its controls for any change whose source isn't itself. Color zone logic lives in `AppSettings.GetZone` (overlay and API).
 - **Phone UI:** served at `/` (and `/pair?code=…` from the QR) with CSP `script-src 'self'` (no inline scripts/styles), `no-cache`, `nosniff`. Token in `localStorage` (`gametimer.token`). The countdown runs locally between 5 s ticks; language follows the PC setting; on close 1008 `revoked`/`unauthorized` or HTTP 401 it forgets the token and shows the pairing screen. No service worker (not needed for installing; no offline cache).
@@ -119,7 +121,9 @@ Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTime
 - The repo lives on the owner's PC at `D:\Projects\GameTimer`, reached through the connected folder (`device_bash`, path `$HOME/mnt/Projects/GameTimer`).
 - Git leaves stale `.git/index.lock` / `HEAD.lock` from the sandbox: request delete permission for `D:\Projects`, then `rm -f` them before committing.
 - Commit message attribution lines come from the session's system instructions.
-- **Push / PR:** the agent's git (Linux VM) has no GitHub credentials, but the GitKraken MCP `git_push` runs on the owner's Windows and uses his git credentials, so pushing a branch works (set `branch.<name>.remote/merge` first). Creating a PR through GitKraken needs the owner to run `gk auth login` once; otherwise give him the compare link `https://github.com/DmitroShapovalov/GameTimer/compare/master...<branch>?expand=1`.
+- **Push / PR (GitHub access):** follow the owner's `personal-github-access` skill. In short: a fine-grained PAT (personal account only, selected repos; Contents, Pull requests, Workflows, Actions, Issues RW; no Administration / Secrets) lives in `D:\Projects\_claude\github-credentials` (git store format), shared by all his projects. Use it per command, never write it into `.git/config` (Windows git reads that file too), never print it:
+  `git -c credential.helper= -c "credential.helper=store --file=$HOME/mnt/Projects/_claude/github-credentials" push -u origin <branch>`.
+  **Never use the GitKraken tools**: they use the owner's Windows git credentials, which also reach his employer's repositories.
 - After a git command that left `.lock` files (no delete permission yet), request delete permission for `D:\Projects` and remove them before the next git command.
 - **Building from the agent (compile check).** `device_bash` runs in a Linux VM, not Windows, with network access. Install the .NET 8 SDK into the session home (it does not persist between sessions, ~1 min), then build a copy outside the repo so Linux `bin/obj` never mix with the owner's Windows build:
   ```bash

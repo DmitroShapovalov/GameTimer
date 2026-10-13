@@ -16,6 +16,7 @@
       tabTimer: "Timer", tabSettings: "Settings", tabDevices: "Phones",
       connecting: "Connecting to the PC…",
       offline: "PC unreachable. Reconnecting… Check that this phone is on the same Wi-Fi.",
+      offlineLong: "PC still unreachable. If it is on and this phone is on the same Wi-Fi, the PC may have a new address: on the PC open Settings → Connect phone and scan the new QR code.",
       state_running: "Running", state_stopped: "Stopped", state_notStarted: "Not started", state_expired: "Time's up",
       endsThen: "Ends at {0}, then {1}",
       act_shutdown: "the PC shuts down", act_lock: "the screen locks", act_logoff: "the user is logged off",
@@ -55,6 +56,7 @@
       tabTimer: "Таймер", tabSettings: "Настройки", tabDevices: "Телефоны",
       connecting: "Подключение к ПК…",
       offline: "ПК недоступен. Переподключение… Проверьте, что телефон в той же сети Wi-Fi.",
+      offlineLong: "ПК всё ещё недоступен. Если он включён, а телефон в той же сети Wi-Fi, у ПК мог смениться адрес: на ПК откройте «Настройки» → «Подключить телефон» и отсканируйте новый QR-код.",
       state_running: "Идёт", state_stopped: "Остановлен", state_notStarted: "Не запущен", state_expired: "Время вышло",
       endsThen: "Закончится в {0}, затем {1}",
       act_shutdown: "ПК выключится", act_lock: "экран заблокируется", act_logoff: "произойдёт выход из системы",
@@ -109,6 +111,8 @@
   let settings = null;        // last settings from the PC
   let ws = null, retryTimer = 0, retryMs = 1000;
   let online = false;
+  let offlineSince = 0;       // performance.now() when the connection was lost (0 = online)
+  const OFFLINE_HINT_MS = 20000;
   let tab = "timer";
   let mode = "interval";
   let settingsDirty = false;
@@ -202,11 +206,21 @@
 
   function setOnline(value) {
     online = value;
+    if (value) offlineSince = 0;
+    else if (!offlineSince) offlineSince = performance.now();
     document.body.classList.toggle("offline", !value);
-    const banner = $("banner");
-    banner.hidden = value || !token;
-    banner.textContent = status ? t("offline") : t("connecting");
+    renderBanner();
   }
+
+  // After a while offline, the likely cause is a new PC address (router / DHCP): say how to fix it
+  function renderBanner() {
+    const banner = $("banner");
+    banner.hidden = online || !token;
+    if (banner.hidden) return;
+    const long = offlineSince && performance.now() - offlineSince > OFFLINE_HINT_MS;
+    banner.textContent = long ? t("offlineLong") : status ? t("offline") : t("connecting");
+  }
+  setInterval(renderBanner, 2000);
 
   function unpair(message) {
     token = null;

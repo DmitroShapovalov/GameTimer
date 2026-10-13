@@ -287,6 +287,12 @@
                                          Checked="RemoteToggle_Changed" Unchecked="RemoteToggle_Changed"/>
                         <TextBlock x:Name="RemoteStatusText" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,8"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <StackPanel x:Name="FirewallPanel" Margin="0,0,0,8" Visibility="Collapsed">
+                            <TextBlock x:Name="FirewallText" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4"
+                                       Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                       Text="Windows Firewall may block the phone."/>
+                            <ui:Button x:Name="FirewallButton" Content="Allow in firewall" Click="FirewallButton_Click"/>
+                        </StackPanel>
                         <ui:Button x:Name="ConnectPhoneButton" Content="Connect phone" Click="ConnectPhone_Click"
                                    IsEnabled="False"/>
 

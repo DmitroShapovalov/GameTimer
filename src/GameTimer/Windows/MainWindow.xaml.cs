@@ -19,6 +19,7 @@ public partial class MainWindow : FluentWindow
     private readonly DeviceStore _devices;
     private readonly PairingService _pairing;
     private bool _isRemoteBusy;
+    private bool? _firewallOk; // null = not checked yet
     private AppSettings _settings;
     private OverlayWindow? _overlay;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -128,6 +129,8 @@ public partial class MainWindow : FluentWindow
         PhoneControlLabel.Text = Loc.Get("PhoneControl");
         RemoteToggle.Content = Loc.Get("Remote_Toggle");
         ConnectPhoneButton.Content = Loc.Get("ConnectPhone");
+        FirewallText.Text = Loc.Get("Remote_FirewallMissing");
+        FirewallButton.Content = Loc.Get("Remote_FirewallFix");
         PairedDevicesLabel.Text = Loc.Get("PairedDevices");
         NoDevicesText.Text = Loc.Get("PairedDevices_None");
         UpdateRemoteStatus();
@@ -833,6 +836,11 @@ public partial class MainWindow : FluentWindow
 
             if (enable)
             {
+                // Add the rule before the first listen, so Windows doesn't show its own prompt
+                // (where "Cancel" would create a block rule). One UAC prompt; declining is not fatal.
+                _firewallOk = await FirewallHelper.IsConfiguredAsync(_settings.RemotePort)
+                              || await FirewallHelper.ConfigureElevatedAsync(_settings.RemotePort);
+
                 if (!await _remote.StartAsync(_settings.RemotePort))
                 {
                     RemoteToggle.IsChecked = false;
@@ -860,6 +868,25 @@ public partial class MainWindow : FluentWindow
         // On failure (e.g. port busy) the setting stays on, so the next launch tries again
         await _remote.StartAsync(_settings.RemotePort);
         UpdateRemoteStatus();
+
+        // No UAC prompt at launch: only show the warning and the button if the rule is missing
+        _firewallOk = await FirewallHelper.IsConfiguredAsync(_settings.RemotePort);
+        UpdateRemoteStatus();
+    }
+
+    private async void FirewallButton_Click(object sender, RoutedEventArgs e)
+    {
+        FirewallButton.IsEnabled = false;
+        try
+        {
+            await FirewallHelper.ConfigureElevatedAsync(_settings.RemotePort);
+            _firewallOk = await FirewallHelper.IsConfiguredAsync(_settings.RemotePort);
+        }
+        finally
+        {
+            FirewallButton.IsEnabled = true;
+            UpdateRemoteStatus();
+        }
     }
 
     private async void ConnectPhone_Click(object sender, RoutedEventArgs e)
@@ -896,8 +923,14 @@ public partial class MainWindow : FluentWindow
     {
         ConnectPhoneButton.IsEnabled = _remote.IsRunning;
 
+        FirewallPanel.Visibility = _remote.IsRunning && _firewallOk == false ? Visibility.Visible : Visibility.Collapsed;
+
         if (_remote.IsRunning)
-            RemoteStatusText.Text = string.Format(Loc.Get("Remote_Running"), _remote.Port);
+        {
+            // The address the phone uses, so a parent can compare it after a router change
+            var host = NetworkFilter.GetLanAddress()?.ToString() ?? "localhost";
+            RemoteStatusText.Text = string.Format(Loc.Get("Remote_Running"), $"http://{host}:{_remote.Port}");
+        }
         else if (_remote.LastError != null)
             RemoteStatusText.Text = string.Format(Loc.Get("Remote_StartFailed"), _settings.RemotePort, _remote.LastError);
         else

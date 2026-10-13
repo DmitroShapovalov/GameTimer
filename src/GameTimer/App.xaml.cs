@@ -21,6 +21,15 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
+        // Elevated helper run (UAC) to set up the firewall rule: do the work and exit,
+        // before the single-instance check so it doesn't just wake the running copy
+        if (e.Args.Length == 2 && e.Args[0] == FirewallHelper.ConfigureArg
+            && int.TryParse(e.Args[1], out var firewallPort) && firewallPort is > 0 and < 65536)
+        {
+            Shutdown(FirewallHelper.Apply(firewallPort));
+            return;
+        }
+
         // The signal event is create-or-open: whichever process gets here first creates it.
         // This closes the race when several copies launch before any of them has a window.
         _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
