@@ -38,6 +38,8 @@ src/GameTimer/
     TimerController.cs     Single source of truth: Start/Stop/Reset/Extend, State, StateChanged; runs the expiry action
     TimerService.cs        DispatcherTimer countdown on a monotonic clock (TickCount64); events Tick, AlertTriggered, TimerExpired
     SettingsService.cs     settings.json next to the exe
+    RemoteServer.cs        Embedded Kestrel for the phone remote: Start/Stop, LastError; off by default
+    NetworkFilter.cs       Allows only loopback / private LAN remote addresses
     ShutdownService.cs     shutdown / lock / logoff, CancelShutdown
     SoundService.cs        MediaPlayer; built-in Resources/notification.mp3 (embedded) or custom file
   Helpers/
@@ -64,6 +66,7 @@ installer/setup.iss        Inno Setup script (per-user install, optional autosta
 - **Single instance:** second launch signals the first (`Local\SystemMonitor_7F3A2C1E_*`) and exits; first calls `MainWindow.BringToFront()`.
 - **Overlay position:** stored as 0..1 fractions mapped to `[0, screen - overlaySize]`.
 - **Keyboard:** Enter = start / add alert, ↑↓ (+Shift) adjust, `:` jumps to minutes, Ctrl+1..4 tabs, Esc = tray.
+- **Phone control:** toggle in the Settings tab (auth required) starts/stops `RemoteServer` on `RemotePort` (5123); `RemoteEnabled` is restored at launch without a prompt. `App.OnExit` stops the host.
 - **Clock:** remaining time is monotonic (`Environment.TickCount64`): system clock changes don't affect it, sleep time still counts. Time-of-day mode reads the wall clock once at start.
 - **Debug-only hotkeys:** Ctrl+Shift+Plus / Minus = `Extend(±1)` (temporary, for testing).
 - **Validation:** empty time field = 0; inline error text under inputs disables Start.

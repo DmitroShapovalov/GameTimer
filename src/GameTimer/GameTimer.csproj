@@ -25,6 +25,11 @@
     <PackageReference Include="WPF-UI" Version="3.0.5" />
   </ItemGroup>
 
+  <!-- Embedded Kestrel for the phone remote (Phase 1) -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
 
   <ItemGroup>
     <EmbeddedResource Update="Localization\Strings.resx">

@@ -218,4 +218,19 @@
   <data name="WAVFilter" xml:space="preserve">
     <value>Звуковые файлы|*.wav;*.mp3</value>
   </data>
+  <data name="PhoneControl" xml:space="preserve">
+    <value>Управление с телефона</value>
+  </data>
+  <data name="Remote_Toggle" xml:space="preserve">
+    <value>Разрешить управление с телефона по домашнему Wi-Fi</value>
+  </data>
+  <data name="Remote_Off" xml:space="preserve">
+    <value>Выключено</value>
+  </data>
+  <data name="Remote_Running" xml:space="preserve">
+    <value>Работает на порту {0}</value>
+  </data>
+  <data name="Remote_StartFailed" xml:space="preserve">
+    <value>Не удалось запустить на порту {0}: {1}</value>
+  </data>
 </root>

@@ -218,4 +218,19 @@
   <data name="WAVFilter" xml:space="preserve">
     <value>Sound files|*.wav;*.mp3</value>
   </data>
+  <data name="PhoneControl" xml:space="preserve">
+    <value>Phone control</value>
+  </data>
+  <data name="Remote_Toggle" xml:space="preserve">
+    <value>Allow control from a phone on home Wi-Fi</value>
+  </data>
+  <data name="Remote_Off" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="Remote_Running" xml:space="preserve">
+    <value>Running on port {0}</value>
+  </data>
+  <data name="Remote_StartFailed" xml:space="preserve">
+    <value>Could not start on port {0}: {1}</value>
+  </data>
 </root>

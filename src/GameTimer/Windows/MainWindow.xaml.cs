@@ -15,6 +15,8 @@ public partial class MainWindow : FluentWindow
     private readonly SettingsService _settingsService;
     private readonly SoundService _soundService = new();
     private readonly TimerController _timer;
+    private readonly RemoteServer _remote;
+    private bool _isRemoteBusy;
     private AppSettings _settings;
     private OverlayWindow? _overlay;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -32,7 +34,8 @@ public partial class MainWindow : FluentWindow
     // Track timer state for localization
     private string _timerStateKey = "Timer_NotStarted";
 
-    public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer)
+    public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer,
+        RemoteServer remote)
     {
         InitializeComponent();
         _settingsService = settingsService;
@@ -43,6 +46,7 @@ public partial class MainWindow : FluentWindow
         _timer.Tick += OnTimerTick;
         _timer.AlertTriggered += OnAlertTriggered;
         _timer.StateChanged += OnTimerStateChanged;
+        _remote = remote;
 
         LoadSettingsToUI();
         ApplyLocalization();
@@ -53,6 +57,10 @@ public partial class MainWindow : FluentWindow
 
         Loaded += (_, _) => FocusTimeInput();
         StartButton.ToolTip = "Enter";
+
+        // The setting was approved (Windows Hello) when it was turned on, so no prompt at launch
+        if (_settings.RemoteEnabled)
+            _ = StartRemoteOnLaunchAsync();
     }
 
     #region Localization
@@ -111,6 +119,9 @@ public partial class MainWindow : FluentWindow
         ActionShutdown.Content = Loc.Get("Action_Shutdown");
         ActionLock.Content = Loc.Get("Action_Lock");
         ActionLogoff.Content = Loc.Get("Action_Logoff");
+        PhoneControlLabel.Text = Loc.Get("PhoneControl");
+        RemoteToggle.Content = Loc.Get("Remote_Toggle");
+        UpdateRemoteStatus();
         ProtectionInfo.Title = Loc.Get("Protection");
         ProtectionInfo.Message = Loc.Get("ProtectionInfo");
         AboutLabel.Text = Loc.Get("About");
@@ -201,6 +212,9 @@ public partial class MainWindow : FluentWindow
         // Settings tab - action
         _lastActionIndex = (int)_settings.Action;
         ActionCombo.SelectedIndex = _lastActionIndex;
+
+        // Settings tab - phone control
+        RemoteToggle.IsChecked = _settings.RemoteEnabled;
     }
 
     private void SaveSettings()
@@ -755,6 +769,65 @@ public partial class MainWindow : FluentWindow
         _lastActionIndex = newIndex;
         _settings.Action = (TimerAction)newIndex;
         SaveSettings();
+    }
+
+    // Turning phone control on or off requires auth, like other protected settings
+    private async void RemoteToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading || _isRemoteBusy) return;
+
+        bool enable = RemoteToggle.IsChecked == true;
+        if (enable == _settings.RemoteEnabled) return;
+
+        _isRemoteBusy = true; // reverting IsChecked below re-enters this handler
+        RemoteToggle.IsEnabled = false;
+        try
+        {
+            if (!await RequireAuth())
+            {
+                RemoteToggle.IsChecked = _settings.RemoteEnabled;
+                return;
+            }
+
+            if (enable)
+            {
+                if (!await _remote.StartAsync(_settings.RemotePort))
+                {
+                    RemoteToggle.IsChecked = false;
+                    return;
+                }
+            }
+            else
+            {
+                await _remote.StopAsync();
+            }
+
+            _settings.RemoteEnabled = enable;
+            SaveSettings();
+        }
+        finally
+        {
+            _isRemoteBusy = false;
+            RemoteToggle.IsEnabled = true;
+            UpdateRemoteStatus();
+        }
+    }
+
+    private async Task StartRemoteOnLaunchAsync()
+    {
+        // On failure (e.g. port busy) the setting stays on, so the next launch tries again
+        await _remote.StartAsync(_settings.RemotePort);
+        UpdateRemoteStatus();
+    }
+
+    private void UpdateRemoteStatus()
+    {
+        if (_remote.IsRunning)
+            RemoteStatusText.Text = string.Format(Loc.Get("Remote_Running"), _remote.Port);
+        else if (_remote.LastError != null)
+            RemoteStatusText.Text = string.Format(Loc.Get("Remote_StartFailed"), _settings.RemotePort, _remote.LastError);
+        else
+            RemoteStatusText.Text = Loc.Get("Remote_Off");
     }
 
     #endregion

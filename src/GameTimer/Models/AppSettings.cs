@@ -50,6 +50,10 @@ public class AppSettings
 
     // UI language (en, ru)
     public string Language { get; set; } = "en";
+
+    // Phone remote over home Wi-Fi (embedded server). Off by default.
+    public bool RemoteEnabled { get; set; } = false;
+    public int RemotePort { get; set; } = 5123;
 }
 
 public class AlertPoint

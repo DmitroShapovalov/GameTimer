@@ -17,6 +17,8 @@ public partial class App : System.Windows.Application
     private Mutex? _instanceMutex;
     private EventWaitHandle? _showEvent;
 
+    private RemoteServer? _remoteServer;
+
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
         // The signal event is create-or-open: whichever process gets here first creates it.
@@ -46,8 +48,9 @@ public partial class App : System.Windows.Application
         var settings = settingsService.Load();
         Loc.SetLanguage(settings.Language);
         var timerController = new TimerController(settings);
+        _remoteServer = new RemoteServer();
 
-        var mainWindow = new MainWindow(settingsService, settings, timerController);
+        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer);
         MainWindow = mainWindow;
         mainWindow.Show();
 
@@ -63,6 +66,10 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(System.Windows.ExitEventArgs e)
     {
+        // Stop the embedded server off the UI thread so its shutdown can't wait on the dispatcher
+        if (_remoteServer is { IsRunning: true } server)
+            Task.Run(server.StopAsync).Wait(TimeSpan.FromSeconds(5));
+
         if (_instanceMutex != null)
         {
             _instanceMutex.ReleaseMutex();

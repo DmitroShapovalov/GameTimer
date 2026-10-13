@@ -21,7 +21,7 @@ Each step ends with a building, working app. Do not start the next step until th
 | # | Step | Spec | Status |
 |---|---|---|---|
 | 1 | `TimerController` refactor + monotonic clock + `Extend` | RMT-01 | ☑ |
-| 2 | Embedded Kestrel host, settings toggle, LAN-only binding | RMT-02 | ☐ |
+| 2 | Embedded Kestrel host, settings toggle, LAN-only binding | RMT-02 | ☑ |
 | 3 | Pairing, device tokens, auth middleware, rate limiting | RMT-04 | ☐ |
 | 4 | REST API endpoints | RMT-03 | ☐ |
 | 5 | WebSocket push events | RMT-03 (`/ws`) | ☐ |
@@ -32,7 +32,7 @@ Each step ends with a building, working app. Do not start the next step until th
 **Step 1 — TimerController.** Move start/stop/reset/expiry out of `MainWindow.xaml.cs` into `TimerController` with a `StateChanged` event; the window only subscribes. Track remaining time with `Stopwatch` / `Environment.TickCount64` instead of `DateTime.Now` (closes the "system clock change" backlog item). Add `Extend(minutes)` (negative allowed, never below zero; in time-of-day mode it shifts the target).
 *Done when:* desktop behaviour is unchanged; changing the system clock does not affect the remaining time; `Extend` works from a temporary debug hotkey or unit test.
 
-**Step 2 — Embedded server.** Add `<FrameworkReference Include="Microsoft.AspNetCore.App" />`. New settings `RemoteEnabled` (default `false`) and `RemotePort` (default `5123`). "Phone control" toggle in the Settings tab, protected by Windows Hello. Host starts/stops with the toggle and binds only to private-network addresses. A single unauthenticated `GET /health` returning 200 is allowed temporarily for this step only, bound to `localhost`.
+**Step 2 — Embedded server.** Add `<FrameworkReference Include="Microsoft.AspNetCore.App" />`. New settings `RemoteEnabled` (default `false`) and `RemotePort` (default `5123`). "Phone control" toggle in the Settings tab, protected by Windows Hello. Host starts/stops with the toggle; it listens on all interfaces and drops connections from outside the home LAN (see RMT-02). A single unauthenticated `GET /health` returning 200 is allowed temporarily for this step only, answering only requests from this PC.
 *Done when:* toggle off → nothing listens on the port; toggle on → host reachable from the PC; app exit stops the host cleanly.
 
 **Step 3 — Pairing and security** (before any real API, so no endpoint is ever open). `DeviceStore` (device id, name, SHA-256 token hash, created, last-seen) persisted with settings. "Connect phone" dialog (Windows Hello) shows a QR with a one-time code valid for 2 minutes. `POST /pair` exchanges the code for a ≥ 256-bit random token. Bearer auth middleware with constant-time comparison on every route except `/pair` and static files. Rate limiting via built-in `Microsoft.AspNetCore.RateLimiting` on `/pair` and auth failures. Remove the temporary `/health`.
@@ -63,7 +63,7 @@ Move start/stop/reset/expiry logic out of `MainWindow.xaml.cs` into a `TimerCont
 ### RMT-02 Embedded server
 - Kestrel via `<FrameworkReference Include="Microsoft.AspNetCore.App" />` (binds to LAN without admin; `HttpListener` would need `netsh urlacl` as admin).
 - Port `5123` by default, configurable. **Off by default**; toggle "Phone control" in the Settings tab (toggling requires auth).
-- Bind to private network addresses only.
+- LAN-only by remote-address filter (decided in step 2): Kestrel listens on all interfaces, `NetworkFilter` aborts every connection not from loopback, 10/8, 172.16/12, 192.168/16, 169.254/16, fe80::/10 or fc00::/7. Survives DHCP address changes without restarting the host; Phase 2 adds Tailscale's 100.64/10 in one place.
 
 ### RMT-03 API (JSON)
 
