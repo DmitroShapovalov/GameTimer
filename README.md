@@ -56,7 +56,7 @@ The output will be in `bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/`.
 
 The PC app can serve a small web app to your phone. It works only inside your home network and is **off by default**.
 
-1. In **Settings**, turn on **Phone control** (Windows Hello). The first time, Windows asks whether to allow network access: allow it for **private networks** only.
+1. In **Settings**, turn on **Phone control** (Windows Hello). The first time, Windows asks for administrator rights once: GameTimer adds a firewall rule that lets only devices on your home network reach it. If you skip that, a warning with an **Allow in firewall** button stays under the switch.
 2. Click **Connect phone** (Windows Hello) and scan the QR code with the phone camera. The phone must be on the same Wi-Fi. The code is valid for 2 minutes and works once.
 3. Give the phone a name and tap **Connect**.
 
@@ -73,7 +73,7 @@ Changes made on the PC show up on the phone immediately, and the other way round
 
 **Security.** Only paired phones can control the timer: each gets its own random token, and the PC stores only a hash of it. Requests from outside the home network are refused, and repeated failed attempts are rate-limited. Remove a phone in **Settings** (or from another phone) to cut it off at once. The connection is plain HTTP inside your home network.
 
-**If the phone shows "PC unreachable":** check that the phone is on the same Wi-Fi and that the PC is on. If the router gave the PC a new address, connect the phone again with a new QR code — or reserve a fixed address for the PC in the router (DHCP reservation).
+**If the phone shows "PC unreachable":** check that the phone is on the same Wi-Fi and that the PC is on. The address the phone uses is shown under the **Phone control** switch (e.g. `http://192.168.1.20:5123`). If the router gave the PC a new address, connect the phone again with a new QR code and add the new page to the home screen; to avoid this, reserve a fixed address for the PC in the router (DHCP reservation).
 
 Developers: the API and WebSocket messages are documented in [`docs/remote-api.http`](docs/remote-api.http).
 

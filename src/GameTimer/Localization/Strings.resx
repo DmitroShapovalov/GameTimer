@@ -228,7 +228,7 @@
     <value>Off</value>
   </data>
   <data name="Remote_Running" xml:space="preserve">
-    <value>Running on port {0}</value>
+    <value>Running at {0}</value>
   </data>
   <data name="Remote_StartFailed" xml:space="preserve">
     <value>Could not start on port {0}: {1}</value>
@@ -262,5 +262,11 @@
   </data>
   <data name="Device_LastSeen" xml:space="preserve">
     <value>Last seen {0}</value>
+  </data>
+  <data name="Remote_FirewallMissing" xml:space="preserve">
+    <value>Windows Firewall may block the phone: the rule for phone access is missing.</value>
+  </data>
+  <data name="Remote_FirewallFix" xml:space="preserve">
+    <value>Allow in firewall</value>
   </data>
 </root>

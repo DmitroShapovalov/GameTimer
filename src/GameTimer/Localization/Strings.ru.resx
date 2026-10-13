@@ -228,7 +228,7 @@
     <value>Выключено</value>
   </data>
   <data name="Remote_Running" xml:space="preserve">
-    <value>Работает на порту {0}</value>
+    <value>Работает: {0}</value>
   </data>
   <data name="Remote_StartFailed" xml:space="preserve">
     <value>Не удалось запустить на порту {0}: {1}</value>
@@ -262,5 +262,11 @@
   </data>
   <data name="Device_LastSeen" xml:space="preserve">
     <value>Последний раз: {0}</value>
+  </data>
+  <data name="Remote_FirewallMissing" xml:space="preserve">
+    <value>Брандмауэр Windows может не пустить телефон: нет правила для доступа с телефона.</value>
+  </data>
+  <data name="Remote_FirewallFix" xml:space="preserve">
+    <value>Разрешить в брандмауэре</value>
   </data>
 </root>
