@@ -54,6 +54,9 @@ public class AppSettings
     // Phone remote over home Wi-Fi (embedded server). Off by default.
     public bool RemoteEnabled { get; set; } = false;
     public int RemotePort { get; set; } = 5123;
+
+    // Paired phones (token hashes only)
+    public List<PairedDevice> Devices { get; set; } = new();
 }
 
 public class AlertPoint

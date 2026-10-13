@@ -16,6 +16,8 @@ public partial class MainWindow : FluentWindow
     private readonly SoundService _soundService = new();
     private readonly TimerController _timer;
     private readonly RemoteServer _remote;
+    private readonly DeviceStore _devices;
+    private readonly PairingService _pairing;
     private bool _isRemoteBusy;
     private AppSettings _settings;
     private OverlayWindow? _overlay;
@@ -35,7 +37,7 @@ public partial class MainWindow : FluentWindow
     private string _timerStateKey = "Timer_NotStarted";
 
     public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer,
-        RemoteServer remote)
+        RemoteServer remote, DeviceStore devices, PairingService pairing)
     {
         InitializeComponent();
         _settingsService = settingsService;
@@ -47,6 +49,9 @@ public partial class MainWindow : FluentWindow
         _timer.AlertTriggered += OnAlertTriggered;
         _timer.StateChanged += OnTimerStateChanged;
         _remote = remote;
+        _devices = devices;
+        _pairing = pairing;
+        _devices.Changed += RefreshDevicesList;
 
         LoadSettingsToUI();
         ApplyLocalization();
@@ -121,7 +126,11 @@ public partial class MainWindow : FluentWindow
         ActionLogoff.Content = Loc.Get("Action_Logoff");
         PhoneControlLabel.Text = Loc.Get("PhoneControl");
         RemoteToggle.Content = Loc.Get("Remote_Toggle");
+        ConnectPhoneButton.Content = Loc.Get("ConnectPhone");
+        PairedDevicesLabel.Text = Loc.Get("PairedDevices");
+        NoDevicesText.Text = Loc.Get("PairedDevices_None");
         UpdateRemoteStatus();
+        RefreshDevicesList();
         ProtectionInfo.Title = Loc.Get("Protection");
         ProtectionInfo.Message = Loc.Get("ProtectionInfo");
         AboutLabel.Text = Loc.Get("About");
@@ -820,8 +829,40 @@ public partial class MainWindow : FluentWindow
         UpdateRemoteStatus();
     }
 
+    private async void ConnectPhone_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_remote.IsRunning || _remote.Port is not int port) return;
+        if (!await RequireAuth()) return;
+
+        var address = NetworkFilter.GetLanAddress();
+        if (address == null)
+        {
+            System.Windows.MessageBox.Show(Loc.Get("ConnectPhone_NoNetwork"), Loc.Get("Error"),
+                System.Windows.MessageBoxButton.OK);
+            return;
+        }
+
+        new ConnectPhoneDialog(_pairing, address.ToString(), port) { Owner = this }.ShowDialog();
+    }
+
+    private async void RevokeDevice_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: PairedDevice device }) return;
+        if (!await RequireAuth()) return;
+        _devices.Revoke(device.Id); // its next request gets 401
+    }
+
+    private void RefreshDevicesList()
+    {
+        DevicesList.ItemsSource = null;
+        DevicesList.ItemsSource = _devices.Devices;
+        NoDevicesText.Visibility = _devices.Devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void UpdateRemoteStatus()
     {
+        ConnectPhoneButton.IsEnabled = _remote.IsRunning;
+
         if (_remote.IsRunning)
             RemoteStatusText.Text = string.Format(Loc.Get("Remote_Running"), _remote.Port);
         else if (_remote.LastError != null)

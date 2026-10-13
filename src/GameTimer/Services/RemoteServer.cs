@@ -1,20 +1,45 @@
+using System.IO;
+using System.Threading.RateLimiting;
+using GameTimer.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace GameTimer.Services;
 
 /// <summary>
 /// Embedded Kestrel host for the phone remote (Phase 1). Off by default; started and stopped
-/// from the Settings tab. Listens on all interfaces, but <see cref="NetworkFilter"/> drops every
-/// connection that does not come from this PC or the home LAN.
+/// from the Settings tab.
+///
+/// Security layers, in pipeline order:
+/// 1. <see cref="NetworkFilter"/>: connections from outside this PC / the home LAN are aborted.
+/// 2. Rate limiting: <c>POST /pair</c> per client IP, and failed authentications per client IP.
+/// 3. Bearer token auth on everything under <c>/api</c> and <c>/ws</c>.
+///    Only <c>/pair</c> (and, from step 6, static files) are reachable without a token.
 /// </summary>
 public sealed class RemoteServer
 {
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(3);
+    private const string PairPolicy = "pair";
+    private const string DeviceItemKey = "GameTimer.Device";
+    private const int MaxDeviceNameLength = 40;
+
+    private readonly DeviceStore _devices;
+    private readonly PairingService _pairing;
+    private readonly UiThread _ui;
 
     private WebApplication? _app;
+    private PartitionedRateLimiter<string>? _authFailures;
+
+    public RemoteServer(DeviceStore devices, PairingService pairing, UiThread ui)
+    {
+        _devices = devices;
+        _pairing = pairing;
+        _ui = ui;
+    }
 
     public bool IsRunning => _app != null;
     public int? Port { get; private set; }
@@ -38,9 +63,30 @@ public sealed class RemoteServer
             builder.Logging.ClearProviders();
             builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port));
 
+            builder.Services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy(PairPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+                    ClientKey(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
+            });
+
+            var authFailures = PartitionedRateLimiter.Create<string, string>(key =>
+                RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0
+                }));
+
             app = builder.Build();
 
-            // LAN-only: drop anything from outside the home network without an answer
+            // 1. LAN-only: drop anything from outside the home network without an answer
             app.Use(async (context, next) =>
             {
                 if (!NetworkFilter.IsAllowed(context.Connection.RemoteIpAddress))
@@ -51,16 +97,41 @@ public sealed class RemoteServer
                 await next(context);
             });
 
-            // TEMPORARY (Phase 1, step 2 only): removed in step 3 together with the pairing / auth work.
-            // Answers only to requests from this PC.
-            app.MapGet("/health", (HttpContext context) =>
-                NetworkFilter.IsLoopback(context.Connection.RemoteIpAddress)
-                    ? Results.Text("ok")
-                    : Results.NotFound());
+            // 2. Endpoint rate-limit policies (/pair)
+            app.UseRateLimiter();
+
+            // 3. Bearer auth for the API and the WebSocket
+            app.Use(async (context, next) =>
+            {
+                var path = context.Request.Path;
+                if (!path.StartsWithSegments("/api") && !path.StartsWithSegments("/ws"))
+                {
+                    await next(context);
+                    return;
+                }
+
+                var device = _devices.FindByToken(GetBearerToken(context.Request));
+                if (device == null)
+                {
+                    using var lease = authFailures.AttemptAcquire(ClientKey(context));
+                    context.Response.StatusCode = lease.IsAcquired
+                        ? StatusCodes.Status401Unauthorized
+                        : StatusCodes.Status429TooManyRequests;
+                    return;
+                }
+
+                _devices.Touch(device);
+                context.Items[DeviceItemKey] = device;
+                await next(context);
+            });
+
+            MapPairing(app);
+            MapDevices(app);
 
             await app.StartAsync();
 
             _app = app;
+            _authFailures = authFailures;
             Port = port;
             LastError = null;
             return true;
@@ -81,6 +152,7 @@ public sealed class RemoteServer
 
         _app = null;
         Port = null;
+        _pairing.Cancel();
         try
         {
             using var cts = new CancellationTokenSource(StopTimeout);
@@ -93,6 +165,96 @@ public sealed class RemoteServer
         finally
         {
             await app.DisposeAsync();
+            _authFailures?.Dispose();
+            _authFailures = null;
         }
     }
+
+    #region Endpoints
+
+    private void MapPairing(WebApplication app)
+    {
+        // Page the QR code opens on the phone. Temporary until the full mobile UI (step 6).
+        app.MapGet("/pair", (HttpContext context) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            return Results.Content(PairPage.Value, "text/html; charset=utf-8");
+        });
+
+        // Exchange a one-time code for a long-lived device token
+        app.MapPost("/pair", async (PairRequest? request) =>
+        {
+            if (request == null || !_pairing.TryConsume(request.Code))
+                return Results.Json(new { error = "invalid_code" }, statusCode: StatusCodes.Status400BadRequest);
+
+            var name = SanitizeName(request.Name);
+            var (device, token) = await _ui.InvokeAsync(() =>
+            {
+                var added = _devices.Add(name);
+                _pairing.NotifyPaired(added.Device);
+                return added;
+            });
+
+            return Results.Json(new { deviceId = device.Id, name = device.Name, token });
+        }).RequireRateLimiting(PairPolicy);
+    }
+
+    private void MapDevices(WebApplication app)
+    {
+        app.MapGet("/api/devices", (HttpContext context) =>
+        {
+            var current = CurrentDevice(context);
+            return Results.Json(_devices.Devices.Select(d => new
+            {
+                id = d.Id,
+                name = d.Name,
+                created = d.Created,
+                lastSeen = d.LastSeen,
+                current = d.Id == current.Id
+            }));
+        });
+
+        app.MapDelete("/api/devices/{id}", async (string id) =>
+            await _ui.InvokeAsync(() => _devices.Revoke(id))
+                ? Results.NoContent()
+                : Results.NotFound());
+    }
+
+    #endregion
+
+    #region Helpers
+
+    public sealed record PairRequest(string? Code, string? Name);
+
+    private static readonly Lazy<string> PairPage = new(() =>
+    {
+        using var stream = typeof(RemoteServer).Assembly.GetManifestResourceStream("Remote/pair.html")
+            ?? throw new InvalidOperationException("Embedded resource Remote/pair.html not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    });
+
+    private static PairedDevice CurrentDevice(HttpContext context) =>
+        (PairedDevice)context.Items[DeviceItemKey]!;
+
+    private static string ClientKey(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    private static string? GetBearerToken(HttpRequest request)
+    {
+        var header = request.Headers.Authorization.ToString();
+        const string prefix = "Bearer ";
+        return header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? header[prefix.Length..].Trim()
+            : null;
+    }
+
+    private static string SanitizeName(string? name)
+    {
+        var clean = new string((name ?? "").Where(c => !char.IsControl(c)).ToArray()).Trim();
+        if (clean.Length > MaxDeviceNameLength) clean = clean[..MaxDeviceNameLength].Trim();
+        return clean.Length > 0 ? clean : "Phone";
+    }
+
+    #endregion
 }

@@ -233,4 +233,34 @@
   <data name="Remote_StartFailed" xml:space="preserve">
     <value>Не удалось запустить на порту {0}: {1}</value>
   </data>
+  <data name="ConnectPhone" xml:space="preserve">
+    <value>Подключить телефон</value>
+  </data>
+  <data name="ConnectPhone_Instructions" xml:space="preserve">
+    <value>Отсканируйте код камерой телефона. Телефон должен быть в той же сети Wi-Fi, что и этот ПК.</value>
+  </data>
+  <data name="ConnectPhone_ExpiresIn" xml:space="preserve">
+    <value>Код действует ещё {0}</value>
+  </data>
+  <data name="ConnectPhone_Expired" xml:space="preserve">
+    <value>Срок действия кода истёк. Закройте окно и попробуйте снова.</value>
+  </data>
+  <data name="ConnectPhone_Connected" xml:space="preserve">
+    <value>Подключён: {0}</value>
+  </data>
+  <data name="ConnectPhone_NoNetwork" xml:space="preserve">
+    <value>Не найдено подключение к домашней сети. Подключите ПК к Wi-Fi или кабелю и попробуйте снова.</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Закрыть</value>
+  </data>
+  <data name="PairedDevices" xml:space="preserve">
+    <value>Подключённые телефоны</value>
+  </data>
+  <data name="PairedDevices_None" xml:space="preserve">
+    <value>Пока нет подключённых телефонов</value>
+  </data>
+  <data name="Device_LastSeen" xml:space="preserve">
+    <value>Последний раз: {0}</value>
+  </data>
 </root>

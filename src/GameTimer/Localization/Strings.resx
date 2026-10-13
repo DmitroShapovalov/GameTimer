@@ -233,4 +233,34 @@
   <data name="Remote_StartFailed" xml:space="preserve">
     <value>Could not start on port {0}: {1}</value>
   </data>
+  <data name="ConnectPhone" xml:space="preserve">
+    <value>Connect phone</value>
+  </data>
+  <data name="ConnectPhone_Instructions" xml:space="preserve">
+    <value>Scan this code with the phone camera. The phone must be on the same Wi-Fi as this PC.</value>
+  </data>
+  <data name="ConnectPhone_ExpiresIn" xml:space="preserve">
+    <value>The code is valid for {0}</value>
+  </data>
+  <data name="ConnectPhone_Expired" xml:space="preserve">
+    <value>The code has expired. Close this window and try again.</value>
+  </data>
+  <data name="ConnectPhone_Connected" xml:space="preserve">
+    <value>Connected: {0}</value>
+  </data>
+  <data name="ConnectPhone_NoNetwork" xml:space="preserve">
+    <value>No home network connection found. Connect this PC to Wi-Fi or a network cable and try again.</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="PairedDevices" xml:space="preserve">
+    <value>Paired phones</value>
+  </data>
+  <data name="PairedDevices_None" xml:space="preserve">
+    <value>No phones connected yet</value>
+  </data>
+  <data name="Device_LastSeen" xml:space="preserve">
+    <value>Last seen {0}</value>
+  </data>
 </root>

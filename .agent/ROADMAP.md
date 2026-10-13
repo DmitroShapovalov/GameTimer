@@ -22,7 +22,7 @@ Each step ends with a building, working app. Do not start the next step until th
 |---|---|---|---|
 | 1 | `TimerController` refactor + monotonic clock + `Extend` | RMT-01 | ☑ |
 | 2 | Embedded Kestrel host, settings toggle, LAN-only binding | RMT-02 | ☑ |
-| 3 | Pairing, device tokens, auth middleware, rate limiting | RMT-04 | ☐ |
+| 3 | Pairing, device tokens, auth middleware, rate limiting | RMT-04 | ☑ |
 | 4 | REST API endpoints | RMT-03 | ☐ |
 | 5 | WebSocket push events | RMT-03 (`/ws`) | ☐ |
 | 6 | Mobile web UI (PWA) | RMT-05 | ☐ |
@@ -35,7 +35,7 @@ Each step ends with a building, working app. Do not start the next step until th
 **Step 2 — Embedded server.** Add `<FrameworkReference Include="Microsoft.AspNetCore.App" />`. New settings `RemoteEnabled` (default `false`) and `RemotePort` (default `5123`). "Phone control" toggle in the Settings tab, protected by Windows Hello. Host starts/stops with the toggle; it listens on all interfaces and drops connections from outside the home LAN (see RMT-02). A single unauthenticated `GET /health` returning 200 is allowed temporarily for this step only, answering only requests from this PC.
 *Done when:* toggle off → nothing listens on the port; toggle on → host reachable from the PC; app exit stops the host cleanly.
 
-**Step 3 — Pairing and security** (before any real API, so no endpoint is ever open). `DeviceStore` (device id, name, SHA-256 token hash, created, last-seen) persisted with settings. "Connect phone" dialog (Windows Hello) shows a QR with a one-time code valid for 2 minutes. `POST /pair` exchanges the code for a ≥ 256-bit random token. Bearer auth middleware with constant-time comparison on every route except `/pair` and static files. Rate limiting via built-in `Microsoft.AspNetCore.RateLimiting` on `/pair` and auth failures. Remove the temporary `/health`.
+**Step 3 — Pairing and security** (before any real API, so no endpoint is ever open). `DeviceStore` (device id, name, SHA-256 token hash, created, last-seen) persisted with settings. "Connect phone" dialog (Windows Hello) shows a QR with a one-time code valid for 2 minutes. `POST /pair` exchanges the code for a ≥ 256-bit random token. Bearer auth middleware with constant-time comparison on every route except `/pair` and static files. Rate limiting via built-in `Microsoft.AspNetCore.RateLimiting` on `/pair` and auth failures. Remove the temporary `/health`. Also implemented here (moved from step 4): `GET /api/devices`, `DELETE /api/devices/{id}`, and a temporary `GET /pair` page, so pairing and revocation can be tested from a real phone.
 *Done when:* unpaired requests get 401; an expired or reused code fails; a paired token works; revoking a device makes its next request fail.
 
 **Step 4 — REST API.** Implement the RMT-03 table. Every handler marshals to the UI thread with `Dispatcher.InvokeAsync` and goes through `TimerController` / `SettingsService`, never through the window.

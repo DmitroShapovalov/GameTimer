@@ -1,0 +1,120 @@
+<!doctype html>
+<!-- Temporary pairing page (Phase 1, step 3). Replaced by the full mobile UI in step 6. -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>GameTimer</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px; background: #202020; color: #fff;
+         font: 16px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  main { max-width: 420px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 16px; }
+  label { display: block; font-size: 13px; color: #aaa; margin-bottom: 4px; }
+  input { box-sizing: border-box; width: 100%; padding: 12px; font-size: 16px; border-radius: 6px;
+          border: 1px solid #444; background: #2b2b2b; color: #fff; }
+  button { width: 100%; margin-top: 12px; padding: 12px; font-size: 16px; border: 0; border-radius: 6px;
+           background: #0078D4; color: #fff; }
+  button.secondary { background: #3a3a3a; }
+  button:disabled { opacity: .5; }
+  #msg { margin-top: 16px; }
+  .ok { color: #6ccb5f; } .err { color: #ff6b6b; }
+  ul { padding-left: 20px; color: #ccc; }
+</style>
+</head>
+<body>
+<main>
+  <h1>GameTimer</h1>
+  <div id="pairForm" hidden>
+    <label for="name" id="nameLabel"></label>
+    <input id="name" maxlength="40" autocomplete="off">
+    <button id="pairBtn"></button>
+  </div>
+  <button id="checkBtn" class="secondary" hidden></button>
+  <div id="msg"></div>
+  <ul id="devices"></ul>
+</main>
+<script>
+(() => {
+  const ru = (navigator.language || "").toLowerCase().startsWith("ru");
+  const T = ru ? {
+    name: "Название телефона", pair: "Подключить", check: "Проверить подключение",
+    paired: "Телефон подключён. Полное управление появится в следующей версии.",
+    badCode: "Код неверный или истёк. Создайте новый на ПК.",
+    tooMany: "Слишком много попыток. Подождите минуту.",
+    noCode: "Откройте эту страницу, отсканировав QR-код на ПК.",
+    ok: "Подключение работает. Телефоны:", revoked: "Этот телефон отключён на ПК. Подключите его заново.",
+    offline: "ПК недоступен. Проверьте, что телефон в той же сети Wi-Fi.", you: " (этот)"
+  } : {
+    name: "Phone name", pair: "Connect", check: "Check connection",
+    paired: "Phone connected. Full controls arrive in the next version.",
+    badCode: "The code is invalid or has expired. Create a new one on the PC.",
+    tooMany: "Too many attempts. Wait a minute.",
+    noCode: "Open this page by scanning the QR code on the PC.",
+    ok: "Connection works. Phones:", revoked: "This phone was removed on the PC. Connect it again.",
+    offline: "PC unreachable. Make sure the phone is on the same Wi-Fi.", you: " (this one)"
+  };
+  const $ = id => document.getElementById(id);
+  const TOKEN = "gametimer.token";
+  const store = {
+    get: () => { try { return localStorage.getItem(TOKEN); } catch { return null; } },
+    set: v => { try { localStorage.setItem(TOKEN, v); } catch {} },
+    clear: () => { try { localStorage.removeItem(TOKEN); } catch {} }
+  };
+  const say = (text, cls) => { $("msg").textContent = text; $("msg").className = cls || ""; };
+
+  $("nameLabel").textContent = T.name;
+  $("pairBtn").textContent = T.pair;
+  $("checkBtn").textContent = T.check;
+  const ua = navigator.userAgent;
+  $("name").value = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : "Phone";
+
+  const code = new URLSearchParams(location.search).get("code");
+  // Keep the one-time code out of the address bar / history once read
+  if (code) history.replaceState(null, "", "/pair");
+
+  const showCheck = () => { $("checkBtn").hidden = !store.get(); };
+
+  if (code) $("pairForm").hidden = false;
+  else if (!store.get()) say(T.noCode);
+  showCheck();
+
+  $("pairBtn").onclick = async () => {
+    $("pairBtn").disabled = true;
+    try {
+      const r = await fetch("/pair", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, name: $("name").value }) });
+      if (r.ok) {
+        const data = await r.json();
+        store.set(data.token);
+        $("pairForm").hidden = true;
+        say(T.paired, "ok");
+        showCheck();
+        return;
+      }
+      say(r.status === 429 ? T.tooMany : T.badCode, "err");
+    } catch { say(T.offline, "err"); }
+    $("pairBtn").disabled = false;
+  };
+
+  $("checkBtn").onclick = async () => {
+    $("devices").replaceChildren();
+    try {
+      const r = await fetch("/api/devices", { headers: { Authorization: "Bearer " + store.get() } });
+      if (r.status === 401) { store.clear(); showCheck(); say(T.revoked, "err"); return; }
+      if (r.status === 429) { say(T.tooMany, "err"); return; }
+      if (!r.ok) { say("HTTP " + r.status, "err"); return; }
+      say(T.ok, "ok");
+      for (const d of await r.json()) {
+        const li = document.createElement("li");
+        li.textContent = d.name + (d.current ? T.you : "");
+        $("devices").appendChild(li);
+      }
+    } catch { say(T.offline, "err"); }
+  };
+})();
+</script>
+</body>
+</html>

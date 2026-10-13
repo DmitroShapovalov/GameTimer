@@ -48,9 +48,13 @@ public partial class App : System.Windows.Application
         var settings = settingsService.Load();
         Loc.SetLanguage(settings.Language);
         var timerController = new TimerController(settings);
-        _remoteServer = new RemoteServer();
 
-        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer);
+        var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
+        var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
+        var pairing = new PairingService();
+        _remoteServer = new RemoteServer(deviceStore, pairing, ui);
+
+        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing);
         MainWindow = mainWindow;
         mainWindow.Show();
 

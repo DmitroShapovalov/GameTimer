@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
 namespace GameTimer.Services;
@@ -29,6 +30,44 @@ public static class NetworkFilter
             return ip.IsIPv6LinkLocal || ip.IsIPv6UniqueLocal; // fe80::/10, fc00::/7
 
         return false;
+    }
+
+    /// <summary>
+    /// The PC's IPv4 address on the home LAN, for the pairing QR code. Prefers an interface with a
+    /// default gateway, which skips virtual adapters (Hyper-V, WSL, VPN). Null if not connected.
+    /// </summary>
+    public static IPAddress? GetLanAddress()
+    {
+        try
+        {
+            return NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => n.OperationalStatus == OperationalStatus.Up
+                            && n.NetworkInterfaceType != NetworkInterfaceType.Loopback
+                            && n.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
+                .Select(n => n.GetIPProperties())
+                .SelectMany(p => p.UnicastAddresses
+                    .Select(a => a.Address)
+                    .Where(a => a.AddressFamily == AddressFamily.InterNetwork
+                                && !IPAddress.IsLoopback(a)
+                                && !IsLinkLocalV4(a)
+                                && IsAllowed(a))
+                    .Select(a => (Address: a, HasGateway: p.GatewayAddresses.Any(g =>
+                        g.Address.AddressFamily == AddressFamily.InterNetwork
+                        && !g.Address.Equals(IPAddress.Any)))))
+                .OrderByDescending(x => x.HasGateway)
+                .Select(x => x.Address)
+                .FirstOrDefault();
+        }
+        catch (NetworkInformationException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsLinkLocalV4(IPAddress ip)
+    {
+        var b = ip.GetAddressBytes();
+        return b[0] == 169 && b[1] == 254;
     }
 
     public static bool IsLoopback(IPAddress? ip)

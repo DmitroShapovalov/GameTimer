@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <PackageReference Include="WPF-UI" Version="3.0.5" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
   <!-- Embedded Kestrel for the phone remote (Phase 1) -->
@@ -39,6 +40,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\notification.mp3" />
+    <!-- Web pages served to the phone; read by LogicalName, e.g. "Remote/pair.html" -->
+    <EmbeddedResource Include="Remote\**\*" LogicalName="Remote/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

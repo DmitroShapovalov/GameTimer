@@ -285,8 +285,36 @@
                         <TextBlock x:Name="PhoneControlLabel" Text="Phone control" Style="{StaticResource SectionLabel}"/>
                         <ui:ToggleSwitch x:Name="RemoteToggle" Content="Allow control from a phone on home Wi-Fi"
                                          Checked="RemoteToggle_Changed" Unchecked="RemoteToggle_Changed"/>
-                        <TextBlock x:Name="RemoteStatusText" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,16"
+                        <TextBlock x:Name="RemoteStatusText" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,8"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <ui:Button x:Name="ConnectPhoneButton" Content="Connect phone" Click="ConnectPhone_Click"
+                                   IsEnabled="False"/>
+
+                        <TextBlock x:Name="PairedDevicesLabel" Text="Paired phones" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="NoDevicesText" Text="No phones connected yet" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <ItemsControl x:Name="DevicesList" Margin="0,0,0,16">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}"/>
+                                            <TextBlock Text="{Binding LastSeenText}" FontSize="11"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <ui:Button Grid.Column="1" Appearance="Secondary"
+                                                   Width="30" Height="30" Padding="0"
+                                                   Click="RevokeDevice_Click" Tag="{Binding}">
+                                            <ui:SymbolIcon Symbol="Delete24" FontSize="14"/>
+                                        </ui:Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <ui:InfoBar x:Name="ProtectionInfo" Title="Protection" IsOpen="True" IsClosable="False"
                                     Severity="Informational"
