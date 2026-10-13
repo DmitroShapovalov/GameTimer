@@ -24,7 +24,7 @@ Each step ends with a building, working app. Do not start the next step until th
 | 2 | Embedded Kestrel host, settings toggle, LAN-only binding | RMT-02 | ☑ |
 | 3 | Pairing, device tokens, auth middleware, rate limiting | RMT-04 | ☑ |
 | 4 | REST API endpoints | RMT-03 | ☑ |
-| 5 | WebSocket push events | RMT-03 (`/ws`) | ☐ |
+| 5 | WebSocket push events | RMT-03 (`/ws`) | ☑ |
 | 6 | Mobile web UI (PWA) | RMT-05 | ☐ |
 | 7 | Firewall rule, optional mDNS | RMT-06 | ☐ |
 | 8 | Acceptance pass | Acceptance | ☐ |
@@ -43,6 +43,7 @@ Requests and examples: `docs/remote-api.http`.
 *Done when:* all endpoints work from `curl`/HTTP file with a valid token, and actions are visible on the PC overlay.
 
 **Step 5 — WebSocket.** `/ws` authenticated with the same token (header or first message). Events: `tick` (every 5 s), `alert`, `expired`, `started`, `stopped`, `settingsChanged`, driven by `TimerController` / `SettingsService` events.
+Also added: `hello` (status + settings right after auth) and `extended` (so +/- minutes show up immediately, not with the next 5 s tick). Message reference: `docs/remote-api.http`; manual test: `docs/ws-watch.ps1`.
 *Done when:* a change made on the PC appears in a connected WS client within 1 s.
 
 **Step 6 — Mobile web UI.** Static files embedded in the exe, served at `/`. Screens: status, start, settings, paired devices. PWA manifest + icon, EN/RU following the desktop language, "PC offline" state with WS auto-reconnect.

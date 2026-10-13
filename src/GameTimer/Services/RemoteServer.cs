@@ -39,6 +39,16 @@ public sealed partial class RemoteServer
     private WebApplication? _app;
     private PartitionedRateLimiter<string>? _authFailures;
 
+    /// <summary>JSON shape shared by HTTP responses and WebSocket messages.</summary>
+    private static readonly JsonSerializerOptions Json = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+        return options;
+    }
+
     public RemoteServer(DeviceStore devices, PairingService pairing, UiThread ui,
         TimerController timer, AppSettings settings, SettingsService settingsService)
     {
@@ -74,8 +84,10 @@ public sealed partial class RemoteServer
 
             // Enums as camelCase strings ("running", "interval", "lock"); numbers are rejected
             builder.Services.ConfigureHttpJsonOptions(options =>
-                options.SerializerOptions.Converters.Add(
-                    new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false)));
+            {
+                foreach (var converter in Json.Converters)
+                    options.SerializerOptions.Converters.Add(converter);
+            });
 
             builder.Services.AddRateLimiter(options =>
             {
@@ -114,6 +126,8 @@ public sealed partial class RemoteServer
             // 2. Endpoint rate-limit policies (/pair)
             app.UseRateLimiter();
 
+            app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
+
             // 3. Bearer auth for the API and the WebSocket
             app.Use(async (context, next) =>
             {
@@ -124,7 +138,17 @@ public sealed partial class RemoteServer
                     return;
                 }
 
-                var device = _devices.FindByToken(GetBearerToken(context.Request));
+                var bearer = GetBearerToken(context.Request);
+
+                // Browsers can't set headers on a WebSocket: /ws without a header authenticates
+                // with its first message instead (see RemoteServer.Events.cs)
+                if (bearer == null && path.StartsWithSegments("/ws") && context.WebSockets.IsWebSocketRequest)
+                {
+                    await next(context);
+                    return;
+                }
+
+                var device = _devices.FindByToken(bearer);
                 if (device == null)
                 {
                     using var lease = authFailures.AttemptAcquire(ClientKey(context));
@@ -143,11 +167,13 @@ public sealed partial class RemoteServer
             MapDevices(app);
             MapTimer(app);
             MapSettings(app);
+            MapEvents(app);
 
             await app.StartAsync();
 
             _app = app;
             _authFailures = authFailures;
+            SubscribeEvents();
             Port = port;
             LastError = null;
             return true;
@@ -169,6 +195,8 @@ public sealed partial class RemoteServer
         _app = null;
         Port = null;
         _pairing.Cancel();
+        UnsubscribeEvents();
+        _hub.CloseAll(); // otherwise open sockets keep StopAsync waiting
         try
         {
             using var cts = new CancellationTokenSource(StopTimeout);

@@ -41,6 +41,8 @@ src/GameTimer/
     SettingsService.cs     settings.json next to the exe
     RemoteServer.cs        Embedded Kestrel for the phone remote: LAN filter, rate limits, bearer auth, pairing, devices
     RemoteServer.Api.cs    Timer and settings endpoints, DTOs, validation (partial class)
+    RemoteServer.Events.cs /ws endpoint: first-message auth, event subscriptions → broadcasts (partial class)
+    WebSocketHub.cs        Open sockets: per-connection outbox + send loop, broadcast, disconnect, graceful close
     NetworkFilter.cs       Allows only loopback / private LAN remote addresses; finds the PC's LAN IP for the QR
     DeviceStore.cs         Paired devices: Add/Revoke on UI thread, thread-safe token lookup (snapshot)
     PairingService.cs      One-time 8-char pairing code, 2-minute lifetime, single active code
@@ -61,7 +63,9 @@ src/GameTimer/
     ConnectPhoneDialog     QR code with the one-time pairing link, countdown, "connected" state
   Remote/                  Web files served to the phone, embedded by LogicalName ("Remote/pair.html")
 installer/setup.iss        Inno Setup script (per-user install, optional autostart)
-docs/remote-api.http       Every phone API request with examples (REST Client format)
+docs/remote-api.http       Every phone API request and WebSocket message, with examples (REST Client format)
+docs/ws-watch.ps1          PowerShell: pair with a code and print /ws events with timestamps
+docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API and /ws events on the real PC (PASS/FAIL)
 .github/workflows/release.yml   On tag v*: publish + build installer + GitHub Release
 ```
 
@@ -77,6 +81,8 @@ docs/remote-api.http       Every phone API request with examples (REST Client fo
 - **Phone control:** toggle in the Settings tab (auth required) starts/stops `RemoteServer` on `RemotePort` (5123); `RemoteEnabled` is restored at launch without a prompt. `App.OnExit` stops the host.
 - **Phone pairing & auth:** "Connect phone" (auth) shows a QR for `http://<lan-ip>:<port>/pair?code=…`. `POST /pair {code, name}` → `{deviceId, name, token}`; the token is 256-bit base64url, stored on the PC only as a SHA-256 hash. Everything under `/api` and `/ws` needs `Authorization: Bearer <token>` (401; 429 after 10 failures/min per IP). `/pair` is limited to 5 POSTs/min per IP. Any paired phone can list / revoke devices; the PC can revoke from the Settings tab (auth).
 - **Phone API:** see `docs/remote-api.http`. JSON camelCase, enums as camelCase strings (numbers rejected). Handlers run on the UI thread via `UiThread.InvokeAsync` and only use `TimerController` / `SettingsService`. `PUT /api/settings` is partial and validated, then `SettingsService.NotifyChanged(server)`; `MainWindow` refreshes its controls for any change whose source isn't itself. Color zone logic lives in `AppSettings.GetZone` (overlay and API).
+- **Extend event order:** `Extended` is raised first, then `TimerService.EvaluateNow()` may raise an alert or the expiry.
+- **WebSocket `/ws`:** auth by bearer header or first message `{"type":"auth","token"}` (5 s). Events come from `TimerController` (`StateChanged`, `Tick` throttled to 5 s, `AlertTriggered`, `Extended`), `SettingsService.SettingsChanged` (sent only if the settings DTO changed) and `DeviceStore.Changed` (revoked devices are disconnected). Subscribed while the server runs.
 - **Clock:** remaining time is monotonic (`Environment.TickCount64`): system clock changes don't affect it, sleep time still counts. Time-of-day mode reads the wall clock once at start.
 - **Debug-only hotkeys:** Ctrl+Shift+Plus / Minus = `Extend(±1)` (temporary, for testing).
 - **Validation:** empty time field = 0; inline error text under inputs disables Start.
@@ -87,6 +93,7 @@ Add every new string to **both** `Strings.resx` and `Strings.ru.resx` (same key)
 
 ## Gotchas (compile errors we already hit)
 
+- WebSockets: never cancel a pending `ReceiveAsync` (it aborts the socket and the close reason is lost). Close by sending `CloseOutputAsync` and waiting for the echo (`WebSocketHub.CloseAsync`).
 - WPF projects don't get `System.IO` in implicit usings: add `using System.IO;` for `StreamReader`, `MemoryStream` etc.
 
 - Namespace `GameTimer.Windows` shadows WinRT `Windows.*`: use `global::Windows.Security...`.

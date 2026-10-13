@@ -34,6 +34,9 @@ public sealed class TimerController
     /// <summary>Raised when an alert point is reached (minutes remaining).</summary>
     public event Action<int>? AlertTriggered;
 
+    /// <summary>Raised after Extend changed a still-running timer (minutes added, negative = removed).</summary>
+    public event Action<int>? Extended;
+
     public TimerState State { get; private set; } = TimerState.NotStarted;
     public TimerMode? Mode { get; private set; }
     public bool IsRunning => State == TimerState.Running;
@@ -115,6 +118,11 @@ public sealed class TimerController
         if (!IsRunning || minutes == 0 || Math.Abs(minutes) > MaxExtendMinutes) return false;
 
         _timer.Extend(TimeSpan.FromMinutes(minutes));
+
+        // Clients learn the new time first, then any alert it reached (or the expiry at zero)
+        if (_timer.Remaining > TimeSpan.Zero)
+            Extended?.Invoke(minutes);
+        _timer.EvaluateNow();
         return true;
     }
 

@@ -51,8 +51,8 @@ public class TimerService
     }
 
     /// <summary>
-    /// Adds (or, if negative, removes) time on a running timer. Never goes below zero;
-    /// reaching zero expires the timer immediately.
+    /// Adds (or, if negative, removes) time on a running timer. Never goes below zero.
+    /// Call <see cref="EvaluateNow"/> afterwards to update listeners (and expire at zero).
     /// </summary>
     public void Extend(TimeSpan delta)
     {
@@ -66,10 +66,15 @@ public class TimerService
         var minutesLeft = (int)Math.Ceiling(newRemaining.TotalMinutes);
         _firedAlerts.RemoveWhere(m => m < minutesLeft);
 
-        // Restart the interval so the next tick is a full second away, and update listeners now
+        // Restart the interval so the next tick is a full second away
         _timer.Stop();
         _timer.Start();
-        Evaluate();
+    }
+
+    /// <summary>Raises Tick / alerts / expiry for the current remaining time without waiting for the next tick.</summary>
+    public void EvaluateNow()
+    {
+        if (IsRunning) Evaluate();
     }
 
     public void Stop()

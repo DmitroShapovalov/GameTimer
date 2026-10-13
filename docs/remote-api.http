@@ -46,6 +46,18 @@ Content-Type: application/json
 
 { "action": "lock", "redThreshold": 5, "alertPoints": [ { "minutes": 5, "enabled": true }, { "minutes": 1, "enabled": true } ] }
 
+### WebSocket push events: ws://localhost:5123/ws  (watch them with docs/ws-watch.ps1)
+# Auth: "Authorization: Bearer <token>" on the upgrade request, or (browsers) a first message
+#   { "type": "auth", "token": "<token>" } within 5 s. Failure: close 1008 "unauthorized" / "auth_timeout".
+# Server messages (JSON, field "type"):
+#   hello {status, settings}                once, right after auth
+#   started | stopped | expired {status}     timer state changes (stopped also covers reset)
+#   tick {status}                           every 5 s while running
+#   alert {minutes, status}                 an alert point was reached
+#   extended {minutes, status}              time added / removed
+#   settingsChanged {settings}              only when the API-visible settings changed
+# Server closes: 1008 "revoked" (device removed), 1001 "server_stopping". Max 10 connections (503).
+
 ### Paired devices
 GET {{host}}/api/devices
 Authorization: Bearer {{token}}
