@@ -278,4 +278,16 @@
   <data name="Interruption_Dismiss" xml:space="preserve">
     <value>Got it</value>
   </data>
+  <data name="Tamper_Label" xml:space="preserve">
+    <value>Protection from closing</value>
+  </data>
+  <data name="Tamper_Toggle" xml:space="preserve">
+    <value>Prevent closing from Task Manager</value>
+  </data>
+  <data name="Tamper_Hint" xml:space="preserve">
+    <value>When on, the child cannot end the app from Task Manager. You can still exit it from the tray (Windows Hello). An administrator can still force it.</value>
+  </data>
+  <data name="Tamper_Failed" xml:space="preserve">
+    <value>Could not change the protection setting.</value>
+  </data>
 </root>

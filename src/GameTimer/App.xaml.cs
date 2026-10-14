@@ -56,6 +56,11 @@ public partial class App : System.Windows.Application
         var settingsService = new SettingsService();
         var settings = settingsService.Load();
         Loc.SetLanguage(settings.Language);
+
+        // Parental-control resilience: stop the child ending the app from Task Manager (opt-in)
+        if (settings.TamperProtection)
+            ProcessProtection.DenyTermination();
+
         var timerStateStore = new TimerStateStore();
         var timerController = new TimerController(settings, timerStateStore);
 

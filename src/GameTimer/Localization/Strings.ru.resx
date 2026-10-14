@@ -278,4 +278,16 @@
   <data name="Interruption_Dismiss" xml:space="preserve">
     <value>Понятно</value>
   </data>
+  <data name="Tamper_Label" xml:space="preserve">
+    <value>Защита от закрытия</value>
+  </data>
+  <data name="Tamper_Toggle" xml:space="preserve">
+    <value>Не давать закрыть через диспетчер задач</value>
+  </data>
+  <data name="Tamper_Hint" xml:space="preserve">
+    <value>Когда включено, ребёнок не сможет завершить приложение через диспетчер задач. Выйти из него по-прежнему можно через трей (Windows Hello). Администратор всё равно сможет закрыть принудительно.</value>
+  </data>
+  <data name="Tamper_Failed" xml:space="preserve">
+    <value>Не удалось изменить настройку защиты.</value>
+  </data>
 </root>

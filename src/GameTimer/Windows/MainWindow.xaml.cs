@@ -20,6 +20,7 @@ public partial class MainWindow : FluentWindow
     private readonly PairingService _pairing;
     private bool _isRemoteBusy;
     private bool? _firewallOk; // null = not checked yet
+    private bool _isTamperBusy;
     private AppSettings _settings;
     private OverlayWindow? _overlay;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -130,6 +131,9 @@ public partial class MainWindow : FluentWindow
         PhoneControlLabel.Text = Loc.Get("PhoneControl");
         RemoteToggle.Content = Loc.Get("Remote_Toggle");
         ConnectPhoneButton.Content = Loc.Get("ConnectPhone");
+        TamperLabel.Text = Loc.Get("Tamper_Label");
+        TamperToggle.Content = Loc.Get("Tamper_Toggle");
+        TamperHint.Text = Loc.Get("Tamper_Hint");
         FirewallText.Text = Loc.Get("Remote_FirewallMissing");
         FirewallButton.Content = Loc.Get("Remote_FirewallFix");
         PairedDevicesLabel.Text = Loc.Get("PairedDevices");
@@ -228,6 +232,9 @@ public partial class MainWindow : FluentWindow
         // Settings tab - action
         _lastActionIndex = (int)_settings.Action;
         ActionCombo.SelectedIndex = _lastActionIndex;
+
+        // Settings tab - protection
+        TamperToggle.IsChecked = _settings.TamperProtection;
 
         // Settings tab - phone control
         RemoteToggle.IsChecked = _settings.RemoteEnabled;
@@ -848,6 +855,43 @@ public partial class MainWindow : FluentWindow
     }
 
     // Turning phone control on or off requires auth, like other protected settings
+    // Enabling denies termination now; disabling re-allows it. Both require Windows Hello.
+    private async void TamperToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading || _isTamperBusy) return;
+
+        bool enable = TamperToggle.IsChecked == true;
+        if (enable == _settings.TamperProtection) return;
+
+        _isTamperBusy = true; // reverting IsChecked below re-enters this handler
+        TamperToggle.IsEnabled = false;
+        try
+        {
+            if (!await RequireAuth())
+            {
+                TamperToggle.IsChecked = _settings.TamperProtection;
+                return;
+            }
+
+            bool ok = enable ? ProcessProtection.DenyTermination() : ProcessProtection.AllowTermination();
+            if (!ok)
+            {
+                System.Windows.MessageBox.Show(Loc.Get("Tamper_Failed"), Loc.Get("Error"),
+                    System.Windows.MessageBoxButton.OK);
+                TamperToggle.IsChecked = _settings.TamperProtection;
+                return;
+            }
+
+            _settings.TamperProtection = enable;
+            SaveSettings();
+        }
+        finally
+        {
+            _isTamperBusy = false;
+            TamperToggle.IsEnabled = true;
+        }
+    }
+
     private async void RemoteToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (_isLoading || _isRemoteBusy) return;

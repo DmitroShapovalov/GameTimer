@@ -327,6 +327,12 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
+                        <TextBlock x:Name="TamperLabel" Text="Protection from closing" Style="{StaticResource SectionLabel}"/>
+                        <ui:ToggleSwitch x:Name="TamperToggle" Content="Prevent closing from Task Manager"
+                                         Checked="TamperToggle_Changed" Unchecked="TamperToggle_Changed"/>
+                        <TextBlock x:Name="TamperHint" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,16"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+
                         <ui:InfoBar x:Name="ProtectionInfo" Title="Protection" IsOpen="True" IsClosable="False"
                                     Severity="Informational"
                                     Message="Timer controls are protected by Windows Hello (PIN / fingerprint / face)."/>
