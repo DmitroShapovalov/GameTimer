@@ -285,7 +285,7 @@
     <value>Prevent closing from Task Manager</value>
   </data>
   <data name="Tamper_Hint" xml:space="preserve">
-    <value>When on, the child cannot end the app from Task Manager. You can still exit it from the tray (Windows Hello). An administrator can still force it.</value>
+    <value>When on, the app cannot be ended from Task Manager. You can still exit it from the tray (Windows Hello). This only works if the child uses a standard (non-administrator) Windows account — on an administrator account Task Manager can still close it.</value>
   </data>
   <data name="Tamper_Failed" xml:space="preserve">
     <value>Could not change the protection setting.</value>
