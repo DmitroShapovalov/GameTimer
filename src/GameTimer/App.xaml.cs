@@ -51,6 +51,20 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         ApplicationAccentColorManager.Apply(Color.FromRgb(0x00, 0x78, 0xD4));
 
+        // Log unhandled errors and keep the app from showing a Windows crash dialog on the UI thread
+        DispatcherUnhandledException += (_, args) =>
+        {
+            DiagnosticLog.Write("UI exception: " + args.Exception);
+            args.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            DiagnosticLog.Write("fatal exception: " + args.ExceptionObject);
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            DiagnosticLog.Write("task exception: " + args.Exception);
+            args.SetObserved();
+        };
+
         // Core services live here, not in the window, so other control surfaces
         // (the phone API from Phase 1) can share the same TimerController.
         var settingsService = new SettingsService();
@@ -74,8 +88,10 @@ public partial class App : System.Windows.Application
         mainWindow.Show();
 
         // Resume a timer that was still running when the app last stopped (close, kill, reboot, logoff).
-        // After Show(), so the window and overlay react to the resulting state change.
-        timerController.TryResume();
+        // After Show(), so the window and overlay react to the resulting state change. Guarded so a
+        // resume problem can never stop the app from launching.
+        try { timerController.TryResume(); }
+        catch (Exception ex) { DiagnosticLog.Write("resume threw: " + ex); }
 
         // Background listener: when another copy is launched, bring our window forward
         var listener = new Thread(() =>
@@ -90,8 +106,15 @@ public partial class App : System.Windows.Application
     protected override void OnExit(System.Windows.ExitEventArgs e)
     {
         // Stop the embedded server off the UI thread so its shutdown can't wait on the dispatcher
-        if (_remoteServer is { IsRunning: true } server)
-            Task.Run(server.StopAsync).Wait(TimeSpan.FromSeconds(5));
+        try
+        {
+            if (_remoteServer is { IsRunning: true } server)
+                Task.Run(server.StopAsync).Wait(TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write("server stop on exit failed: " + ex);
+        }
 
         if (_instanceMutex != null)
         {

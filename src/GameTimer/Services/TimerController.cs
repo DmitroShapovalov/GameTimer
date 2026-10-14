@@ -83,7 +83,11 @@ public sealed class TimerController
     {
         _dispatcher.VerifyAccess();
         var saved = _store.Load();
-        if (saved == null) return;
+        if (saved == null)
+        {
+            DiagnosticLog.Write("resume: no saved timer");
+            return;
+        }
 
         // A leftover running state means the app did not exit cleanly through the tray (which stops the
         // timer after Windows Hello). That is the tamper signal shown to the parent.
@@ -98,12 +102,14 @@ public sealed class TimerController
             : saved.TargetUtc - DateTimeOffset.UtcNow;
 
         Mode = saved.Mode;
+        DiagnosticLog.Write($"resume: sameBoot={sameBoot} remaining={remaining.TotalSeconds:F0}s action={_settings.Action}");
         if (remaining <= TimeSpan.Zero)
         {
             // Time ran out while the app was not running — enforce the action now
             _store.Clear();
             SetState(TimerState.Expired);
-            ShutdownService.Execute(_settings.Action);
+            try { ShutdownService.Execute(_settings.Action); }
+            catch (Exception ex) { DiagnosticLog.Write("resume: action failed: " + ex); }
             return;
         }
 

@@ -19,7 +19,11 @@ public sealed class TimerStateStore
     {
         try
         {
-            File.WriteAllText(StatePath, JsonSerializer.Serialize(state, JsonOptions));
+            // Write to a temp file then replace, so a kill mid-write leaves the old file intact, never a partial one
+            var json = JsonSerializer.Serialize(state, JsonOptions);
+            var tmp = StatePath + ".tmp";
+            File.WriteAllText(tmp, json);
+            File.Move(tmp, StatePath, overwrite: true);
         }
         catch
         {
@@ -34,9 +38,9 @@ public sealed class TimerStateStore
             if (File.Exists(StatePath))
                 return JsonSerializer.Deserialize<PersistedTimer>(File.ReadAllText(StatePath), JsonOptions);
         }
-        catch
+        catch (Exception ex)
         {
-            // Corrupt or unreadable — treat as no saved timer
+            DiagnosticLog.Write("timer-state load failed: " + ex.Message);
         }
         return null;
     }

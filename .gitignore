@@ -8,3 +8,6 @@ obj/
 publish/
 
 installer/Output/
+
+diagnostics.log
+timer-state.json
