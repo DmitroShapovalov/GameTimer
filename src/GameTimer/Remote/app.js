@@ -16,6 +16,8 @@
       tabTimer: "Timer", tabSettings: "Settings", tabDevices: "Phones",
       connecting: "Connecting to the PC…",
       offline: "PC unreachable. Reconnecting… Check that this phone is on the same Wi-Fi.",
+      closedWhileRunning: "GameTimer was closed on the PC at {0} while a timer was running, and resumed when it started again.",
+      gotIt: "Got it",
       offlineLong: "PC still unreachable. If it is on and this phone is on the same Wi-Fi, the PC may have a new address: on the PC open Settings → Connect phone and scan the new QR code.",
       state_running: "Running", state_stopped: "Stopped", state_notStarted: "Not started", state_expired: "Time's up",
       endsThen: "Ends at {0}, then {1}",
@@ -56,6 +58,8 @@
       tabTimer: "Таймер", tabSettings: "Настройки", tabDevices: "Телефоны",
       connecting: "Подключение к ПК…",
       offline: "ПК недоступен. Переподключение… Проверьте, что телефон в той же сети Wi-Fi.",
+      closedWhileRunning: "GameTimer на ПК был закрыт в {0}, пока шёл таймер, и продолжился при следующем запуске.",
+      gotIt: "Понятно",
       offlineLong: "ПК всё ещё недоступен. Если он включён, а телефон в той же сети Wi-Fi, у ПК мог смениться адрес: на ПК откройте «Настройки» → «Подключить телефон» и отсканируйте новый QR-код.",
       state_running: "Идёт", state_stopped: "Остановлен", state_notStarted: "Не запущен", state_expired: "Время вышло",
       endsThen: "Закончится в {0}, затем {1}",
@@ -354,7 +358,21 @@
     }
   }
 
+  function renderInterruption() {
+    const box = $("interruption");
+    const at = status && status.lastInterruption;
+    if (!at) { box.hidden = true; return; }
+    const when = new Date(at).toLocaleString(lang, { dateStyle: "short", timeStyle: "short" });
+    $("interruption-text").textContent = t("closedWhileRunning", when);
+    box.hidden = false;
+  }
+  $("interruption-ok").addEventListener("click", async () => {
+    try { setStatus(await api("POST", "/api/interruption/ack")); }
+    catch (e) { if (e.status !== 401) toast(errorText(e)); }
+  });
+
   function renderTimer() {
+    renderInterruption();
     const running = !!status && status.state === "running";
     $("state").textContent = status ? t("state_" + status.state) : "";
     if (running && status.targetTime) {

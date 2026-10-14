@@ -33,6 +33,8 @@ h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 8px; te
 .msg.err { color: var(--error); }
 
 .card { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.card.warn { background: #4a3a00; color: #ffe08a; }
+.card.warn p { margin: 0 0 10px; }
 .brand { display: flex; align-items: center; gap: 12px; margin: 24px 0 16px; }
 
 /* Buttons */

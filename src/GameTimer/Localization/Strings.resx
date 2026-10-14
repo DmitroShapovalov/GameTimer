@@ -269,4 +269,13 @@
   <data name="Remote_FirewallFix" xml:space="preserve">
     <value>Allow in firewall</value>
   </data>
+  <data name="Interruption_Title" xml:space="preserve">
+    <value>Timer was interrupted</value>
+  </data>
+  <data name="Interruption_Message" xml:space="preserve">
+    <value>GameTimer was closed at {0} while a timer was running, and the timer resumed when it started again.</value>
+  </data>
+  <data name="Interruption_Dismiss" xml:space="preserve">
+    <value>Got it</value>
+  </data>
 </root>

@@ -31,6 +31,12 @@ public class TimerService
         }
     }
 
+    /// <summary>Absolute monotonic deadline (<see cref="Environment.TickCount64"/>), for persistence.</summary>
+    public long DeadlineTick => _deadlineMs;
+
+    /// <summary>Alert points already fired, so a resumed timer does not replay them.</summary>
+    public IReadOnlyCollection<int> FiredAlerts => _firedAlerts;
+
     public AppSettings Settings { get; set; }
 
     public TimerService(AppSettings settings)
@@ -43,10 +49,12 @@ public class TimerService
         _timer.Tick += (_, _) => Evaluate();
     }
 
-    public void Start(TimeSpan duration)
+    public void Start(TimeSpan duration, IEnumerable<int>? firedAlerts = null)
     {
         _deadlineMs = Environment.TickCount64 + (long)duration.TotalMilliseconds;
         _firedAlerts.Clear();
+        if (firedAlerts != null)
+            foreach (var m in firedAlerts) _firedAlerts.Add(m);
         _timer.Start();
     }
 

@@ -147,8 +147,10 @@ For reliable background push notifications ("time is up", "timer was stopped"). 
 
 ## Backlog / known gaps
 
-Tamper resistance (the child uses the same Windows account):
-- The process can be killed from Task Manager. Ideas: watchdog second process, or run the enforcer as a Windows service with the UI as a client.
+Tamper resistance (the child uses the same Windows account, which is an administrator):
+- ~~Closing the app loses the running timer.~~ Done: the running timer is persisted (`timer-state.json`) and resumed on next launch (close, kill, reboot, logoff); if the time ran out while the app was gone, the action runs at launch. Same-boot resume uses the monotonic deadline (clock-change proof); after a reboot it falls back to the wall-clock target. (TimerStateStore, TimerController.TryResume)
+- ~~No sign the app was closed.~~ Done: a resume that finds a leftover running timer means the app was not exited cleanly through the tray; the parent sees "closed at HH:MM" on the PC and on the phone (`LastInterruption`, `/api/interruption/ack`).
+- The process can still be killed from Task Manager. Next: deny PROCESS_TERMINATE via the process DACL, and a watchdog second process that relaunches the other; both behind a parent-enabled "Tamper protection" toggle. An admin token can still override the DACL.
 - `settings.json` sits in a user-writable folder and can be edited. Ideas: move to `%ProgramData%` with ACLs, or sign/encrypt it. Note: from Phase 1 it also holds device token hashes.
 - ~~Changing the system clock shifts the time-of-day target.~~ Fixed in Phase 1, step 1 (monotonic clock).
 - No usage log. Idea: history of sessions (start, stop, who stopped, extensions), later visible on the phone.

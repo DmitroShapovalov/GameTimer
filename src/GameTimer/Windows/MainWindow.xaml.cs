@@ -49,6 +49,7 @@ public partial class MainWindow : FluentWindow
         _timer.Tick += OnTimerTick;
         _timer.AlertTriggered += OnAlertTriggered;
         _timer.StateChanged += OnTimerStateChanged;
+        _timer.InterruptionChanged += UpdateInterruptionBar;
         _remote = remote;
         _devices = devices;
         _pairing = pairing;
@@ -143,6 +144,8 @@ public partial class MainWindow : FluentWindow
 
         // Tray menu
         UpdateTrayMenu();
+
+        UpdateInterruptionBar();
     }
 
     // From <Version> (CI passes the tag: -p:Version=1.2.0); drop the "+commit" suffix the SDK appends
@@ -545,6 +548,26 @@ public partial class MainWindow : FluentWindow
 
     // Fires for every transition, whoever caused it (this window now, the phone API later).
     // The shutdown / lock / logoff on expiry is executed by TimerController itself.
+    // Shows "the app was closed while a timer ran" after a tamper-style restart; the parent dismisses it
+    private void UpdateInterruptionBar()
+    {
+        bool show = _timer.LastInterruption is DateTimeOffset;
+        if (show)
+        {
+            var when = _timer.LastInterruption!.Value.LocalDateTime;
+            InterruptionBar.Title = Loc.Get("Interruption_Title");
+            InterruptionBar.Message = string.Format(Loc.Get("Interruption_Message"), when.ToString("g"));
+            InterruptionDismiss.Content = Loc.Get("Interruption_Dismiss");
+        }
+        InterruptionBar.IsOpen = show;
+        InterruptionDismiss.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void InterruptionDismiss_Click(object sender, RoutedEventArgs e)
+    {
+        _timer.AcknowledgeInterruption();
+    }
+
     private void OnTimerStateChanged(TimerState state)
     {
         switch (state)

@@ -37,6 +37,11 @@
                     </StackPanel>
                 </TabItem.Header>
                 <StackPanel Margin="16">
+                    <ui:InfoBar x:Name="InterruptionBar" Severity="Warning" IsOpen="False" IsClosable="False"
+                                Margin="0,0,0,8"/>
+                    <ui:Button x:Name="InterruptionDismiss" Content="Got it" Appearance="Secondary"
+                               HorizontalAlignment="Right" Margin="0,0,0,12" Visibility="Collapsed"
+                               Click="InterruptionDismiss_Click"/>
                     <TextBlock x:Name="ModeLabel" Text="Mode" Style="{StaticResource SectionLabel}"/>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                         <RadioButton x:Name="ModeInterval" Content="Interval" IsChecked="True"

@@ -56,7 +56,8 @@ public partial class App : System.Windows.Application
         var settingsService = new SettingsService();
         var settings = settingsService.Load();
         Loc.SetLanguage(settings.Language);
-        var timerController = new TimerController(settings);
+        var timerStateStore = new TimerStateStore();
+        var timerController = new TimerController(settings, timerStateStore);
 
         var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
         var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
@@ -66,6 +67,10 @@ public partial class App : System.Windows.Application
         var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing);
         MainWindow = mainWindow;
         mainWindow.Show();
+
+        // Resume a timer that was still running when the app last stopped (close, kill, reboot, logoff).
+        // After Show(), so the window and overlay react to the resulting state change.
+        timerController.TryResume();
 
         // Background listener: when another copy is launched, bring our window forward
         var listener = new Thread(() =>

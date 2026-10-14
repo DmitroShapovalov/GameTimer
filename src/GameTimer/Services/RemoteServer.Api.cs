@@ -25,7 +25,8 @@ public sealed partial class RemoteServer
         int RemainingSeconds,
         DateTimeOffset? TargetTime,
         TimerAction Action,
-        TimerZone? Zone);
+        TimerZone? Zone,
+        DateTimeOffset? LastInterruption);
 
     public sealed record StartRequest(TimerMode? Mode, int Hours, int Minutes);
 
@@ -79,6 +80,13 @@ public sealed partial class RemoteServer
                     : Error(StatusCodes.Status400BadRequest, "invalid_time");
             });
         });
+
+        // Dismiss the "app was closed while a timer ran" note (shown after a tamper-style restart)
+        app.MapPost("/api/interruption/ack", () => _ui.InvokeAsync(() =>
+        {
+            _timer.AcknowledgeInterruption();
+            return Results.Json(BuildStatus());
+        }));
 
         // Stop also cancels a pending shutdown (TimerController.Stop)
         app.MapPost("/api/timer/stop", () => _ui.InvokeAsync(() =>
@@ -134,7 +142,8 @@ public sealed partial class RemoteServer
             running ? (int)remaining.TotalSeconds : 0,
             running ? DateTimeOffset.Now + remaining : null,
             _settings.Action,
-            running ? _settings.GetZone(remaining) : null);
+            running ? _settings.GetZone(remaining) : null,
+            _timer.LastInterruption);
     }
 
     // UI thread only
