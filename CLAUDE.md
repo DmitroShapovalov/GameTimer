@@ -57,6 +57,8 @@ src/GameTimer/
     Loc.cs                 Loc.Get("Key"), Loc.SetLanguage("en"|"ru")
     Strings.resx           English (default)
     Strings.ru.resx        Russian
+    Strings.nl.resx        Dutch
+    Strings.uk.resx        Ukrainian
   Windows/
     MainWindow             FluentWindow, 4 tabs (Timer, Display, Notifications, Settings), tray, keyboard
     OverlayWindow          Countdown overlay, color zones, pulse animation
@@ -98,7 +100,7 @@ docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API an
 
 ## Localization
 
-Add every new string to **both** `Strings.resx` and `Strings.ru.resx` (same key), set it in `ApplyLocalization()`. Language switches at runtime without restart. Don't add `<EmbeddedResource Include=...>` for resx: the SDK includes them automatically (NETSDK1022 duplicate error).
+Add every new string to **all** `Strings*.resx` files (en, ru, nl, uk — same key in each), set it in `ApplyLocalization()`. The phone has its own copy in `Remote/app.js` (`STR.en/ru/nl/uk`); keep it in sync. A new language also needs: a `ComboBoxItem` in `MainWindow.xaml`, an `<option>` in `Remote/index.html`, an `STR` block in `app.js`, and the code in the `Languages` whitelist in `RemoteServer.Api.cs`. Language switches at runtime without restart. Don't add `<EmbeddedResource Include=...>` for resx: the SDK includes them automatically (NETSDK1022 duplicate error).
 
 ## Gotchas (compile errors we already hit)
 

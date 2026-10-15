@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="Tab_Timer" xml:space="preserve">
+    <value>Timer</value>
+  </data>
+  <data name="Mode" xml:space="preserve">
+    <value>Modus</value>
+  </data>
+  <data name="Mode_Interval" xml:space="preserve">
+    <value>Interval</value>
+  </data>
+  <data name="Mode_TimeOfDay" xml:space="preserve">
+    <value>Tijdstip</value>
+  </data>
+  <data name="Hours" xml:space="preserve">
+    <value>Uren:</value>
+  </data>
+  <data name="Minutes" xml:space="preserve">
+    <value>Minuten:</value>
+  </data>
+  <data name="Hour" xml:space="preserve">
+    <value>Uur:</value>
+  </data>
+  <data name="Timer_NotStarted" xml:space="preserve">
+    <value>Timer niet gestart</value>
+  </data>
+  <data name="Timer_Started" xml:space="preserve">
+    <value>Timer loopt</value>
+  </data>
+  <data name="Timer_Stopped" xml:space="preserve">
+    <value>Timer gestopt</value>
+  </data>
+  <data name="Timer_Expired" xml:space="preserve">
+    <value>Tijd is om!</value>
+  </data>
+  <data name="Start" xml:space="preserve">
+    <value>Start</value>
+  </data>
+  <data name="Stop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="Reset" xml:space="preserve">
+    <value>Herstellen</value>
+  </data>
+  <data name="Tab_Display" xml:space="preserve">
+    <value>Weergave</value>
+  </data>
+  <data name="OverlayPosition" xml:space="preserve">
+    <value>Positie van de overlay (sleep de markering)</value>
+  </data>
+  <data name="FontSize" xml:space="preserve">
+    <value>Tekengrootte</value>
+  </data>
+  <data name="Opacity" xml:space="preserve">
+    <value>Dekking</value>
+  </data>
+  <data name="ShowBackground" xml:space="preserve">
+    <value>Achtergrond achter tekst</value>
+  </data>
+  <data name="Thresholds" xml:space="preserve">
+    <value>Drempels (minuten)</value>
+  </data>
+  <data name="WarningFrom" xml:space="preserve">
+    <value>Waarschuwing:</value>
+  </data>
+  <data name="AlertFrom" xml:space="preserve">
+    <value>Alarm:</value>
+  </data>
+  <data name="Min" xml:space="preserve">
+    <value>min</value>
+  </data>
+  <data name="ZoneColors" xml:space="preserve">
+    <value>Zonekleuren (klik om te kiezen)</value>
+  </data>
+  <data name="Zone_Normal" xml:space="preserve">
+    <value>Normaal</value>
+  </data>
+  <data name="Zone_Warning" xml:space="preserve">
+    <value>Waarschuwing</value>
+  </data>
+  <data name="Zone_Alert" xml:space="preserve">
+    <value>Alarm</value>
+  </data>
+  <data name="Tab_Notifications" xml:space="preserve">
+    <value>Meldingen</value>
+  </data>
+  <data name="AlertPoints" xml:space="preserve">
+    <value>Geluidsmeldingen</value>
+  </data>
+  <data name="MinBeforeTimer" xml:space="preserve">
+    <value>min voor einde</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Verwijderen</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Toevoegen</value>
+  </data>
+  <data name="SoundFile" xml:space="preserve">
+    <value>Geluidsbestand</value>
+  </data>
+  <data name="BuiltIn" xml:space="preserve">
+    <value>Ingebouwd</value>
+  </data>
+  <data name="CustomFile" xml:space="preserve">
+    <value>Eigen bestand</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>Bladeren...</value>
+  </data>
+  <data name="Preview" xml:space="preserve">
+    <value>Voorbeeld</value>
+  </data>
+  <data name="MinPlaceholder" xml:space="preserve">
+    <value>min</value>
+  </data>
+  <data name="Tab_Settings" xml:space="preserve">
+    <value>Instellingen</value>
+  </data>
+  <data name="ActionOnExpiry" xml:space="preserve">
+    <value>Actie als de tijd om is</value>
+  </data>
+  <data name="Action_Shutdown" xml:space="preserve">
+    <value>Computer afsluiten</value>
+  </data>
+  <data name="Action_Lock" xml:space="preserve">
+    <value>Scherm vergrendelen</value>
+  </data>
+  <data name="Action_Logoff" xml:space="preserve">
+    <value>Afmelden</value>
+  </data>
+  <data name="Protection" xml:space="preserve">
+    <value>Beveiliging</value>
+  </data>
+  <data name="ProtectionInfo" xml:space="preserve">
+    <value>Timerbediening is beveiligd met Windows Hello (pincode / vingerafdruk / gezicht).</value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>Over</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Speeltijdbegrenzer voor Windows</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>Taal</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Fout</value>
+  </data>
+  <data name="InvalidTime" xml:space="preserve">
+    <value>Voer een geldige tijd in.</value>
+  </data>
+  <data name="InvalidTimeRange" xml:space="preserve">
+    <value>Voer een geldige tijd in (0-23 : 0-59).</value>
+  </data>
+  <data name="AlertExists" xml:space="preserve">
+    <value>Dit meldpunt bestaat al.</value>
+  </data>
+  <data name="SelectSoundFile" xml:space="preserve">
+    <value>Kies een geluidsbestand</value>
+  </data>
+  <data name="AuthPrompt" xml:space="preserve">
+    <value>GameTimer: bevestig je identiteit</value>
+  </data>
+  <data name="TrayOpen" xml:space="preserve">
+    <value>Openen</value>
+  </data>
+  <data name="TrayExit" xml:space="preserve">
+    <value>Afsluiten</value>
+  </data>
+  <data name="EnterWindowsPassword" xml:space="preserve">
+    <value>Voer je Windows-wachtwoord in:</value>
+  </data>
+  <data name="PasswordTitle" xml:space="preserve">
+    <value>Verificatie</value>
+  </data>
+  <data name="WAVFilter" xml:space="preserve">
+    <value>Geluidsbestanden|*.wav;*.mp3</value>
+  </data>
+  <data name="PhoneControl" xml:space="preserve">
+    <value>Telefoonbediening</value>
+  </data>
+  <data name="Remote_Toggle" xml:space="preserve">
+    <value>Bediening vanaf een telefoon op thuis-wifi toestaan</value>
+  </data>
+  <data name="Remote_Off" xml:space="preserve">
+    <value>Uit</value>
+  </data>
+  <data name="Remote_Running" xml:space="preserve">
+    <value>Actief op {0}</value>
+  </data>
+  <data name="Remote_StartFailed" xml:space="preserve">
+    <value>Kon niet starten op poort {0}: {1}</value>
+  </data>
+  <data name="ConnectPhone" xml:space="preserve">
+    <value>Telefoon verbinden</value>
+  </data>
+  <data name="ConnectPhone_Instructions" xml:space="preserve">
+    <value>Scan deze code met de camera van de telefoon. De telefoon moet op dezelfde wifi zitten als deze pc.</value>
+  </data>
+  <data name="ConnectPhone_ExpiresIn" xml:space="preserve">
+    <value>De code is geldig voor {0}</value>
+  </data>
+  <data name="ConnectPhone_Expired" xml:space="preserve">
+    <value>De code is verlopen. Sluit dit venster en probeer opnieuw.</value>
+  </data>
+  <data name="ConnectPhone_Connected" xml:space="preserve">
+    <value>Verbonden: {0}</value>
+  </data>
+  <data name="ConnectPhone_NoNetwork" xml:space="preserve">
+    <value>Geen thuisnetwerk gevonden. Verbind deze pc met wifi of een netwerkkabel en probeer opnieuw.</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Sluiten</value>
+  </data>
+  <data name="PairedDevices" xml:space="preserve">
+    <value>Gekoppelde telefoons</value>
+  </data>
+  <data name="PairedDevices_None" xml:space="preserve">
+    <value>Nog geen telefoons verbonden</value>
+  </data>
+  <data name="Device_LastSeen" xml:space="preserve">
+    <value>Laatst gezien {0}</value>
+  </data>
+  <data name="Remote_FirewallMissing" xml:space="preserve">
+    <value>Windows Firewall kan de telefoon blokkeren: de regel voor telefoontoegang ontbreekt.</value>
+  </data>
+  <data name="Remote_FirewallFix" xml:space="preserve">
+    <value>Toestaan in firewall</value>
+  </data>
+  <data name="Interruption_Title" xml:space="preserve">
+    <value>Timer is onderbroken</value>
+  </data>
+  <data name="Interruption_Message" xml:space="preserve">
+    <value>GameTimer is om {0} gesloten terwijl een timer liep; de timer is hervat bij de volgende start.</value>
+  </data>
+  <data name="Interruption_Dismiss" xml:space="preserve">
+    <value>Begrepen</value>
+  </data>
+  <data name="Tamper_Label" xml:space="preserve">
+    <value>Beveiliging tegen sluiten</value>
+  </data>
+  <data name="Tamper_Toggle" xml:space="preserve">
+    <value>Sluiten via Taakbeheer voorkomen</value>
+  </data>
+  <data name="Tamper_Hint" xml:space="preserve">
+    <value>Als dit aan staat, kan de app niet via Taakbeheer worden beeindigd. Je kunt hem nog wel afsluiten via het systeemvak (Windows Hello). Dit werkt alleen als het kind een standaard (niet-beheerders) Windows-account gebruikt - met een beheerdersaccount kan Taakbeheer hem alsnog sluiten.</value>
+  </data>
+  <data name="Tamper_Failed" xml:space="preserve">
+    <value>Kon de beveiligingsinstelling niet wijzigen.</value>
+  </data>
+  <data name="Tab_History" xml:space="preserve">
+    <value>Geschiedenis</value>
+  </data>
+  <data name="History_Empty" xml:space="preserve">
+    <value>Nog geen gebeurtenissen</value>
+  </data>
+  <data name="Ev_Started" xml:space="preserve">
+    <value>Gestart</value>
+  </data>
+  <data name="Ev_Stopped" xml:space="preserve">
+    <value>Gestopt</value>
+  </data>
+  <data name="Ev_Reset" xml:space="preserve">
+    <value>Gereset</value>
+  </data>
+  <data name="Ev_Extended_Plus" xml:space="preserve">
+    <value>+{0} min</value>
+  </data>
+  <data name="Ev_Extended_Minus" xml:space="preserve">
+    <value>−{0} min</value>
+  </data>
+  <data name="Ev_Expired" xml:space="preserve">
+    <value>Tijd om</value>
+  </data>
+  <data name="Ev_Resumed" xml:space="preserve">
+    <value>Hervat na herstart</value>
+  </data>
+  <data name="Ev_Closed" xml:space="preserve">
+    <value>App gesloten</value>
+  </data>
+  <data name="Who_Pc" xml:space="preserve">
+    <value>Pc</value>
+  </data>
+  <data name="Who_Phone" xml:space="preserve">
+    <value>telefoon</value>
+  </data>
+  <data name="Who_System" xml:space="preserve">
+    <value>automatisch</value>
+  </data>
+  <data name="Tab_Schedule" xml:space="preserve">
+    <value>Schema</value>
+  </data>
+  <data name="Sched_Label" xml:space="preserve">
+    <value>Dagschema</value>
+  </data>
+  <data name="Sched_Intro" xml:space="preserve">
+    <value>Een dagelijks tijdbudget en de uren waarop spelen mag, per weekdag. Standaard uit.</value>
+  </data>
+  <data name="Sched_Enable" xml:space="preserve">
+    <value>Schema inschakelen</value>
+  </data>
+  <data name="Sched_Hint" xml:space="preserve">
+    <value>Als dit aan staat, start de timer automatisch het tegoed van de dag en vergrendelt hij als dat op is of de toegestane uren voorbij zijn. Limiet 0 = geen budget. Uren 00:00-24:00 = hele dag.</value>
+  </data>
+  <data name="Sched_Unlock" xml:space="preserve">
+    <value>Ontgrendelen om te bewerken</value>
+  </data>
+  <data name="Sched_Lock" xml:space="preserve">
+    <value>Vergrendelen</value>
+  </data>
+  <data name="Sched_Col_Day" xml:space="preserve">
+    <value>Dag</value>
+  </data>
+  <data name="Sched_Col_On" xml:space="preserve">
+    <value>Aan</value>
+  </data>
+  <data name="Sched_Col_Limit" xml:space="preserve">
+    <value>Min/dag</value>
+  </data>
+  <data name="Sched_Col_From" xml:space="preserve">
+    <value>Van</value>
+  </data>
+  <data name="Sched_Col_To" xml:space="preserve">
+    <value>Tot</value>
+  </data>
+  <data name="Sched_St_Off" xml:space="preserve">
+    <value>Schema staat uit. De timer wordt handmatig bediend.</value>
+  </data>
+  <data name="Sched_St_Allowed" xml:space="preserve">
+    <value>Nu toegestaan - vandaag nog {0} min beschikbaar.</value>
+  </data>
+  <data name="Sched_St_OutsideWindow" xml:space="preserve">
+    <value>Nu geblokkeerd - buiten de toegestane uren voor vandaag.</value>
+  </data>
+  <data name="Sched_St_DayOff" xml:space="preserve">
+    <value>De hele dag geblokkeerd - vandaag mag er niet gespeeld worden.</value>
+  </data>
+  <data name="Sched_St_LimitReached" xml:space="preserve">
+    <value>Nu geblokkeerd - het tijdbudget van vandaag is op.</value>
+  </data>
+</root>

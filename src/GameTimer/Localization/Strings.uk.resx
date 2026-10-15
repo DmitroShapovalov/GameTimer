@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="Tab_Timer" xml:space="preserve">
+    <value>Таймер</value>
+  </data>
+  <data name="Mode" xml:space="preserve">
+    <value>Режим</value>
+  </data>
+  <data name="Mode_Interval" xml:space="preserve">
+    <value>Інтервал</value>
+  </data>
+  <data name="Mode_TimeOfDay" xml:space="preserve">
+    <value>До часу</value>
+  </data>
+  <data name="Hours" xml:space="preserve">
+    <value>Години:</value>
+  </data>
+  <data name="Minutes" xml:space="preserve">
+    <value>Хвилини:</value>
+  </data>
+  <data name="Hour" xml:space="preserve">
+    <value>Година:</value>
+  </data>
+  <data name="Timer_NotStarted" xml:space="preserve">
+    <value>Таймер не запущено</value>
+  </data>
+  <data name="Timer_Started" xml:space="preserve">
+    <value>Таймер працює</value>
+  </data>
+  <data name="Timer_Stopped" xml:space="preserve">
+    <value>Таймер зупинено</value>
+  </data>
+  <data name="Timer_Expired" xml:space="preserve">
+    <value>Час вийшов!</value>
+  </data>
+  <data name="Start" xml:space="preserve">
+    <value>Старт</value>
+  </data>
+  <data name="Stop" xml:space="preserve">
+    <value>Стоп</value>
+  </data>
+  <data name="Reset" xml:space="preserve">
+    <value>Скинути</value>
+  </data>
+  <data name="Tab_Display" xml:space="preserve">
+    <value>Вигляд</value>
+  </data>
+  <data name="OverlayPosition" xml:space="preserve">
+    <value>Положення оверлея (перетягніть маркер)</value>
+  </data>
+  <data name="FontSize" xml:space="preserve">
+    <value>Розмір шрифту</value>
+  </data>
+  <data name="Opacity" xml:space="preserve">
+    <value>Непрозорість</value>
+  </data>
+  <data name="ShowBackground" xml:space="preserve">
+    <value>Тло за текстом</value>
+  </data>
+  <data name="Thresholds" xml:space="preserve">
+    <value>Пороги (хвилини)</value>
+  </data>
+  <data name="WarningFrom" xml:space="preserve">
+    <value>Попередження:</value>
+  </data>
+  <data name="AlertFrom" xml:space="preserve">
+    <value>Тривога:</value>
+  </data>
+  <data name="Min" xml:space="preserve">
+    <value>хв</value>
+  </data>
+  <data name="ZoneColors" xml:space="preserve">
+    <value>Кольори зон (натисніть, щоб обрати)</value>
+  </data>
+  <data name="Zone_Normal" xml:space="preserve">
+    <value>Звичайний</value>
+  </data>
+  <data name="Zone_Warning" xml:space="preserve">
+    <value>Попередження</value>
+  </data>
+  <data name="Zone_Alert" xml:space="preserve">
+    <value>Тривога</value>
+  </data>
+  <data name="Tab_Notifications" xml:space="preserve">
+    <value>Сповіщення</value>
+  </data>
+  <data name="AlertPoints" xml:space="preserve">
+    <value>Звукові сповіщення</value>
+  </data>
+  <data name="MinBeforeTimer" xml:space="preserve">
+    <value>хв до кінця</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Видалити</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Додати</value>
+  </data>
+  <data name="SoundFile" xml:space="preserve">
+    <value>Звуковий файл</value>
+  </data>
+  <data name="BuiltIn" xml:space="preserve">
+    <value>Вбудований</value>
+  </data>
+  <data name="CustomFile" xml:space="preserve">
+    <value>Власний файл</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>Огляд...</value>
+  </data>
+  <data name="Preview" xml:space="preserve">
+    <value>Прослухати</value>
+  </data>
+  <data name="MinPlaceholder" xml:space="preserve">
+    <value>хв</value>
+  </data>
+  <data name="Tab_Settings" xml:space="preserve">
+    <value>Налаштування</value>
+  </data>
+  <data name="ActionOnExpiry" xml:space="preserve">
+    <value>Дія, коли час вийде</value>
+  </data>
+  <data name="Action_Shutdown" xml:space="preserve">
+    <value>Вимкнути комп'ютер</value>
+  </data>
+  <data name="Action_Lock" xml:space="preserve">
+    <value>Заблокувати екран</value>
+  </data>
+  <data name="Action_Logoff" xml:space="preserve">
+    <value>Вийти з системи</value>
+  </data>
+  <data name="Protection" xml:space="preserve">
+    <value>Захист</value>
+  </data>
+  <data name="ProtectionInfo" xml:space="preserve">
+    <value>Керування таймером захищене Windows Hello (PIN / відбиток / обличчя).</value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>Про програму</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Обмежувач ігрового часу для Windows</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>Мова</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Помилка</value>
+  </data>
+  <data name="InvalidTime" xml:space="preserve">
+    <value>Введіть коректний час.</value>
+  </data>
+  <data name="InvalidTimeRange" xml:space="preserve">
+    <value>Введіть коректний час (0-23 : 0-59).</value>
+  </data>
+  <data name="AlertExists" xml:space="preserve">
+    <value>Таке сповіщення вже існує.</value>
+  </data>
+  <data name="SelectSoundFile" xml:space="preserve">
+    <value>Виберіть звуковий файл</value>
+  </data>
+  <data name="AuthPrompt" xml:space="preserve">
+    <value>GameTimer: підтвердьте особу</value>
+  </data>
+  <data name="TrayOpen" xml:space="preserve">
+    <value>Відкрити</value>
+  </data>
+  <data name="TrayExit" xml:space="preserve">
+    <value>Вихід</value>
+  </data>
+  <data name="EnterWindowsPassword" xml:space="preserve">
+    <value>Введіть пароль Windows:</value>
+  </data>
+  <data name="PasswordTitle" xml:space="preserve">
+    <value>Автентифікація</value>
+  </data>
+  <data name="WAVFilter" xml:space="preserve">
+    <value>Звукові файли|*.wav;*.mp3</value>
+  </data>
+  <data name="PhoneControl" xml:space="preserve">
+    <value>Керування з телефона</value>
+  </data>
+  <data name="Remote_Toggle" xml:space="preserve">
+    <value>Дозволити керування з телефона в домашній мережі Wi-Fi</value>
+  </data>
+  <data name="Remote_Off" xml:space="preserve">
+    <value>Вимкнено</value>
+  </data>
+  <data name="Remote_Running" xml:space="preserve">
+    <value>Працює за адресою {0}</value>
+  </data>
+  <data name="Remote_StartFailed" xml:space="preserve">
+    <value>Не вдалося запустити на порту {0}: {1}</value>
+  </data>
+  <data name="ConnectPhone" xml:space="preserve">
+    <value>Підключити телефон</value>
+  </data>
+  <data name="ConnectPhone_Instructions" xml:space="preserve">
+    <value>Відскануйте цей код камерою телефона. Телефон має бути в тій самій мережі Wi-Fi, що й цей ПК.</value>
+  </data>
+  <data name="ConnectPhone_ExpiresIn" xml:space="preserve">
+    <value>Код дійсний {0}</value>
+  </data>
+  <data name="ConnectPhone_Expired" xml:space="preserve">
+    <value>Термін дії коду минув. Закрийте це вікно й спробуйте ще раз.</value>
+  </data>
+  <data name="ConnectPhone_Connected" xml:space="preserve">
+    <value>Підключено: {0}</value>
+  </data>
+  <data name="ConnectPhone_NoNetwork" xml:space="preserve">
+    <value>Домашню мережу не знайдено. Підключіть цей ПК до Wi-Fi чи кабелю й спробуйте ще раз.</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Закрити</value>
+  </data>
+  <data name="PairedDevices" xml:space="preserve">
+    <value>Підключені телефони</value>
+  </data>
+  <data name="PairedDevices_None" xml:space="preserve">
+    <value>Телефони ще не підключені</value>
+  </data>
+  <data name="Device_LastSeen" xml:space="preserve">
+    <value>Востаннє: {0}</value>
+  </data>
+  <data name="Remote_FirewallMissing" xml:space="preserve">
+    <value>Брандмауер Windows може блокувати телефон: правило для доступу з телефона відсутнє.</value>
+  </data>
+  <data name="Remote_FirewallFix" xml:space="preserve">
+    <value>Дозволити в брандмауері</value>
+  </data>
+  <data name="Interruption_Title" xml:space="preserve">
+    <value>Таймер було перервано</value>
+  </data>
+  <data name="Interruption_Message" xml:space="preserve">
+    <value>GameTimer закрито о {0}, поки працював таймер; таймер відновлено після наступного запуску.</value>
+  </data>
+  <data name="Interruption_Dismiss" xml:space="preserve">
+    <value>Зрозуміло</value>
+  </data>
+  <data name="Tamper_Label" xml:space="preserve">
+    <value>Захист від закриття</value>
+  </data>
+  <data name="Tamper_Toggle" xml:space="preserve">
+    <value>Не дозволяти закриття через Диспетчер завдань</value>
+  </data>
+  <data name="Tamper_Hint" xml:space="preserve">
+    <value>Коли ввімкнено, програму не можна завершити через Диспетчер завдань. Її можна закрити лише з системного лотка (Windows Hello). Це працює лише якщо дитина користується звичайним (не адміністраторським) обліковим записом Windows - з обліковим записом адміністратора Диспетчер завдань усе одно зможе її закрити.</value>
+  </data>
+  <data name="Tamper_Failed" xml:space="preserve">
+    <value>Не вдалося змінити налаштування захисту.</value>
+  </data>
+  <data name="Tab_History" xml:space="preserve">
+    <value>Історія</value>
+  </data>
+  <data name="History_Empty" xml:space="preserve">
+    <value>Подій поки немає</value>
+  </data>
+  <data name="Ev_Started" xml:space="preserve">
+    <value>Запущено</value>
+  </data>
+  <data name="Ev_Stopped" xml:space="preserve">
+    <value>Зупинено</value>
+  </data>
+  <data name="Ev_Reset" xml:space="preserve">
+    <value>Скинуто</value>
+  </data>
+  <data name="Ev_Extended_Plus" xml:space="preserve">
+    <value>+{0} хв</value>
+  </data>
+  <data name="Ev_Extended_Minus" xml:space="preserve">
+    <value>−{0} хв</value>
+  </data>
+  <data name="Ev_Expired" xml:space="preserve">
+    <value>Час вийшов</value>
+  </data>
+  <data name="Ev_Resumed" xml:space="preserve">
+    <value>Відновлено після перезапуску</value>
+  </data>
+  <data name="Ev_Closed" xml:space="preserve">
+    <value>Програму закрито</value>
+  </data>
+  <data name="Who_Pc" xml:space="preserve">
+    <value>ПК</value>
+  </data>
+  <data name="Who_Phone" xml:space="preserve">
+    <value>телефон</value>
+  </data>
+  <data name="Who_System" xml:space="preserve">
+    <value>автоматично</value>
+  </data>
+  <data name="Tab_Schedule" xml:space="preserve">
+    <value>Розклад</value>
+  </data>
+  <data name="Sched_Label" xml:space="preserve">
+    <value>Денний розклад</value>
+  </data>
+  <data name="Sched_Intro" xml:space="preserve">
+    <value>Денний ліміт часу та години, коли можна грати, для кожного дня тижня. Типово вимкнено.</value>
+  </data>
+  <data name="Sched_Enable" xml:space="preserve">
+    <value>Увімкнути розклад</value>
+  </data>
+  <data name="Sched_Hint" xml:space="preserve">
+    <value>Коли ввімкнено, таймер автоматично запускає денний ліміт і блокує, коли час вичерпано або закінчилися дозволені години. Ліміт 0 = без обмеження. Години 00:00-24:00 = весь день.</value>
+  </data>
+  <data name="Sched_Unlock" xml:space="preserve">
+    <value>Розблокувати для змін</value>
+  </data>
+  <data name="Sched_Lock" xml:space="preserve">
+    <value>Заблокувати</value>
+  </data>
+  <data name="Sched_Col_Day" xml:space="preserve">
+    <value>День</value>
+  </data>
+  <data name="Sched_Col_On" xml:space="preserve">
+    <value>Увімк</value>
+  </data>
+  <data name="Sched_Col_Limit" xml:space="preserve">
+    <value>Хв/день</value>
+  </data>
+  <data name="Sched_Col_From" xml:space="preserve">
+    <value>З</value>
+  </data>
+  <data name="Sched_Col_To" xml:space="preserve">
+    <value>До</value>
+  </data>
+  <data name="Sched_St_Off" xml:space="preserve">
+    <value>Розклад вимкнено. Таймер керується вручну.</value>
+  </data>
+  <data name="Sched_St_Allowed" xml:space="preserve">
+    <value>Зараз дозволено - сьогодні доступно {0} хв.</value>
+  </data>
+  <data name="Sched_St_OutsideWindow" xml:space="preserve">
+    <value>Зараз заблоковано - поза дозволеними годинами на сьогодні.</value>
+  </data>
+  <data name="Sched_St_DayOff" xml:space="preserve">
+    <value>Заблоковано на весь день - сьогодні грати не можна.</value>
+  </data>
+  <data name="Sched_St_LimitReached" xml:space="preserve">
+    <value>Зараз заблоковано - денний ліміт часу вичерпано.</value>
+  </data>
+</root>

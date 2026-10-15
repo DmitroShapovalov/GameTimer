@@ -14,7 +14,7 @@ A game time limiter for Windows — designed for parents who want to manage thei
 - **Draggable overlay position** — position the timer anywhere on screen via a visual preview
 - **Phone control over home Wi-Fi** — see and control the timer from a phone (start, stop, ±15 min, settings); no cloud, no app store, paired by QR code
 - **Daily schedule** — an optional per-weekday time budget and allowed-hours window; GameTimer starts the day's allowance automatically and locks when it runs out or the hours end (off by default)
-- **Bilingual UI** — English (default) and Russian, switchable at runtime
+- **Multilingual UI** — English (default), Russian, Dutch and Ukrainian, switchable at runtime
 - **Modern look** — Fluent Design (WPF UI) with dark theme
 
 ## Download
