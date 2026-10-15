@@ -137,6 +137,12 @@
     </form>
   </section>
 
+  <!-- Game session history -->
+  <section id="screen-history" class="screen" hidden>
+    <p id="history-empty" class="muted" hidden></p>
+    <ul id="history" class="card list"></ul>
+  </section>
+
   <!-- Paired phones -->
   <section id="screen-devices" class="screen" hidden>
     <div id="install-card" class="card" hidden>
@@ -159,6 +165,10 @@
   <button data-tab="settings">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
     <span data-t="tabSettings"></span>
+  </button>
+  <button data-tab="history">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/></svg>
+    <span data-t="tabHistory"></span>
   </button>
   <button data-tab="devices">
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/></svg>

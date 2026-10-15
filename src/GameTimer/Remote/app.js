@@ -13,7 +13,13 @@
   // ---------- strings (EN / RU; the language follows the desktop setting once connected) ----------
   const STR = {
     en: {
-      tabTimer: "Timer", tabSettings: "Settings", tabDevices: "Phones",
+      tabTimer: "Timer", tabSettings: "Settings", tabDevices: "Phones", tabHistory: "History",
+      historyEmpty: "No events yet",
+      ev_started: "Started", ev_stopped: "Stopped", ev_reset: "Reset",
+      ev_expired: "Time up", ev_resumed: "Resumed after restart", ev_closed: "App closed",
+      ev_plus: "+{0} min", ev_minus: "−{0} min",
+      who_pc: "PC", who_system: "automatic",
+      mode_interval: "interval", mode_absolute: "until time",
       connecting: "Connecting to the PC…",
       offline: "PC unreachable. Reconnecting… Check that this phone is on the same Wi-Fi.",
       closedWhileRunning: "GameTimer was closed on the PC at {0} while a timer was running, and resumed when it started again.",
@@ -55,7 +61,13 @@
       err_generic: "Something went wrong ({0})."
     },
     ru: {
-      tabTimer: "Таймер", tabSettings: "Настройки", tabDevices: "Телефоны",
+      tabTimer: "Таймер", tabSettings: "Настройки", tabDevices: "Телефоны", tabHistory: "История",
+      historyEmpty: "Пока нет событий",
+      ev_started: "Запуск", ev_stopped: "Остановлен", ev_reset: "Сброс",
+      ev_expired: "Время вышло", ev_resumed: "Продолжен после перезапуска", ev_closed: "Приложение закрыто",
+      ev_plus: "+{0} мин", ev_minus: "−{0} мин",
+      who_pc: "ПК", who_system: "автоматически",
+      mode_interval: "интервал", mode_absolute: "до времени",
       connecting: "Подключение к ПК…",
       offline: "ПК недоступен. Переподключение… Проверьте, что телефон в той же сети Wi-Fi.",
       closedWhileRunning: "GameTimer на ПК был закрыт в {0}, пока шёл таймер, и продолжился при следующем запуске.",
@@ -196,6 +208,9 @@
       case "settingsChanged":
         setSettings(msg.settings, false);
         break;
+      case "history":
+        if (tab === "history") loadHistory();
+        break;
       case "alert": {
         setStatus(msg.status);
         const cd = $("countdown");
@@ -262,7 +277,7 @@
   }
 
   // ---------- navigation ----------
-  const screens = ["pair", "timer", "settings", "devices"];
+  const screens = ["pair", "timer", "settings", "devices", "history"];
   function show(name) {
     screens.forEach(s => { $("screen-" + s).hidden = s !== name; });
     $("tabs").hidden = name === "pair";
@@ -276,6 +291,7 @@
   document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
     show(b.dataset.tab);
     if (b.dataset.tab === "devices") loadDevices();
+    if (b.dataset.tab === "history") loadHistory();
     if (b.dataset.tab === "settings" && !settingsDirty) fillSettings();
   }));
 
@@ -525,6 +541,43 @@
       msg.textContent = errorText(err);
     }
   });
+
+  // ---------- history screen ----------
+  const pad2 = n => String(n).padStart(2, "0");
+  function eventText(e) {
+    switch (e.type) {
+      case "started": {
+        const m = e.minutes || 0;
+        const dur = m >= 60 ? `${Math.floor(m / 60)}:${pad2(m % 60)}` : `${m} ${lang === "ru" ? "мин" : "min"}`;
+        return `${t("ev_started")}: ${dur} (${t(e.mode === "absolute" ? "mode_absolute" : "mode_interval")})`;
+      }
+      case "stopped": return t("ev_stopped");
+      case "reset": return t("ev_reset");
+      case "extended": return t((e.minutes || 0) >= 0 ? "ev_plus" : "ev_minus", Math.abs(e.minutes || 0));
+      case "expired": return `${t("ev_expired")}: ${t("act_" + e.action)}`;
+      case "resumed": return t("ev_resumed");
+      case "closed": return t("ev_closed");
+      default: return e.type;
+    }
+  }
+  const eventWho = e => e.source === "pc" ? t("who_pc") : e.source === "phone" ? (e.device || "") : t("who_system");
+
+  async function loadHistory() {
+    let events;
+    try { events = await api("GET", "/api/history"); } catch (e) { if (e.status !== 401) toast(errorText(e)); return; }
+    const list = $("history");
+    list.replaceChildren();
+    $("history-empty").hidden = events.length > 0;
+    if (events.length === 0) { $("history-empty").textContent = t("historyEmpty"); return; }
+    for (const e of events) {
+      const li = el("li");
+      const top = el("div", "ev-top");
+      const when = new Date(e.time).toLocaleString(lang, { dateStyle: "short", timeStyle: "short" });
+      top.append(el("span", "ev-when", when), el("span", "ev-who", eventWho(e)));
+      li.append(top, el("div", "ev-text", eventText(e)));
+      list.append(li);
+    }
+  }
 
   // ---------- devices screen ----------
   let myDeviceId = null;

@@ -76,14 +76,15 @@ public partial class App : System.Windows.Application
             ProcessProtection.DenyTermination();
 
         var timerStateStore = new TimerStateStore();
-        var timerController = new TimerController(settings, timerStateStore);
+        var sessionLog = new SessionLog();
+        var timerController = new TimerController(settings, timerStateStore, sessionLog);
 
         var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
         var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
         var pairing = new PairingService();
-        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService);
+        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService, sessionLog);
 
-        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing);
+        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing, sessionLog);
         MainWindow = mainWindow;
         mainWindow.Show();
 

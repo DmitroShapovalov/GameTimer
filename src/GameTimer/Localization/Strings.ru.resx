@@ -290,4 +290,43 @@
   <data name="Tamper_Failed" xml:space="preserve">
     <value>Не удалось изменить настройку защиты.</value>
   </data>
+  <data name="Tab_History" xml:space="preserve">
+    <value>История</value>
+  </data>
+  <data name="History_Empty" xml:space="preserve">
+    <value>Пока нет событий</value>
+  </data>
+  <data name="Ev_Started" xml:space="preserve">
+    <value>Запуск</value>
+  </data>
+  <data name="Ev_Stopped" xml:space="preserve">
+    <value>Остановлен</value>
+  </data>
+  <data name="Ev_Reset" xml:space="preserve">
+    <value>Сброс</value>
+  </data>
+  <data name="Ev_Extended_Plus" xml:space="preserve">
+    <value>+{0} мин</value>
+  </data>
+  <data name="Ev_Extended_Minus" xml:space="preserve">
+    <value>−{0} мин</value>
+  </data>
+  <data name="Ev_Expired" xml:space="preserve">
+    <value>Время вышло</value>
+  </data>
+  <data name="Ev_Resumed" xml:space="preserve">
+    <value>Продолжен после перезапуска</value>
+  </data>
+  <data name="Ev_Closed" xml:space="preserve">
+    <value>Приложение закрыто</value>
+  </data>
+  <data name="Who_Pc" xml:space="preserve">
+    <value>ПК</value>
+  </data>
+  <data name="Who_Phone" xml:space="preserve">
+    <value>телефон</value>
+  </data>
+  <data name="Who_System" xml:space="preserve">
+    <value>автоматически</value>
+  </data>
 </root>

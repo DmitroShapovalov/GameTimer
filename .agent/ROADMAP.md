@@ -154,7 +154,7 @@ Tamper resistance (the child uses the same Windows account, which is an administ
 - The process can be ended from Task Manager. Partly done: a "Protection from closing" toggle (Settings, Windows Hello, off by default) denies PROCESS_TERMINATE on the process DACL for the current user, so Task Manager "End task", `taskkill` and `Stop-Process` are refused (ProcessProtection). Applied at startup when enabled. An administrator token can still override it (take ownership / SeDebugPrivilege). A watchdog second process (relaunch after an admin kill) was considered and dropped: it only helps against an administrator-level kill — who can disable the protection anyway — while risking a hard-to-stop relaunch loop on the child's PC. The deny-terminate + resume + notification cover the realistic case.
 - `settings.json` sits in a user-writable folder and can be edited. Ideas: move to `%ProgramData%` with ACLs, or sign/encrypt it. Note: from Phase 1 it also holds device token hashes.
 - ~~Changing the system clock shifts the time-of-day target.~~ Fixed in Phase 1, step 1 (monotonic clock).
-- No usage log. Idea: history of sessions (start, stop, who stopped, extensions), later visible on the phone.
+- ~~No usage log.~~ Done: `SessionLog` records every event (start / stop / reset / extend / expiry / resume / close) with the source (PC / phone name / system), shown on a History tab on the PC and the phone (`GET /api/history`, live over WS).
 
 Other:
 - Exclusive-fullscreen games: overlay can't draw over them (by design of Windows). Document in README.

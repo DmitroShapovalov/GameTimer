@@ -18,6 +18,7 @@ public partial class MainWindow : FluentWindow
     private readonly RemoteServer _remote;
     private readonly DeviceStore _devices;
     private readonly PairingService _pairing;
+    private readonly SessionLog _sessionLog;
     private bool _isRemoteBusy;
     private bool? _firewallOk; // null = not checked yet
     private bool _isTamperBusy;
@@ -39,7 +40,7 @@ public partial class MainWindow : FluentWindow
     private string _timerStateKey = "Timer_NotStarted";
 
     public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer,
-        RemoteServer remote, DeviceStore devices, PairingService pairing)
+        RemoteServer remote, DeviceStore devices, PairingService pairing, SessionLog sessionLog)
     {
         InitializeComponent();
         _settingsService = settingsService;
@@ -54,6 +55,8 @@ public partial class MainWindow : FluentWindow
         _remote = remote;
         _devices = devices;
         _pairing = pairing;
+        _sessionLog = sessionLog;
+        _sessionLog.Changed += () => Dispatcher.BeginInvoke(RefreshHistory);
         _devices.Changed += RefreshDevicesList;
         _settingsService.SettingsChanged += OnSettingsChanged;
 
@@ -81,6 +84,9 @@ public partial class MainWindow : FluentWindow
         TabDisplayText.Text = Loc.Get("Tab_Display");
         TabNotificationsText.Text = Loc.Get("Tab_Notifications");
         TabSettingsText.Text = Loc.Get("Tab_Settings");
+        TabHistoryText.Text = Loc.Get("Tab_History");
+        HistoryEmpty.Text = Loc.Get("History_Empty");
+        RefreshHistory();
 
         // Timer tab
         ModeLabel.Text = Loc.Get("Mode");
@@ -373,6 +379,7 @@ public partial class MainWindow : FluentWindow
                 Key.D2 or Key.NumPad2 => 1,
                 Key.D3 or Key.NumPad3 => 2,
                 Key.D4 or Key.NumPad4 => 3,
+                Key.D5 or Key.NumPad5 => 4,
                 _ => -1
             };
             if (tab >= 0)
@@ -573,6 +580,47 @@ public partial class MainWindow : FluentWindow
     private void InterruptionDismiss_Click(object sender, RoutedEventArgs e)
     {
         _timer.AcknowledgeInterruption();
+    }
+
+    private sealed record HistoryRow(string When, string Text, string Who);
+
+    private void RefreshHistory()
+    {
+        var rows = _sessionLog.Recent().Select(ToRow).ToList();
+        HistoryList.ItemsSource = rows;
+        HistoryEmpty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static HistoryRow ToRow(GameTimer.Models.SessionEvent e)
+    {
+        var when = e.Time.LocalDateTime.ToString("g");
+        string text = e.Type switch
+        {
+            GameTimer.Models.SessionEventType.Started =>
+                $"{Loc.Get("Ev_Started")}: {FormatDuration(e.Minutes)} ({Loc.Get(e.Mode == GameTimer.Models.TimerMode.Interval ? "Mode_Interval" : "Mode_TimeOfDay")})",
+            GameTimer.Models.SessionEventType.Stopped => Loc.Get("Ev_Stopped"),
+            GameTimer.Models.SessionEventType.Reset => Loc.Get("Ev_Reset"),
+            GameTimer.Models.SessionEventType.Extended =>
+                string.Format(Loc.Get(e.Minutes >= 0 ? "Ev_Extended_Plus" : "Ev_Extended_Minus"), Math.Abs(e.Minutes ?? 0)),
+            GameTimer.Models.SessionEventType.Expired =>
+                $"{Loc.Get("Ev_Expired")}: {Loc.Get("Action_" + e.Action)}",
+            GameTimer.Models.SessionEventType.Resumed => Loc.Get("Ev_Resumed"),
+            GameTimer.Models.SessionEventType.Closed => Loc.Get("Ev_Closed"),
+            _ => e.Type.ToString()
+        };
+        string who = e.Source switch
+        {
+            GameTimer.Models.ActionSource.Pc => Loc.Get("Who_Pc"),
+            GameTimer.Models.ActionSource.Phone => e.Device ?? Loc.Get("Who_Phone"),
+            _ => Loc.Get("Who_System")
+        };
+        return new HistoryRow(when, text, who);
+    }
+
+    private static string FormatDuration(int? minutes)
+    {
+        int m = minutes ?? 0;
+        return m >= 60 ? $"{m / 60}:{m % 60:D2}" : $"{m} {Loc.Get("Min")}";
     }
 
     private void OnTimerStateChanged(TimerState state)
