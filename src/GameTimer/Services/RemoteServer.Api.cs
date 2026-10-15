@@ -14,7 +14,7 @@ public sealed partial class RemoteServer
 {
     private const int MaxMinutes = 24 * 60;
     private const int MaxAlertPoints = 20;
-    private static readonly string[] Languages = { "en", "ru" };
+    private static readonly string[] Languages = { "en", "ru", "nl", "uk" };
     private static readonly Regex HexColor = new("^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
 
     #region DTOs

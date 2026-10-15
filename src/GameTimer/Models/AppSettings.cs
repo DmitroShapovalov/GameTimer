@@ -48,7 +48,7 @@ public class AppSettings
     // Custom sound file path (null = built-in)
     public string? CustomSoundPath { get; set; }
 
-    // UI language (en, ru)
+    // UI language (en, ru, nl, uk)
     public string Language { get; set; } = "en";
 
     // Stop the child closing the app from Task Manager (deny terminate + watchdog). Off by default.

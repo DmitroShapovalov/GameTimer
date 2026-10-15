@@ -277,6 +277,8 @@
                                   Margin="0,0,0,16" SelectionChanged="Language_Changed">
                             <ComboBoxItem Content="English" Tag="en"/>
                             <ComboBoxItem Content="Русский" Tag="ru"/>
+                            <ComboBoxItem Content="Nederlands" Tag="nl"/>
+                            <ComboBoxItem Content="Українська" Tag="uk"/>
                         </ComboBox>
 
                         <TextBlock x:Name="ActionLabel" Text="Action when timer expires" Style="{StaticResource SectionLabel}"/>
