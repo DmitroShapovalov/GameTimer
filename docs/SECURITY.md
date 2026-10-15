@@ -65,10 +65,16 @@ open WebSocket.
 - **Any device already on the home network can reach the port.** It still needs a valid token to do
   anything; an unpaired device only ever gets 401. A guest or a compromised IoT device cannot pair without
   the on-screen code.
-- **`settings.json` is writable by the user.** It holds the device token **hashes** (not tokens) and the
-  settings. A program running as the same Windows user could add its own device hash and thereby pair
-  itself, or change settings. This requires already running code on the PC as that user, so it is not a
-  remote risk. Hardening it (move to `%ProgramData%` with ACLs, or sign it) is tracked in the roadmap.
+- **The state files are tamper-resistant.** `settings.json`, `usage.json` and `timer-state.json` are
+  encrypted with Windows DPAPI (per-user) via `ProtectedStore`: on disk they are opaque, and any hand
+  edit breaks decryption. On load, a tampered file is rolled back to the last good copy (kept as
+  `<file>.bak`, also encrypted) and a **"settings tampered"** event is written to the history the parent
+  sees on the PC and the phone. This defeats the realistic case — a child editing a file in a text editor
+  to reset today's used time (`usage.json`), disable the schedule or the close-protection, extend the
+  running timer, or add their own paired-device hash. It is **not** proof against someone running code as
+  that user: DPAPI is reversible for the same account, so a program could still re-encrypt a forged file.
+  That is the same ceiling as the close-protection (an administrator can bypass it); both raise the bar for
+  the child, which is the threat here. Device tokens are still stored only as **SHA-256 hashes**.
 - **"Protection from closing" is bypassable by an administrator.** The deny-terminate DACL stops Task
   Manager / `taskkill` only for a standard user. On an administrator account Task Manager elevates and
   overrides it. Use a **standard (non-administrator) Windows account for the child** — then it holds, and
@@ -80,8 +86,9 @@ open WebSocket.
 
 All live next to the exe (per-user install → under the child's/parent's own profile, not shared):
 
-- `settings.json` — settings and device token **hashes** (no tokens, no passwords).
-- `timer-state.json` — the running timer, for resume. No secrets.
+- `settings.json` — settings and device token **hashes** (no tokens, no passwords). DPAPI-encrypted (+ `.bak`).
+- `usage.json` — seconds of game time used today, for the daily schedule budget. DPAPI-encrypted (+ `.bak`).
+- `timer-state.json` — the running timer, for resume. No secrets. DPAPI-encrypted (+ `.bak`).
 - `sessions.jsonl` — the event history (times, event types, phone names). No secrets.
 - `diagnostics.log` — unhandled-error text for troubleshooting. **Tokens are never written to it** (verified:
   nothing logs the `Authorization` header or a token).

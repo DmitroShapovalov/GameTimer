@@ -380,4 +380,7 @@
   <data name="Sched_St_LimitReached" xml:space="preserve">
     <value>Сейчас заблокировано - дневной лимит времени исчерпан.</value>
   </data>
+  <data name="Ev_Tampered" xml:space="preserve">
+    <value>Обнаружена подмена настроек — восстановлено</value>
+  </data>
 </root>

@@ -54,8 +54,9 @@ public sealed class UsageTracker
     {
         try
         {
-            if (File.Exists(UsagePath))
-                return JsonSerializer.Deserialize<Record>(File.ReadAllText(UsagePath), JsonOptions);
+            var json = ProtectedStore.Read(UsagePath);
+            if (json != null)
+                return JsonSerializer.Deserialize<Record>(json, JsonOptions);
         }
         catch { /* treat as no record */ }
         return null;
@@ -65,9 +66,7 @@ public sealed class UsageTracker
     {
         try
         {
-            var tmp = UsagePath + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(_record, JsonOptions));
-            File.Move(tmp, UsagePath, overwrite: true);
+            ProtectedStore.Write(UsagePath, JsonSerializer.Serialize(_record, JsonOptions));
         }
         catch { /* non-critical */ }
     }

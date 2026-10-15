@@ -19,11 +19,9 @@ public sealed class TimerStateStore
     {
         try
         {
-            // Write to a temp file then replace, so a kill mid-write leaves the old file intact, never a partial one
-            var json = JsonSerializer.Serialize(state, JsonOptions);
-            var tmp = StatePath + ".tmp";
-            File.WriteAllText(tmp, json);
-            File.Move(tmp, StatePath, overwrite: true);
+            // ProtectedStore encrypts and writes via a temp file + Move, so a kill mid-write leaves
+            // the old file intact, never a partial one.
+            ProtectedStore.Write(StatePath, JsonSerializer.Serialize(state, JsonOptions));
         }
         catch
         {
@@ -35,8 +33,9 @@ public sealed class TimerStateStore
     {
         try
         {
-            if (File.Exists(StatePath))
-                return JsonSerializer.Deserialize<PersistedTimer>(File.ReadAllText(StatePath), JsonOptions);
+            var json = ProtectedStore.Read(StatePath);
+            if (json != null)
+                return JsonSerializer.Deserialize<PersistedTimer>(json, JsonOptions);
         }
         catch (Exception ex)
         {
@@ -49,7 +48,7 @@ public sealed class TimerStateStore
     {
         try
         {
-            if (File.Exists(StatePath)) File.Delete(StatePath);
+            ProtectedStore.Delete(StatePath);
         }
         catch
         {

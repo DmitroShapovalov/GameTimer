@@ -626,6 +626,7 @@ public partial class MainWindow : FluentWindow
                 $"{Loc.Get("Ev_Expired")}: {Loc.Get("Action_" + e.Action)}",
             GameTimer.Models.SessionEventType.Resumed => Loc.Get("Ev_Resumed"),
             GameTimer.Models.SessionEventType.Closed => Loc.Get("Ev_Closed"),
+            GameTimer.Models.SessionEventType.Tampered => Loc.Get("Ev_Tampered"),
             _ => e.Type.ToString()
         };
         string who = e.Source switch

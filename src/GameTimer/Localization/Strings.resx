@@ -380,4 +380,7 @@
   <data name="Sched_St_LimitReached" xml:space="preserve">
     <value>Blocked now - today's time budget is used up.</value>
   </data>
+  <data name="Ev_Tampered" xml:space="preserve">
+    <value>Settings tampered — restored</value>
+  </data>
 </root>

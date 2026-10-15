@@ -99,6 +99,20 @@ public partial class App : System.Windows.Application
         // unlocked (child sits back down). Enforcement while running is handled inside the controller.
         try { timerController.AutoStartIfScheduled(); }
         catch (Exception ex) { DiagnosticLog.Write("schedule autostart threw: " + ex); }
+
+        // Surface tampering detected while loading the protected state files (settings / usage / timer),
+        // so the parent sees it in the history on the PC and the phone.
+        try
+        {
+            foreach (var when in ProtectedStore.DrainTamperReports())
+                sessionLog.Add(new GameTimer.Models.SessionEvent
+                {
+                    Time = when,
+                    Type = GameTimer.Models.SessionEventType.Tampered,
+                    Source = GameTimer.Models.ActionSource.System
+                });
+        }
+        catch (Exception ex) { DiagnosticLog.Write("tamper report threw: " + ex); }
         Microsoft.Win32.SystemEvents.SessionSwitch += (_, args) =>
         {
             if (args.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock)

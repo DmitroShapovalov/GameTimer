@@ -26,15 +26,13 @@ public class SettingsService
     {
         try
         {
-            if (File.Exists(SettingsPath))
-            {
-                var json = File.ReadAllText(SettingsPath);
+            var json = ProtectedStore.Read(SettingsPath);
+            if (json != null)
                 return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
-            }
         }
         catch
         {
-            // Corrupted file — use defaults
+            // Corrupted / tampered beyond recovery — use defaults
         }
 
         return new AppSettings();
@@ -45,7 +43,7 @@ public class SettingsService
         try
         {
             var json = JsonSerializer.Serialize(settings, JsonOptions);
-            File.WriteAllText(SettingsPath, json);
+            ProtectedStore.Write(SettingsPath, json);
         }
         catch
         {
