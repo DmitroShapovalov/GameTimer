@@ -16,7 +16,7 @@
       tabTimer: "Timer", tabSettings: "Settings", tabDevices: "Phones", tabHistory: "History",
       historyEmpty: "No events yet",
       ev_started: "Started", ev_stopped: "Stopped", ev_reset: "Reset",
-      ev_expired: "Time up", ev_resumed: "Resumed after restart", ev_closed: "App closed",
+      ev_expired: "Time up", ev_resumed: "Resumed after restart", ev_closed: "App closed", ev_tampered: "Settings tampered — restored",
       ev_plus: "+{0} min", ev_minus: "−{0} min",
       who_pc: "PC", who_system: "automatic",
       mode_interval: "interval", mode_absolute: "until time",
@@ -73,7 +73,7 @@
       tabTimer: "Таймер", tabSettings: "Настройки", tabDevices: "Телефоны", tabHistory: "История",
       historyEmpty: "Пока нет событий",
       ev_started: "Запуск", ev_stopped: "Остановлен", ev_reset: "Сброс",
-      ev_expired: "Время вышло", ev_resumed: "Продолжен после перезапуска", ev_closed: "Приложение закрыто",
+      ev_expired: "Время вышло", ev_resumed: "Продолжен после перезапуска", ev_closed: "Приложение закрыто", ev_tampered: "Подмена настроек — восстановлено",
       ev_plus: "+{0} мин", ev_minus: "−{0} мин",
       who_pc: "ПК", who_system: "автоматически",
       mode_interval: "интервал", mode_absolute: "до времени",
@@ -138,6 +138,7 @@
       ev_expired: "Tijd om",
       ev_resumed: "Hervat na herstart",
       ev_closed: "App gesloten",
+      ev_tampered: "Instellingen gemanipuleerd — hersteld",
       ev_plus: "+{0} min",
       ev_minus: "−{0} min",
       who_pc: "Pc",
@@ -237,6 +238,7 @@
       ev_expired: "Час вийшов",
       ev_resumed: "Відновлено після перезапуску",
       ev_closed: "Програму закрито",
+      ev_tampered: "Підміну виявлено — відновлено",
       ev_plus: "+{0} хв",
       ev_minus: "−{0} хв",
       who_pc: "ПК",
@@ -926,6 +928,7 @@
       case "expired": return `${t("ev_expired")}: ${t("act_" + e.action)}`;
       case "resumed": return t("ev_resumed");
       case "closed": return t("ev_closed");
+      case "tampered": return t("ev_tampered");
       default: return e.type;
     }
   }

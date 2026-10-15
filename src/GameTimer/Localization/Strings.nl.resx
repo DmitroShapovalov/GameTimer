@@ -380,4 +380,7 @@
   <data name="Sched_St_LimitReached" xml:space="preserve">
     <value>Nu geblokkeerd - het tijdbudget van vandaag is op.</value>
   </data>
+  <data name="Ev_Tampered" xml:space="preserve">
+    <value>Instellingen gemanipuleerd — hersteld</value>
+  </data>
 </root>
