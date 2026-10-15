@@ -77,7 +77,8 @@ public partial class App : System.Windows.Application
 
         var timerStateStore = new TimerStateStore();
         var sessionLog = new SessionLog();
-        var timerController = new TimerController(settings, timerStateStore, sessionLog);
+        var usageTracker = new UsageTracker();
+        var timerController = new TimerController(settings, timerStateStore, sessionLog, usageTracker);
 
         var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
         var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
@@ -93,6 +94,20 @@ public partial class App : System.Windows.Application
         // resume problem can never stop the app from launching.
         try { timerController.TryResume(); }
         catch (Exception ex) { DiagnosticLog.Write("resume threw: " + ex); }
+
+        // Daily schedule: auto-start the day's allowance at launch, and again each time the session is
+        // unlocked (child sits back down). Enforcement while running is handled inside the controller.
+        try { timerController.AutoStartIfScheduled(); }
+        catch (Exception ex) { DiagnosticLog.Write("schedule autostart threw: " + ex); }
+        Microsoft.Win32.SystemEvents.SessionSwitch += (_, args) =>
+        {
+            if (args.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock)
+                Dispatcher.BeginInvoke(() =>
+                {
+                    try { timerController.AutoStartIfScheduled(); }
+                    catch (Exception ex) { DiagnosticLog.Write("schedule unlock threw: " + ex); }
+                });
+        };
 
         // Background listener: when another copy is launched, bring our window forward
         var listener = new Thread(() =>

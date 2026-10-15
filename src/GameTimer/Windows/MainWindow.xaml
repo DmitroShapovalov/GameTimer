@@ -379,6 +379,36 @@
                     </ScrollViewer>
                 </Grid>
             </TabItem>
+            <!-- TAB: Schedule -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Calendar24" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TabScheduleText" Text="Schedule"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16">
+                        <TextBlock x:Name="ScheduleLabel" Text="Daily schedule" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="ScheduleIntro" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="A daily time budget and the hours gaming is allowed, per weekday."/>
+                        <ui:InfoBar x:Name="ScheduleStatusBar" IsOpen="True" IsClosable="False"
+                                    Severity="Informational" Margin="0,0,0,12"/>
+                        <ui:Button x:Name="ScheduleUnlockButton" Content="Unlock to edit"
+                                   Click="ScheduleUnlock_Click" Margin="0,0,0,12"/>
+                        <StackPanel x:Name="ScheduleEditPanel" IsEnabled="False">
+                            <ui:ToggleSwitch x:Name="ScheduleEnabledToggle" Content="Enable schedule"
+                                             Checked="ScheduleEnabled_Changed" Unchecked="ScheduleEnabled_Changed"
+                                             Margin="0,0,0,12"/>
+                            <StackPanel x:Name="ScheduleDaysPanel"/>
+                        </StackPanel>
+                        <TextBlock x:Name="ScheduleHint" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,0"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
         </TabControl>
     </Grid>
 </ui:FluentWindow>

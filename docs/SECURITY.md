@@ -10,8 +10,14 @@ The embedded server exposes a **fixed, small set of actions**, nothing more:
 
 - start / stop / extend the timer;
 - read and change timer settings (expiry action, colors, thresholds, alert points, language);
+- read and change the daily schedule (per-weekday allowed flag, minute budget 0..1440, allowed-hours window 0..1440);
 - list and revoke paired phones;
 - read the session history.
+
+The schedule (`GET`/`PUT /api/schedule`) only decides *when* the timer runs and when the normal expiry
+action fires — its inputs are validated integer ranges with no path, shell or process argument. A token
+holder who changes the schedule can at most start or block gaming on the PC, the same class of effect as
+changing timer settings.
 
 The expiry action is one of **shut down / lock / log off**, run via `shutdown.exe` / `LockWorkStation`
 with **constant arguments** — there is no field anywhere that is passed to a shell, a path, or a process

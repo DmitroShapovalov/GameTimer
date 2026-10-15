@@ -12,7 +12,8 @@ Content-Type: application/json
 
 { "code": "ABCD2345", "name": "PowerShell" }
 
-### Status: state (notStarted|running|stopped|expired), mode, remainingSeconds, targetTime, action, zone
+### Status: state (notStarted|running|stopped|expired), mode, remainingSeconds, targetTime, action, zone,
+### scheduleStatus (off|allowed|outsideWindow|dayDisabled|limitReached), scheduleAvailableSeconds, usedSecondsToday
 GET {{host}}/api/status
 Authorization: Bearer {{token}}
 
@@ -46,6 +47,26 @@ Content-Type: application/json
 
 { "action": "lock", "redThreshold": 5, "alertPoints": [ { "minutes": 5, "enabled": true }, { "minutes": 1, "enabled": true } ] }
 
+### Schedule: { enabled, week[7] }. week is indexed by weekday 0=Sunday..6=Saturday.
+### Each day: allowed, limitMinutes (0=no budget), windowStartMinutes, windowEndMinutes (0..1440; 0 & 1440 = all day).
+GET {{host}}/api/schedule
+Authorization: Bearer {{token}}
+
+### Update schedule: all 7 days required; minute fields 0..1440. Takes effect immediately (may lock the PC).
+PUT {{host}}/api/schedule
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "enabled": true, "week": [
+  { "allowed": true, "limitMinutes": 120, "windowStartMinutes": 540, "windowEndMinutes": 1260 },
+  { "allowed": true, "limitMinutes": 60,  "windowStartMinutes": 900, "windowEndMinutes": 1200 },
+  { "allowed": true, "limitMinutes": 60,  "windowStartMinutes": 900, "windowEndMinutes": 1200 },
+  { "allowed": true, "limitMinutes": 60,  "windowStartMinutes": 900, "windowEndMinutes": 1200 },
+  { "allowed": true, "limitMinutes": 60,  "windowStartMinutes": 900, "windowEndMinutes": 1200 },
+  { "allowed": true, "limitMinutes": 60,  "windowStartMinutes": 900, "windowEndMinutes": 1200 },
+  { "allowed": true, "limitMinutes": 120, "windowStartMinutes": 540, "windowEndMinutes": 1260 }
+] }
+
 ### WebSocket push events: ws://localhost:5123/ws  (watch them with docs/ws-watch.ps1)
 # Auth: "Authorization: Bearer <token>" on the upgrade request, or (browsers) a first message
 #   { "type": "auth", "token": "<token>" } within 5 s. Failure: close 1008 "unauthorized" / "auth_timeout".
@@ -56,6 +77,7 @@ Content-Type: application/json
 #   alert {minutes, status}                 an alert point was reached
 #   extended {minutes, status}              time added / removed
 #   settingsChanged {settings}              only when the API-visible settings changed
+#   schedule {status}                       the schedule allowed/blocked state or the day's allowance changed
 # Server closes: 1008 "revoked" (device removed), 1001 "server_stopping". Max 10 connections (503).
 
 ### Paired devices

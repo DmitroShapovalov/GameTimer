@@ -58,7 +58,16 @@
       err_invalid_threshold: "Colors: minutes must be 1–1440.",
       err_invalid_alerts: "Alerts: 1–1440 minutes, no duplicates.",
       err_invalid_color: "Invalid color.", err_invalid_language: "Unknown language.",
-      err_generic: "Something went wrong ({0})."
+      err_invalid_schedule: "Check the schedule values (0–1440).",
+      err_generic: "Something went wrong ({0}).",
+      schedToday: "Schedule: {0} min left today",
+      schedBlk_window: "Schedule: outside the allowed hours now",
+      schedBlk_day: "Schedule: gaming is off today",
+      schedBlk_limit: "Schedule: today's time budget is used up",
+      schedTitle: "Daily schedule",
+      schedHint: "Per weekday: a daily limit (minutes; 0 = none) and the allowed hours (24-hour, e.g. 15:00). Managed from the PC too.",
+      schedEnable: "Enable schedule",
+      schedCol_day: "Day", schedCol_on: "On", schedCol_min: "Min", schedCol_from: "From", schedCol_to: "To"
     },
     ru: {
       tabTimer: "Таймер", tabSettings: "Настройки", tabDevices: "Телефоны", tabHistory: "История",
@@ -106,7 +115,16 @@
       err_invalid_threshold: "Цвета: от 1 до 1440 минут.",
       err_invalid_alerts: "Оповещения: от 1 до 1440 минут, без повторов.",
       err_invalid_color: "Неверный цвет.", err_invalid_language: "Неизвестный язык.",
-      err_generic: "Что-то пошло не так ({0})."
+      err_invalid_schedule: "Проверьте значения расписания (0–1440).",
+      err_generic: "Что-то пошло не так ({0}).",
+      schedToday: "Расписание: сегодня осталось {0} мин",
+      schedBlk_window: "Расписание: сейчас вне разрешённых часов",
+      schedBlk_day: "Расписание: сегодня играть нельзя",
+      schedBlk_limit: "Расписание: дневной лимит исчерпан",
+      schedTitle: "Дневное расписание",
+      schedHint: "Для каждого дня: дневной лимит (минуты; 0 = без лимита) и разрешённые часы (24-ч, напр. 15:00). Также настраивается на ПК.",
+      schedEnable: "Включить расписание",
+      schedCol_day: "День", schedCol_on: "Вкл", schedCol_min: "Мин", schedCol_from: "С", schedCol_to: "До"
     }
   };
   let lang = store.get(KEY.lang) || ((navigator.language || "").toLowerCase().startsWith("ru") ? "ru" : "en");
@@ -133,6 +151,9 @@
   let mode = "interval";
   let settingsDirty = false;
   let editAlerts = [];
+  let editSched = null;        // { enabled, days[] } working copy for the editor (days indexed by weekday 0=Sun)
+  let scheduleDirty = false;
+  const SCHED_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun, mapped to weekday index
 
   // ---------- API ----------
   class ApiError extends Error {
@@ -211,6 +232,10 @@
       case "history":
         if (tab === "history") loadHistory();
         break;
+      case "schedule":
+        if (msg.status) setStatus(msg.status);
+        if (tab === "settings" && !scheduleDirty) loadSchedule();
+        break;
       case "alert": {
         setStatus(msg.status);
         const cd = $("countdown");
@@ -273,6 +298,7 @@
     applyTexts();
     renderTimer();
     renderAlerts();
+    if (editSched) renderSchedGrid();
     if (tab === "devices") loadDevices();
   }
 
@@ -292,7 +318,7 @@
     show(b.dataset.tab);
     if (b.dataset.tab === "devices") loadDevices();
     if (b.dataset.tab === "history") loadHistory();
-    if (b.dataset.tab === "settings" && !settingsDirty) fillSettings();
+    if (b.dataset.tab === "settings") { if (!settingsDirty) fillSettings(); if (!scheduleDirty) loadSchedule(); }
   }));
 
   // ---------- pairing ----------
@@ -389,6 +415,7 @@
 
   function renderTimer() {
     renderInterruption();
+    renderSchedule();
     const running = !!status && status.state === "running";
     $("state").textContent = status ? t("state_" + status.state) : "";
     if (running && status.targetTime) {
@@ -539,6 +566,147 @@
       if (err.status === 401) return;
       msg.className = "msg err";
       msg.textContent = errorText(err);
+    }
+  });
+
+  // ---------- schedule ----------
+  const clampMin = m => Math.max(0, Math.min(1440, m | 0));
+  function minutesToClock(m) { m = clampMin(m); return pad(Math.floor(m / 60)) + ":" + pad(m % 60); }
+  function clockToMinutes(str, fb) {
+    if (str == null) return fb;
+    str = String(str).trim();
+    if (!str) return fb;
+    const parts = str.split(":");
+    const h = parseInt(parts[0], 10);
+    if (!Number.isInteger(h)) return fb;
+    let mm = 0;
+    if (parts.length > 1 && parts[1] !== "") {
+      mm = parseInt(parts[1], 10);
+      if (!Number.isInteger(mm)) return fb;
+    }
+    return clampMin(h * 60 + mm);
+  }
+  function dayName(weekday) {
+    // 2024-01-07 is a Sunday; + weekday lands on the right day
+    const d = new Date(2024, 0, 7 + weekday);
+    const n = new Intl.DateTimeFormat(lang, { weekday: "short" }).format(d);
+    return n.charAt(0).toUpperCase() + n.slice(1);
+  }
+
+  // Timer-screen status chip
+  function renderSchedule() {
+    const box = $("sched-status");
+    const st = status && status.scheduleStatus;
+    if (!st || st === "off") { box.hidden = true; return; }
+    box.hidden = false;
+    box.classList.remove("warn", "ok");
+    switch (st) {
+      case "allowed":
+        box.textContent = t("schedToday", Math.floor((status.scheduleAvailableSeconds || 0) / 60));
+        box.classList.add("ok");
+        break;
+      case "outsideWindow": box.textContent = t("schedBlk_window"); box.classList.add("warn"); break;
+      case "dayDisabled": box.textContent = t("schedBlk_day"); box.classList.add("warn"); break;
+      case "limitReached": box.textContent = t("schedBlk_limit"); box.classList.add("warn"); break;
+      default: box.hidden = true;
+    }
+  }
+
+  async function loadSchedule() {
+    let sched;
+    try { sched = await api("GET", "/api/schedule"); } catch (e) { if (e.status !== 401) toast(errorText(e)); return; }
+    if (scheduleDirty) return; // don't clobber in-progress edits
+    const week = sched.week || [];
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = week[i] || {};
+      days[i] = {
+        allowed: d.allowed !== false,
+        limit: clampMin(d.limitMinutes | 0),
+        from: minutesToClock(d.windowStartMinutes | 0),
+        to: minutesToClock(d.windowEndMinutes == null ? 1440 : d.windowEndMinutes)
+      };
+    }
+    editSched = { enabled: !!sched.enabled, days };
+    $("sched-enabled").checked = editSched.enabled;
+    $("schedule-msg").textContent = "";
+    renderSchedGrid();
+  }
+
+  function renderSchedGrid() {
+    const g = $("sched-grid");
+    g.replaceChildren();
+    if (!editSched) return;
+    ["schedCol_day", "schedCol_on", "schedCol_min", "schedCol_from", "schedCol_to"].forEach(k =>
+      g.append(el("span", "sched-h", t(k))));
+    SCHED_ORDER.forEach(wd => {
+      const day = editSched.days[wd];
+      g.append(el("span", "sched-day", dayName(wd)));
+
+      const on = el("input");
+      on.type = "checkbox";
+      on.checked = day.allowed;
+      on.addEventListener("change", () => { day.allowed = on.checked; scheduleDirty = true; });
+      g.append(on);
+
+      const lim = el("input", "sched-num");
+      lim.type = "number"; lim.inputMode = "numeric"; lim.min = 0; lim.max = 1440; lim.value = day.limit;
+      lim.addEventListener("input", () => { day.limit = clampMin(parseInt(lim.value || "0", 10) || 0); scheduleDirty = true; });
+      g.append(lim);
+
+      const from = el("input", "sched-time");
+      from.type = "text"; from.inputMode = "numeric"; from.value = day.from; from.placeholder = "00:00";
+      from.addEventListener("input", () => { day.from = from.value; scheduleDirty = true; });
+      g.append(from);
+
+      const to = el("input", "sched-time");
+      to.type = "text"; to.inputMode = "numeric"; to.value = day.to; to.placeholder = "24:00";
+      to.addEventListener("input", () => { day.to = to.value; scheduleDirty = true; });
+      g.append(to);
+    });
+  }
+
+  $("sched-enabled").addEventListener("change", () => {
+    if (editSched) editSched.enabled = $("sched-enabled").checked;
+    scheduleDirty = true;
+  });
+
+  $("schedule-save").addEventListener("click", async () => {
+    if (!editSched) return;
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      const d = editSched.days[i];
+      week[i] = {
+        allowed: d.allowed,
+        limitMinutes: clampMin(parseInt(d.limit, 10) || 0),
+        windowStartMinutes: clockToMinutes(d.from, 0),
+        windowEndMinutes: clockToMinutes(d.to, 1440)
+      };
+    }
+    const msg = $("schedule-msg");
+    try {
+      const saved = await api("PUT", "/api/schedule", { enabled: $("sched-enabled").checked, week });
+      scheduleDirty = false;
+      await Promise.resolve();
+      // refresh from the server's normalized values
+      const days = [];
+      (saved.week || []).forEach((d, i) => {
+        days[i] = {
+          allowed: d.allowed !== false,
+          limit: clampMin(d.limitMinutes | 0),
+          from: minutesToClock(d.windowStartMinutes | 0),
+          to: minutesToClock(d.windowEndMinutes == null ? 1440 : d.windowEndMinutes)
+        };
+      });
+      editSched = { enabled: !!saved.enabled, days };
+      $("sched-enabled").checked = editSched.enabled;
+      renderSchedGrid();
+      msg.className = "msg ok";
+      msg.textContent = t("saved");
+    } catch (e) {
+      if (e.status === 401) return;
+      msg.className = "msg err";
+      msg.textContent = errorText(e);
     }
   });
 
