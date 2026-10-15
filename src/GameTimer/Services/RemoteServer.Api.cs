@@ -26,7 +26,13 @@ public sealed partial class RemoteServer
         DateTimeOffset? TargetTime,
         TimerAction Action,
         TimerZone? Zone,
-        DateTimeOffset? LastInterruption);
+        DateTimeOffset? LastInterruption,
+        ScheduleStatus ScheduleStatus,
+        int ScheduleAvailableSeconds,
+        int UsedSecondsToday);
+
+    public sealed record DayDto(bool Allowed, int LimitMinutes, int WindowStartMinutes, int WindowEndMinutes);
+    public sealed record ScheduleDto(bool Enabled, List<DayDto> Week);
 
     public sealed record StartRequest(TimerMode? Mode, int Hours, int Minutes);
 
@@ -119,6 +125,35 @@ public sealed partial class RemoteServer
     {
         app.MapGet("/api/settings", () => _ui.InvokeAsync(() => Results.Json(BuildSettings())));
 
+        app.MapGet("/api/schedule", () => _ui.InvokeAsync(() => Results.Json(BuildSchedule())));
+
+        app.MapPut("/api/schedule", async (ScheduleDto? update) =>
+        {
+            if (update?.Week == null || update.Week.Count != 7)
+                return Error(StatusCodes.Status400BadRequest, "invalid_request");
+            foreach (var d in update.Week)
+            {
+                if (d == null || d.LimitMinutes is < 0 or > 1440
+                    || d.WindowStartMinutes is < 0 or > 1440 || d.WindowEndMinutes is < 0 or > 1440)
+                    return Error(StatusCodes.Status400BadRequest, "invalid_schedule");
+            }
+            return await _ui.InvokeAsync(() =>
+            {
+                _settings.ScheduleEnabled = update.Enabled;
+                _settings.Week = update.Week.Select(d => new DaySchedule
+                {
+                    Allowed = d.Allowed,
+                    LimitMinutes = d.LimitMinutes,
+                    WindowStartMinutes = d.WindowStartMinutes,
+                    WindowEndMinutes = d.WindowEndMinutes
+                }).ToList();
+                _settingsService.Save(_settings);
+                _settingsService.NotifyChanged(this);
+                _timer.ReevaluateSchedule();
+                return Results.Json(BuildSchedule());
+            });
+        });
+
         app.MapPut("/api/settings", async (SettingsUpdate? update) =>
         {
             if (update == null)
@@ -145,6 +180,7 @@ public sealed partial class RemoteServer
     {
         var running = _timer.IsRunning;
         var remaining = _timer.Remaining;
+        var schedule = _timer.CurrentSchedule();
         return new StatusDto(
             _timer.State,
             running ? _timer.Mode : null,
@@ -152,7 +188,10 @@ public sealed partial class RemoteServer
             running ? DateTimeOffset.Now + remaining : null,
             _settings.Action,
             running ? _settings.GetZone(remaining) : null,
-            _timer.LastInterruption);
+            _timer.LastInterruption,
+            schedule.Status,
+            schedule.AvailableSeconds,
+            _timer.UsedSecondsToday);
     }
 
     // UI thread only
@@ -165,6 +204,12 @@ public sealed partial class RemoteServer
         _settings.ColorYellow,
         _settings.ColorRed,
         _settings.Language);
+
+    // UI thread only
+    private ScheduleDto BuildSchedule() => new(
+        _settings.ScheduleEnabled,
+        (_settings.Week ?? new List<DaySchedule>()).Select(d =>
+            new DayDto(d.Allowed, d.LimitMinutes, d.WindowStartMinutes, d.WindowEndMinutes)).ToList());
 
     private static string? Validate(SettingsUpdate u)
     {

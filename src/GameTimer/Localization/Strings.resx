@@ -329,4 +329,55 @@
   <data name="Who_System" xml:space="preserve">
     <value>automatic</value>
   </data>
+  <data name="Tab_Schedule" xml:space="preserve">
+    <value>Schedule</value>
+  </data>
+  <data name="Sched_Label" xml:space="preserve">
+    <value>Daily schedule</value>
+  </data>
+  <data name="Sched_Intro" xml:space="preserve">
+    <value>A daily time budget and the hours gaming is allowed, per weekday. Off by default.</value>
+  </data>
+  <data name="Sched_Enable" xml:space="preserve">
+    <value>Enable schedule</value>
+  </data>
+  <data name="Sched_Hint" xml:space="preserve">
+    <value>When on, the timer starts the day's allowance automatically and locks when it runs out or the allowed hours end. Limit 0 = no budget. Hours 00:00-24:00 = all day.</value>
+  </data>
+  <data name="Sched_Unlock" xml:space="preserve">
+    <value>Unlock to edit</value>
+  </data>
+  <data name="Sched_Lock" xml:space="preserve">
+    <value>Lock</value>
+  </data>
+  <data name="Sched_Col_Day" xml:space="preserve">
+    <value>Day</value>
+  </data>
+  <data name="Sched_Col_On" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="Sched_Col_Limit" xml:space="preserve">
+    <value>Min/day</value>
+  </data>
+  <data name="Sched_Col_From" xml:space="preserve">
+    <value>From</value>
+  </data>
+  <data name="Sched_Col_To" xml:space="preserve">
+    <value>To</value>
+  </data>
+  <data name="Sched_St_Off" xml:space="preserve">
+    <value>Schedule is off. The timer is controlled manually.</value>
+  </data>
+  <data name="Sched_St_Allowed" xml:space="preserve">
+    <value>Allowed now - {0} min available today.</value>
+  </data>
+  <data name="Sched_St_OutsideWindow" xml:space="preserve">
+    <value>Blocked now - outside the allowed hours for today.</value>
+  </data>
+  <data name="Sched_St_DayOff" xml:space="preserve">
+    <value>Blocked all day - gaming is off for today.</value>
+  </data>
+  <data name="Sched_St_LimitReached" xml:space="preserve">
+    <value>Blocked now - today's time budget is used up.</value>
+  </data>
 </root>

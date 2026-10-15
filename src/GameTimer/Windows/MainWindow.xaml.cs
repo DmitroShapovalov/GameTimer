@@ -39,6 +39,17 @@ public partial class MainWindow : FluentWindow
     // Track timer state for localization
     private string _timerStateKey = "Timer_NotStarted";
 
+    // Schedule tab: editing is gated behind Windows Hello; controls built once in code
+    private bool _scheduleUnlocked;
+    private readonly System.Windows.Controls.CheckBox[] _dayAllowed = new System.Windows.Controls.CheckBox[7];
+    private readonly Wpf.Ui.Controls.TextBox[] _dayLimit = new Wpf.Ui.Controls.TextBox[7];
+    private readonly Wpf.Ui.Controls.TextBox[] _dayFrom = new Wpf.Ui.Controls.TextBox[7];
+    private readonly Wpf.Ui.Controls.TextBox[] _dayTo = new Wpf.Ui.Controls.TextBox[7];
+    private readonly System.Windows.Controls.TextBlock[] _dayName = new System.Windows.Controls.TextBlock[7];
+    private System.Windows.Controls.TextBlock? _schHeadDay, _schHeadOn, _schHeadLimit, _schHeadFrom, _schHeadTo;
+    // Display order Monday..Sunday, mapped to (int)DayOfWeek (0 = Sunday)
+    private static readonly int[] ScheduleDayOrder = { 1, 2, 3, 4, 5, 6, 0 };
+
     public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer,
         RemoteServer remote, DeviceStore devices, PairingService pairing, SessionLog sessionLog)
     {
@@ -52,6 +63,7 @@ public partial class MainWindow : FluentWindow
         _timer.AlertTriggered += OnAlertTriggered;
         _timer.StateChanged += OnTimerStateChanged;
         _timer.InterruptionChanged += UpdateInterruptionBar;
+        _timer.ScheduleStateChanged += () => Dispatcher.BeginInvoke(UpdateScheduleStatus);
         _remote = remote;
         _devices = devices;
         _pairing = pairing;
@@ -85,6 +97,7 @@ public partial class MainWindow : FluentWindow
         TabNotificationsText.Text = Loc.Get("Tab_Notifications");
         TabSettingsText.Text = Loc.Get("Tab_Settings");
         TabHistoryText.Text = Loc.Get("Tab_History");
+        TabScheduleText.Text = Loc.Get("Tab_Schedule");
         HistoryEmpty.Text = Loc.Get("History_Empty");
         RefreshHistory();
 
@@ -155,6 +168,7 @@ public partial class MainWindow : FluentWindow
         // Tray menu
         UpdateTrayMenu();
 
+        ApplyScheduleLabels();
         UpdateInterruptionBar();
     }
 
@@ -244,6 +258,10 @@ public partial class MainWindow : FluentWindow
 
         // Settings tab - phone control
         RemoteToggle.IsChecked = _settings.RemoteEnabled;
+
+        // Schedule tab
+        BuildScheduleRows();
+        LoadScheduleToUi();
     }
 
     private void SaveSettings()
@@ -271,6 +289,7 @@ public partial class MainWindow : FluentWindow
             SelectLanguageInCombo(_settings.Language);
             Loc.SetLanguage(_settings.Language);
             ApplyLocalization(); // also refreshes the alerts list
+            LoadScheduleToUi();
         }
         finally
         {
@@ -380,6 +399,7 @@ public partial class MainWindow : FluentWindow
                 Key.D3 or Key.NumPad3 => 2,
                 Key.D4 or Key.NumPad4 => 3,
                 Key.D5 or Key.NumPad5 => 4,
+                Key.D6 or Key.NumPad6 => 5,
                 _ => -1
             };
             if (tab >= 0)
@@ -1148,8 +1168,254 @@ public partial class MainWindow : FluentWindow
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
         e.Cancel = true;
+        LockSchedule(); // require Windows Hello again next time the window opens
         Hide();
         if (_trayIcon != null) _trayIcon.Visible = true;
+    }
+
+    #endregion
+
+    #region Schedule
+
+    // The day rows are identical, so they are built once in code rather than 7x in XAML.
+    private void BuildScheduleRows()
+    {
+        if (_dayName[ScheduleDayOrder[0]] != null) return; // already built
+
+        ScheduleDaysPanel.Children.Add(BuildScheduleHeader());
+
+        foreach (var dow in ScheduleDayOrder)
+        {
+            var grid = NewScheduleGrid();
+            grid.Margin = new Thickness(0, 3, 0, 3);
+
+            var name = new System.Windows.Controls.TextBlock { VerticalAlignment = System.Windows.VerticalAlignment.Center };
+            Grid.SetColumn(name, 0);
+            _dayName[dow] = name;
+
+            var allowed = new System.Windows.Controls.CheckBox
+            {
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+            };
+            allowed.Checked += Schedule_Toggle;
+            allowed.Unchecked += Schedule_Toggle;
+            Grid.SetColumn(allowed, 1);
+            _dayAllowed[dow] = allowed;
+
+            var limit = new Wpf.Ui.Controls.TextBox { Width = 46, VerticalAlignment = System.Windows.VerticalAlignment.Center };
+            limit.TextChanged += Schedule_Text;
+            Grid.SetColumn(limit, 2);
+            _dayLimit[dow] = limit;
+
+            var from = new Wpf.Ui.Controls.TextBox { Width = 54, VerticalAlignment = System.Windows.VerticalAlignment.Center };
+            from.TextChanged += Schedule_Text;
+            Grid.SetColumn(from, 3);
+            _dayFrom[dow] = from;
+
+            var dash = new System.Windows.Controls.TextBlock
+            {
+                Text = "\u2013",
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextFillColorSecondaryBrush")
+            };
+            Grid.SetColumn(dash, 4);
+
+            var to = new Wpf.Ui.Controls.TextBox { Width = 54, VerticalAlignment = System.Windows.VerticalAlignment.Center };
+            to.TextChanged += Schedule_Text;
+            Grid.SetColumn(to, 5);
+            _dayTo[dow] = to;
+
+            grid.Children.Add(name);
+            grid.Children.Add(allowed);
+            grid.Children.Add(limit);
+            grid.Children.Add(from);
+            grid.Children.Add(dash);
+            grid.Children.Add(to);
+            ScheduleDaysPanel.Children.Add(grid);
+        }
+    }
+
+    private Grid BuildScheduleHeader()
+    {
+        var grid = NewScheduleGrid();
+        grid.Margin = new Thickness(0, 0, 0, 2);
+        _schHeadDay = HeaderCell(0);
+        _schHeadOn = HeaderCell(1);
+        _schHeadLimit = HeaderCell(2);
+        _schHeadFrom = HeaderCell(3);
+        _schHeadTo = HeaderCell(5);
+        foreach (var c in new[] { _schHeadDay, _schHeadOn, _schHeadLimit, _schHeadFrom, _schHeadTo })
+            grid.Children.Add(c);
+        return grid;
+
+        System.Windows.Controls.TextBlock HeaderCell(int col)
+        {
+            var t = new System.Windows.Controls.TextBlock
+            {
+                FontSize = 11,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextFillColorSecondaryBrush"),
+                VerticalAlignment = System.Windows.VerticalAlignment.Center
+            };
+            Grid.SetColumn(t, col);
+            return t;
+        }
+    }
+
+    private static Grid NewScheduleGrid()
+    {
+        var grid = new Grid();
+        foreach (var w in new[] { 76.0, 46.0, 54.0, 56.0, 16.0, 56.0 })
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
+        return grid;
+    }
+
+    private void ApplyScheduleLabels()
+    {
+        ScheduleLabel.Text = Loc.Get("Sched_Label");
+        ScheduleIntro.Text = Loc.Get("Sched_Intro");
+        ScheduleEnabledToggle.Content = Loc.Get("Sched_Enable");
+        ScheduleHint.Text = Loc.Get("Sched_Hint");
+        ScheduleUnlockButton.Content = Loc.Get(_scheduleUnlocked ? "Sched_Lock" : "Sched_Unlock");
+
+        if (_schHeadDay != null) _schHeadDay.Text = Loc.Get("Sched_Col_Day");
+        if (_schHeadOn != null) _schHeadOn.Text = Loc.Get("Sched_Col_On");
+        if (_schHeadLimit != null) _schHeadLimit.Text = Loc.Get("Sched_Col_Limit");
+        if (_schHeadFrom != null) _schHeadFrom.Text = Loc.Get("Sched_Col_From");
+        if (_schHeadTo != null) _schHeadTo.Text = Loc.Get("Sched_Col_To");
+
+        var dtf = System.Globalization.CultureInfo.GetCultureInfo(Loc.CurrentLanguage).DateTimeFormat;
+        for (int d = 0; d < 7; d++)
+        {
+            if (_dayName[d] == null) continue;
+            var n = dtf.GetAbbreviatedDayName((DayOfWeek)d);
+            if (n.Length > 0) n = char.ToUpper(n[0]) + n.Substring(1);
+            _dayName[d].Text = n;
+        }
+
+        UpdateScheduleStatus();
+    }
+
+    private void LoadScheduleToUi()
+    {
+        if (_settings.Week == null || _settings.Week.Count != 7)
+            _settings.Week = AppSettings.DefaultWeek();
+
+        ScheduleEnabledToggle.IsChecked = _settings.ScheduleEnabled;
+        for (int d = 0; d < 7; d++)
+        {
+            if (_dayAllowed[d] == null) continue;
+            var day = _settings.Week[d];
+            _dayAllowed[d].IsChecked = day.Allowed;
+            _dayLimit[d].Text = day.LimitMinutes.ToString();
+            _dayFrom[d].Text = FormatClock(day.WindowStartMinutes);
+            _dayTo[d].Text = FormatClock(day.WindowEndMinutes);
+        }
+        UpdateScheduleStatus();
+    }
+
+    private void Schedule_Toggle(object sender, RoutedEventArgs e) => ApplyScheduleFromUi();
+    private void Schedule_Text(object sender, TextChangedEventArgs e) => ApplyScheduleFromUi();
+    private void ScheduleEnabled_Changed(object sender, RoutedEventArgs e) => ApplyScheduleFromUi();
+
+    private void ApplyScheduleFromUi()
+    {
+        if (_isLoading || !_scheduleUnlocked) return;
+        if (_settings.Week == null || _settings.Week.Count != 7)
+            _settings.Week = AppSettings.DefaultWeek();
+
+        _settings.ScheduleEnabled = ScheduleEnabledToggle.IsChecked == true;
+        for (int d = 0; d < 7; d++)
+        {
+            if (_dayAllowed[d] == null) continue;
+            var day = _settings.Week[d];
+            day.Allowed = _dayAllowed[d].IsChecked == true;
+            day.LimitMinutes = Math.Clamp(ParseInt(_dayLimit[d].Text), 0, 24 * 60);
+            day.WindowStartMinutes = ParseClock(_dayFrom[d].Text, 0);
+            day.WindowEndMinutes = ParseClock(_dayTo[d].Text, 24 * 60);
+        }
+        SaveSettings();
+        _timer.ReevaluateSchedule();
+        UpdateScheduleStatus();
+    }
+
+    private async void ScheduleUnlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (_scheduleUnlocked) { LockSchedule(); return; }
+        if (!await RequireAuth()) return;
+        _scheduleUnlocked = true;
+        ScheduleEditPanel.IsEnabled = true;
+        ScheduleUnlockButton.Content = Loc.Get("Sched_Lock");
+    }
+
+    private void LockSchedule()
+    {
+        _scheduleUnlocked = false;
+        if (ScheduleEditPanel != null) ScheduleEditPanel.IsEnabled = false;
+        if (ScheduleUnlockButton != null) ScheduleUnlockButton.Content = Loc.Get("Sched_Unlock");
+    }
+
+    private void UpdateScheduleStatus()
+    {
+        if (ScheduleStatusBar == null) return;
+        var dec = _timer.CurrentSchedule();
+        string msg;
+        var sev = Wpf.Ui.Controls.InfoBarSeverity.Informational;
+        switch (dec.Status)
+        {
+            case ScheduleStatus.Off:
+                msg = Loc.Get("Sched_St_Off");
+                break;
+            case ScheduleStatus.Allowed:
+                msg = string.Format(Loc.Get("Sched_St_Allowed"), dec.AvailableSeconds / 60);
+                sev = Wpf.Ui.Controls.InfoBarSeverity.Success;
+                break;
+            case ScheduleStatus.OutsideWindow:
+                msg = Loc.Get("Sched_St_OutsideWindow");
+                sev = Wpf.Ui.Controls.InfoBarSeverity.Warning;
+                break;
+            case ScheduleStatus.DayDisabled:
+                msg = Loc.Get("Sched_St_DayOff");
+                sev = Wpf.Ui.Controls.InfoBarSeverity.Warning;
+                break;
+            case ScheduleStatus.LimitReached:
+                msg = Loc.Get("Sched_St_LimitReached");
+                sev = Wpf.Ui.Controls.InfoBarSeverity.Warning;
+                break;
+            default:
+                msg = "";
+                break;
+        }
+        ScheduleStatusBar.Message = msg;
+        ScheduleStatusBar.Severity = sev;
+    }
+
+    // "HH:MM" (24:00 for end-of-day); minutes from midnight
+    private static string FormatClock(int minutes)
+    {
+        minutes = Math.Clamp(minutes, 0, 24 * 60);
+        return $"{minutes / 60:D2}:{minutes % 60:D2}";
+    }
+
+    // Parses "H", "H:MM" or "HH:MM" to minutes from midnight (0..1440); fallback on anything else
+    private static int ParseClock(string text, int fallback)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return fallback;
+        text = text.Trim();
+        int h, m = 0;
+        var colon = text.IndexOf(':');
+        if (colon < 0)
+        {
+            if (!int.TryParse(text, out h)) return fallback;
+        }
+        else
+        {
+            if (!int.TryParse(text.Substring(0, colon), out h)) return fallback;
+            var rest = text.Substring(colon + 1);
+            if (rest.Length > 0 && !int.TryParse(rest, out m)) return fallback;
+        }
+        return Math.Clamp(h * 60 + m, 0, 24 * 60);
     }
 
     #endregion

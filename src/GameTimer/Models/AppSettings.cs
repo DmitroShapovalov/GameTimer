@@ -61,6 +61,23 @@ public class AppSettings
     // Paired phones (token hashes only)
     public List<PairedDevice> Devices { get; set; } = new();
 
+    // Daily schedule: per-weekday allowed window + minute budget, enforced automatically. Off by default.
+    public bool ScheduleEnabled { get; set; } = false;
+
+    // 7 days, indexed by (int)DayOfWeek: 0 = Sunday .. 6 = Saturday
+    public List<DaySchedule> Week { get; set; } = DefaultWeek();
+
+    public static List<DaySchedule> DefaultWeek()
+    {
+        var week = new List<DaySchedule>(7);
+        for (int i = 0; i < 7; i++) week.Add(new DaySchedule());
+        return week;
+    }
+
+    /// <summary>The schedule for the given weekday, or a permissive default if the list is malformed.</summary>
+    public DaySchedule DayFor(DayOfWeek day)
+        => Week != null && Week.Count == 7 ? Week[(int)day] : new DaySchedule();
+
     /// <summary>Color zone for the given remaining time. Shared by the overlay and the phone API.</summary>
     public TimerZone GetZone(TimeSpan remaining)
     {

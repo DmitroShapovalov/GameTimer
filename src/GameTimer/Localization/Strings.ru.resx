@@ -329,4 +329,55 @@
   <data name="Who_System" xml:space="preserve">
     <value>автоматически</value>
   </data>
+  <data name="Tab_Schedule" xml:space="preserve">
+    <value>Расписание</value>
+  </data>
+  <data name="Sched_Label" xml:space="preserve">
+    <value>Дневное расписание</value>
+  </data>
+  <data name="Sched_Intro" xml:space="preserve">
+    <value>Дневной лимит времени и часы, когда играть можно, для каждого дня недели. По умолчанию выключено.</value>
+  </data>
+  <data name="Sched_Enable" xml:space="preserve">
+    <value>Включить расписание</value>
+  </data>
+  <data name="Sched_Hint" xml:space="preserve">
+    <value>Когда включено, таймер сам запускает дневной лимит и блокирует ПК, когда время вышло или закончились разрешённые часы. Лимит 0 = без ограничения. Часы 00:00-24:00 = весь день.</value>
+  </data>
+  <data name="Sched_Unlock" xml:space="preserve">
+    <value>Разблокировать для изменения</value>
+  </data>
+  <data name="Sched_Lock" xml:space="preserve">
+    <value>Заблокировать</value>
+  </data>
+  <data name="Sched_Col_Day" xml:space="preserve">
+    <value>День</value>
+  </data>
+  <data name="Sched_Col_On" xml:space="preserve">
+    <value>Вкл</value>
+  </data>
+  <data name="Sched_Col_Limit" xml:space="preserve">
+    <value>Мин/день</value>
+  </data>
+  <data name="Sched_Col_From" xml:space="preserve">
+    <value>С</value>
+  </data>
+  <data name="Sched_Col_To" xml:space="preserve">
+    <value>До</value>
+  </data>
+  <data name="Sched_St_Off" xml:space="preserve">
+    <value>Расписание выключено. Таймер управляется вручную.</value>
+  </data>
+  <data name="Sched_St_Allowed" xml:space="preserve">
+    <value>Сейчас разрешено - доступно сегодня {0} мин.</value>
+  </data>
+  <data name="Sched_St_OutsideWindow" xml:space="preserve">
+    <value>Сейчас заблокировано - вне разрешённых часов на сегодня.</value>
+  </data>
+  <data name="Sched_St_DayOff" xml:space="preserve">
+    <value>Заблокировано на весь день - сегодня играть нельзя.</value>
+  </data>
+  <data name="Sched_St_LimitReached" xml:space="preserve">
+    <value>Сейчас заблокировано - дневной лимит времени исчерпан.</value>
+  </data>
 </root>

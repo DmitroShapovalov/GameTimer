@@ -23,13 +23,18 @@ public sealed class TimerController
     // How "same boot" is judged, and how often the heartbeat refreshes the saved "last seen" time
     private static readonly TimeSpan BootMatchTolerance = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan ScheduleCheckInterval = TimeSpan.FromSeconds(30);
 
     private readonly TimerService _timer;
     private readonly AppSettings _settings;
     private readonly TimerStateStore _store;
     private readonly SessionLog _log;
+    private readonly UsageTracker _usage;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _heartbeat;
+    private readonly DispatcherTimer _scheduleCheck;
+    private long _lastRemainingMs;   // to accrue used time from the countdown's progress
+    private bool _lastBlocked;       // debounce the enforcement action
 
     /// <summary>Raised after every state transition.</summary>
     public event Action<TimerState>? StateChanged;
@@ -46,6 +51,16 @@ public sealed class TimerController
     /// <summary>Raised when a resume finds the app was closed while a timer ran (tamper signal), and when that note is cleared.</summary>
     public event Action? InterruptionChanged;
 
+    /// <summary>Raised after the schedule state (allowed / blocked / budget) may have changed.</summary>
+    public event Action? ScheduleStateChanged;
+
+    /// <summary>Seconds of game time used so far today (for the daily budget).</summary>
+    public int UsedSecondsToday => _usage.UsedSecondsToday;
+
+    /// <summary>The schedule decision for right now (Off when the schedule is disabled).</summary>
+    public ScheduleDecision CurrentSchedule() =>
+        ScheduleEvaluator.Evaluate(DateTime.Now, _settings.ScheduleEnabled, _settings.Week, _usage.UsedSecondsToday);
+
     /// <summary>
     /// When a resume detected the app had been closed/killed while a timer was running, the time it was
     /// last seen; null otherwise. Surfaced to the parent (PC note and phone) and cleared on acknowledge.
@@ -60,16 +75,29 @@ public sealed class TimerController
     /// <summary>Wall-clock moment the timer ends (derived from the monotonic remaining time).</summary>
     public DateTime? TargetTime => IsRunning ? DateTime.Now + Remaining : null;
 
-    public TimerController(AppSettings settings, TimerStateStore store, SessionLog log)
+    public TimerController(AppSettings settings, TimerStateStore store, SessionLog log, UsageTracker usage)
     {
         _settings = settings;
         _store = store;
         _log = log;
+        _usage = usage;
         _dispatcher = Dispatcher.CurrentDispatcher;
         _timer = new TimerService(settings);
-        _timer.Tick += remaining => Tick?.Invoke(remaining);
+        _timer.Tick += OnTick;
         _timer.AlertTriggered += minutes => AlertTriggered?.Invoke(minutes);
         _timer.TimerExpired += OnExpired;
+
+        // Enforces the daily schedule (auto-stop + lock when blocked, clamp when the window/budget shrinks)
+        _scheduleCheck = new DispatcherTimer { Interval = ScheduleCheckInterval };
+        _scheduleCheck.Tick += (_, _) => ScheduleCheck();
+        _scheduleCheck.Start();
+
+        // On each tick: accrue used game time, then notify listeners
+        void OnTick(TimeSpan remaining)
+        {
+            AccrueUsage(remaining);
+            Tick?.Invoke(remaining);
+        }
 
         // Refreshes the saved "last seen" time so a later tamper report shows when the app was closed
         _heartbeat = new DispatcherTimer { Interval = HeartbeatInterval };
@@ -119,6 +147,7 @@ public sealed class TimerController
         }
 
         _timer.Start(remaining, saved.FiredAlerts);
+        _lastRemainingMs = (long)remaining.TotalMilliseconds;
         _heartbeat.Start();
         Log(SessionEventType.Resumed, ActionSource.System);
         SetState(TimerState.Running);
@@ -143,7 +172,9 @@ public sealed class TimerController
         if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return false;
         if (hours == 0 && minutes == 0) return false;
 
-        Begin(TimerMode.Interval, new TimeSpan(hours, minutes, 0), source, device);
+        var duration = new TimeSpan(hours, minutes, 0);
+        if (!CapToSchedule(ref duration)) return false; // schedule blocks or allows a shorter time
+        Begin(TimerMode.Interval, duration, source, device);
         return true;
     }
 
@@ -162,7 +193,9 @@ public sealed class TimerController
         if (target <= now)
             target = target.AddDays(1);
 
-        Begin(TimerMode.Absolute, target - now, source, device);
+        var duration = target - now;
+        if (!CapToSchedule(ref duration)) return false;
+        Begin(TimerMode.Absolute, duration, source, device);
         return true;
     }
 
@@ -175,6 +208,7 @@ public sealed class TimerController
         _timer.Stop();
         _heartbeat.Stop();
         _store.Clear();
+        _lastRemainingMs = 0;
         ShutdownService.CancelShutdown();
         Log(SessionEventType.Stopped, source, device);
         SetState(TimerState.Stopped);
@@ -189,6 +223,7 @@ public sealed class TimerController
         _timer.Stop();
         _heartbeat.Stop();
         _store.Clear();
+        _lastRemainingMs = 0;
         ShutdownService.CancelShutdown();
         Mode = null;
         if (had) Log(SessionEventType.Reset, source, device);
@@ -204,7 +239,18 @@ public sealed class TimerController
         _dispatcher.VerifyAccess();
         if (!IsRunning || minutes == 0 || Math.Abs(minutes) > MaxExtendMinutes) return false;
 
+        // A positive extend can't take the timer past what the schedule still allows today
+        if (minutes > 0 && _settings.ScheduleEnabled)
+        {
+            var dec = CurrentSchedule();
+            if (dec.IsBlocked) return false;
+            int maxAdd = dec.AvailableSeconds - (int)_timer.Remaining.TotalSeconds;
+            if (maxAdd <= 0) return false;
+            minutes = Math.Min(minutes, Math.Max(1, maxAdd / 60));
+        }
+
         _timer.Extend(TimeSpan.FromMinutes(minutes));
+        _lastRemainingMs = (long)_timer.Remaining.TotalMilliseconds; // the change isn't game time
         Log(SessionEventType.Extended, source, device, minutes: minutes);
 
         if (_timer.Remaining > TimeSpan.Zero)
@@ -221,6 +267,7 @@ public sealed class TimerController
     {
         Mode = mode;
         _timer.Start(duration);
+        _lastRemainingMs = (long)duration.TotalMilliseconds;
         _heartbeat.Start();
         Persist();
         Log(SessionEventType.Started, source, device, mode: mode, minutes: (int)Math.Round(duration.TotalMinutes));
@@ -228,10 +275,96 @@ public sealed class TimerController
         Tick?.Invoke(Remaining);
     }
 
+    // Usage accrues from the countdown's progress (how much the remaining time dropped since last tick),
+    // so a running timer always spends today's budget at real time. Clamped so a sleep/clock jump can't
+    // dump a huge amount, and a positive extend (which raises remaining) is never counted.
+    private void AccrueUsage(TimeSpan remaining)
+    {
+        var ms = remaining.TotalMilliseconds;
+        if (_lastRemainingMs > 0)
+        {
+            var deltaMs = _lastRemainingMs - ms;
+            if (deltaMs > 0) _usage.Add((int)Math.Round(Math.Min(deltaMs, 120_000) / 1000.0));
+        }
+        _lastRemainingMs = (long)ms;
+    }
+
+    /// <summary>
+    /// Clamps a requested duration to what the schedule still allows today. Returns false if gaming is
+    /// blocked right now (outside the window, day off, or budget used up).
+    /// </summary>
+    private bool CapToSchedule(ref TimeSpan duration)
+    {
+        if (!_settings.ScheduleEnabled) return true;
+        var dec = CurrentSchedule();
+        if (dec.IsBlocked) return false;
+        if (duration.TotalSeconds > dec.AvailableSeconds)
+            duration = TimeSpan.FromSeconds(dec.AvailableSeconds);
+        return duration > TimeSpan.Zero;
+    }
+
+    /// <summary>
+    /// At app launch and on session unlock: if the schedule allows gaming now and no timer is running,
+    /// start one for the time left today. Called by the app, not the periodic check, so a parent can
+    /// still stop the timer for a break without it restarting every 30 s.
+    /// </summary>
+    public void AutoStartIfScheduled()
+    {
+        _dispatcher.VerifyAccess();
+        if (!_settings.ScheduleEnabled || IsRunning) return;
+        var dec = CurrentSchedule();
+        if (dec.Status == ScheduleStatus.Allowed && dec.AvailableSeconds > 0)
+            Begin(TimerMode.Interval, TimeSpan.FromSeconds(dec.AvailableSeconds), ActionSource.System, null);
+        else
+            ScheduleCheck(); // blocked right now (e.g. outside hours) -> enforce
+    }
+
+    /// <summary>Re-check the schedule now (e.g. after the schedule was changed from the phone or PC).</summary>
+    public void ReevaluateSchedule() => ScheduleCheck();
+
+    // Periodic enforcement of the schedule. Does not auto-start (that is AutoStartIfScheduled).
+    private void ScheduleCheck()
+    {
+        if (!_settings.ScheduleEnabled) { _lastBlocked = false; return; }
+        var dec = CurrentSchedule();
+
+        if (dec.IsBlocked)
+        {
+            if (IsRunning)
+            {
+                _timer.Stop();
+                _heartbeat.Stop();
+                _store.Clear();
+                _lastRemainingMs = 0;
+            }
+            if (!_lastBlocked) // act once per transition into "blocked", not every 30 s
+            {
+                _lastBlocked = true;
+                Log(SessionEventType.Expired, ActionSource.System, action: _settings.Action);
+                SetState(TimerState.Expired);
+                try { ShutdownService.Execute(_settings.Action); }
+                catch (Exception ex) { DiagnosticLog.Write("schedule enforce failed: " + ex); }
+            }
+        }
+        else
+        {
+            _lastBlocked = false;
+            // Window or budget shrank below the running timer -> clamp it down
+            if (IsRunning && _timer.Remaining.TotalSeconds > dec.AvailableSeconds + 2)
+            {
+                _timer.Extend(TimeSpan.FromSeconds(dec.AvailableSeconds - _timer.Remaining.TotalSeconds));
+                _lastRemainingMs = (long)_timer.Remaining.TotalMilliseconds;
+                Persist();
+            }
+        }
+        ScheduleStateChanged?.Invoke();
+    }
+
     private void OnExpired()
     {
         _heartbeat.Stop();
         _store.Clear();
+        _lastRemainingMs = 0;
         Log(SessionEventType.Expired, ActionSource.System, action: _settings.Action);
         SetState(TimerState.Expired);
         ShutdownService.Execute(_settings.Action);

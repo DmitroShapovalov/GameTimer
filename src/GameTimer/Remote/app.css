@@ -146,3 +146,22 @@ input[type=checkbox] { width: 22px; min-height: 22px; height: 22px; accent-color
 .tabs button[aria-current=page] { color: var(--accent); }
 
 body.offline .needs-online { opacity: .45; pointer-events: none; }
+
+/* Schedule */
+.sched-status {
+  padding: 10px 14px; margin-bottom: 12px; border-radius: var(--radius);
+  font-size: 14px; text-align: center; background: var(--card-2); color: var(--muted);
+}
+.sched-status.ok { background: #143a10; color: var(--ok); }
+.sched-status.warn { background: #4a3a00; color: #ffe08a; }
+.row-toggle { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+.row-toggle input { flex: none; }
+.sched-grid {
+  display: grid; grid-template-columns: auto 1.6em 1fr 1fr 1fr;
+  gap: 8px 8px; align-items: center;
+}
+.sched-grid .sched-h { font-size: 12px; color: var(--muted); text-align: center; }
+.sched-grid .sched-h:first-child { text-align: left; }
+.sched-grid .sched-day { font-size: 14px; white-space: nowrap; }
+.sched-grid input { min-height: 40px; padding: 8px; text-align: center; }
+.sched-grid input[type=checkbox] { justify-self: center; }

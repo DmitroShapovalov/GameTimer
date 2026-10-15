@@ -10,6 +10,7 @@
 | v1.2.0 | Phone remote over home Wi-Fi (QR pairing, REST + WebSocket, mobile web UI), automatic firewall rule, monotonic clock (system clock changes no longer affect the timer), version in About |
 | v1.3.0 | Tamper resistance: the running timer survives close / kill / reboot / logoff and resumes (or enforces if expired) at launch; "closed at HH:MM" notice on PC and phone; opt-in "Protection from closing" (deny terminate, needs a standard child account) |
 | v1.4.0 | Game-session history (every event with its source) on a History tab on PC and phone; security review (docs/SECURITY.md) with server hardening (no Server header, 64 KB body cap) |
+| v1.5.0 | Daily schedule: per-weekday minute budget and allowed-hours window; automatic mode (starts the day's allowance at launch/unlock, locks when the budget or the window ends, caps manual timers); editable on the PC (Schedule tab, Windows Hello) and the phone; off by default |
 
 ---
 
@@ -160,4 +161,4 @@ Tamper resistance (the child uses the same Windows account, which is an administ
 Other:
 - Exclusive-fullscreen games: overlay can't draw over them (by design of Windows). Document in README.
 - Overlay hover effect (SPEC OVR-02) was not implemented; seconds are always shown.
-- Daily schedules / limits per weekday.
+- ~~Daily schedules / limits per weekday.~~ Done in v1.5.0: per-weekday `DaySchedule` (allowed / minute budget / allowed-hours window) in `AppSettings.Week`, pure `ScheduleEvaluator`, `UsageTracker` (today's usage in `usage.json`), automatic enforcement in `TimerController` (auto-start the day's allowance at launch/unlock, a 30 s check locks once per transition when blocked and caps a running timer), `GET`/`PUT /api/schedule` + WS `schedule`, PC Schedule tab (Ctrl+6, Windows Hello) and phone Settings editor. Off by default; disabling it needs Windows Hello, so it can't lock the parent out by surprise.

@@ -42,6 +42,7 @@
       <p id="interruption-text"></p>
       <button id="interruption-ok" class="btn secondary small" data-t="gotIt"></button>
     </div>
+    <div id="sched-status" class="sched-status" hidden></div>
     <div class="card status">
       <div id="state" class="state"></div>
       <div id="countdown" class="countdown idle">00:00</div>
@@ -135,6 +136,18 @@
       <p id="settings-msg" class="msg" role="status"></p>
       <button type="submit" class="btn primary wide needs-online" data-t="save"></button>
     </form>
+
+    <div class="card" id="schedule-card">
+      <h2 data-t="schedTitle"></h2>
+      <p class="hint muted" data-t="schedHint"></p>
+      <label class="row-toggle">
+        <input id="sched-enabled" type="checkbox">
+        <span data-t="schedEnable"></span>
+      </label>
+      <div id="sched-grid" class="sched-grid"></div>
+      <p id="schedule-msg" class="msg" role="status"></p>
+      <button type="button" id="schedule-save" class="btn primary wide needs-online" data-t="save"></button>
+    </div>
   </section>
 
   <!-- Game session history -->

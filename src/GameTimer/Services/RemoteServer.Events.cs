@@ -127,6 +127,7 @@ public sealed partial class RemoteServer
         _devices.Changed += OnDevicesChanged;
         _timer.InterruptionChanged += OnInterruptionChanged;
         _sessionLog.Changed += OnHistoryChanged;
+        _timer.ScheduleStateChanged += OnScheduleChanged;
         _lastSettingsJson = JsonSerializer.Serialize(BuildSettings(), Json);
     }
 
@@ -140,6 +141,7 @@ public sealed partial class RemoteServer
         _devices.Changed -= OnDevicesChanged;
         _timer.InterruptionChanged -= OnInterruptionChanged;
         _sessionLog.Changed -= OnHistoryChanged;
+        _timer.ScheduleStateChanged -= OnScheduleChanged;
     }
 
     private void OnTimerStateChanged(TimerState state)
@@ -186,6 +188,10 @@ public sealed partial class RemoteServer
     // A new history event was recorded; the phone refetches the list
     private void OnHistoryChanged() =>
         Broadcast(new { type = "history" });
+
+    // The schedule allowed/blocked state or the day's remaining allowance changed
+    private void OnScheduleChanged() =>
+        Broadcast(new { type = "schedule", status = BuildStatus() });
 
     // A revoked device loses its open socket immediately
     private void OnDevicesChanged()

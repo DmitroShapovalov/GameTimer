@@ -13,6 +13,7 @@ A game time limiter for Windows — designed for parents who want to manage thei
 - **System tray** — minimizes to tray on close; exit only from the tray menu (also protected)
 - **Draggable overlay position** — position the timer anywhere on screen via a visual preview
 - **Phone control over home Wi-Fi** — see and control the timer from a phone (start, stop, ±15 min, settings); no cloud, no app store, paired by QR code
+- **Daily schedule** — an optional per-weekday time budget and allowed-hours window; GameTimer starts the day's allowance automatically and locks when it runs out or the hours end (off by default)
 - **Bilingual UI** — English (default) and Russian, switchable at runtime
 - **Modern look** — Fluent Design (WPF UI) with dark theme
 
@@ -77,6 +78,18 @@ Changes made on the PC show up on the phone immediately, and the other way round
 
 Developers: the API and WebSocket messages are documented in [`docs/remote-api.http`](docs/remote-api.http).
 
+## Daily schedule
+
+Instead of starting the timer by hand every day, you can set a schedule: for each weekday, a **daily time budget** (in minutes) and the **hours gaming is allowed** (e.g. 15:00–20:00). It is **off by default**.
+
+When it is on, GameTimer works automatically:
+
+- it starts the day's allowance on its own when the PC starts or is unlocked;
+- it locks the PC (your chosen action) when the budget runs out or the allowed hours end, and keeps it locked outside those hours;
+- a manually started timer is capped to what the schedule still allows.
+
+Edit it on the PC in the **Schedule** tab (`Ctrl`+`6`) — unlock with Windows Hello first — or on the phone under **Settings**. Both show today's state ("45 min left today", or why gaming is blocked). Because turning the schedule off also needs Windows Hello, it can never lock you, the parent, out by surprise.
+
 ## Protection from closing
 
 The app can keep the running timer even if it is closed, and can make it hard for the child to close.
@@ -93,7 +106,7 @@ The app can keep the running timer even if it is closed, and can make it hard fo
 | `↑` / `↓` | Increase / decrease the focused time value by 1 |
 | `Shift` + `↑` / `↓` | Increase / decrease by 10 |
 | `:` | Jump from the hours field to the minutes field |
-| `Ctrl` + `1`…`4` | Switch tabs |
+| `Ctrl` + `1`…`6` | Switch tabs |
 | `Esc` | Hide the window to the system tray |
 
 Only one copy of the app can run at a time — launching it again just brings the existing window to the front.
