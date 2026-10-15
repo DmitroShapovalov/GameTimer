@@ -20,6 +20,7 @@ public partial class MainWindow : FluentWindow
     private readonly PairingService _pairing;
     private bool _isRemoteBusy;
     private bool? _firewallOk; // null = not checked yet
+    private bool _isTamperBusy;
     private AppSettings _settings;
     private OverlayWindow? _overlay;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -49,6 +50,7 @@ public partial class MainWindow : FluentWindow
         _timer.Tick += OnTimerTick;
         _timer.AlertTriggered += OnAlertTriggered;
         _timer.StateChanged += OnTimerStateChanged;
+        _timer.InterruptionChanged += UpdateInterruptionBar;
         _remote = remote;
         _devices = devices;
         _pairing = pairing;
@@ -129,6 +131,9 @@ public partial class MainWindow : FluentWindow
         PhoneControlLabel.Text = Loc.Get("PhoneControl");
         RemoteToggle.Content = Loc.Get("Remote_Toggle");
         ConnectPhoneButton.Content = Loc.Get("ConnectPhone");
+        TamperLabel.Text = Loc.Get("Tamper_Label");
+        TamperToggle.Content = Loc.Get("Tamper_Toggle");
+        TamperHint.Text = Loc.Get("Tamper_Hint");
         FirewallText.Text = Loc.Get("Remote_FirewallMissing");
         FirewallButton.Content = Loc.Get("Remote_FirewallFix");
         PairedDevicesLabel.Text = Loc.Get("PairedDevices");
@@ -143,6 +148,8 @@ public partial class MainWindow : FluentWindow
 
         // Tray menu
         UpdateTrayMenu();
+
+        UpdateInterruptionBar();
     }
 
     // From <Version> (CI passes the tag: -p:Version=1.2.0); drop the "+commit" suffix the SDK appends
@@ -225,6 +232,9 @@ public partial class MainWindow : FluentWindow
         // Settings tab - action
         _lastActionIndex = (int)_settings.Action;
         ActionCombo.SelectedIndex = _lastActionIndex;
+
+        // Settings tab - protection
+        TamperToggle.IsChecked = _settings.TamperProtection;
 
         // Settings tab - phone control
         RemoteToggle.IsChecked = _settings.RemoteEnabled;
@@ -545,6 +555,26 @@ public partial class MainWindow : FluentWindow
 
     // Fires for every transition, whoever caused it (this window now, the phone API later).
     // The shutdown / lock / logoff on expiry is executed by TimerController itself.
+    // Shows "the app was closed while a timer ran" after a tamper-style restart; the parent dismisses it
+    private void UpdateInterruptionBar()
+    {
+        bool show = _timer.LastInterruption is DateTimeOffset;
+        if (show)
+        {
+            var when = _timer.LastInterruption!.Value.LocalDateTime;
+            InterruptionBar.Title = Loc.Get("Interruption_Title");
+            InterruptionBar.Message = string.Format(Loc.Get("Interruption_Message"), when.ToString("g"));
+            InterruptionDismiss.Content = Loc.Get("Interruption_Dismiss");
+        }
+        InterruptionBar.IsOpen = show;
+        InterruptionDismiss.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void InterruptionDismiss_Click(object sender, RoutedEventArgs e)
+    {
+        _timer.AcknowledgeInterruption();
+    }
+
     private void OnTimerStateChanged(TimerState state)
     {
         switch (state)
@@ -825,6 +855,43 @@ public partial class MainWindow : FluentWindow
     }
 
     // Turning phone control on or off requires auth, like other protected settings
+    // Enabling denies termination now; disabling re-allows it. Both require Windows Hello.
+    private async void TamperToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading || _isTamperBusy) return;
+
+        bool enable = TamperToggle.IsChecked == true;
+        if (enable == _settings.TamperProtection) return;
+
+        _isTamperBusy = true; // reverting IsChecked below re-enters this handler
+        TamperToggle.IsEnabled = false;
+        try
+        {
+            if (!await RequireAuth())
+            {
+                TamperToggle.IsChecked = _settings.TamperProtection;
+                return;
+            }
+
+            bool ok = enable ? ProcessProtection.DenyTermination() : ProcessProtection.AllowTermination();
+            if (!ok)
+            {
+                System.Windows.MessageBox.Show(Loc.Get("Tamper_Failed"), Loc.Get("Error"),
+                    System.Windows.MessageBoxButton.OK);
+                TamperToggle.IsChecked = _settings.TamperProtection;
+                return;
+            }
+
+            _settings.TamperProtection = enable;
+            SaveSettings();
+        }
+        finally
+        {
+            _isTamperBusy = false;
+            TamperToggle.IsEnabled = true;
+        }
+    }
+
     private async void RemoteToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (_isLoading || _isRemoteBusy) return;

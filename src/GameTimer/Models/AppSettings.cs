@@ -51,6 +51,9 @@ public class AppSettings
     // UI language (en, ru)
     public string Language { get; set; } = "en";
 
+    // Stop the child closing the app from Task Manager (deny terminate + watchdog). Off by default.
+    public bool TamperProtection { get; set; } = false;
+
     // Phone remote over home Wi-Fi (embedded server). Off by default.
     public bool RemoteEnabled { get; set; } = false;
     public int RemotePort { get; set; } = 5123;

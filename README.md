@@ -77,6 +77,14 @@ Changes made on the PC show up on the phone immediately, and the other way round
 
 Developers: the API and WebSocket messages are documented in [`docs/remote-api.http`](docs/remote-api.http).
 
+## Protection from closing
+
+The app can keep the running timer even if it is closed, and can make it hard for the child to close.
+
+- **The timer survives being closed.** If the app is closed, the PC reboots or the user logs off while a timer is running, the timer continues from where it left off the next time the app starts. If the time ran out in the meantime, the action (shutdown / lock / logoff) runs at startup.
+- **You are told if it was closed.** Closing the app cleanly goes through the tray and Windows Hello. If it was closed any other way (Task Manager, reboot), the next launch shows "closed at HH:MM" on the PC and on the phone.
+- **Prevent closing (optional).** Settings → **Protection from closing** (Windows Hello, off by default) stops the app being ended from Task Manager (`taskkill`, `Stop-Process` too). **This only works if the child uses a standard, non-administrator Windows account** — on an administrator account Task Manager can still close it. The recommended setup is a separate standard account for the child (Settings → Accounts → Family or Other users), which also stops them changing system settings or removing the app from startup.
+
 ## Keyboard shortcuts
 
 | Key | Action |

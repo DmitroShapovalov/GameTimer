@@ -38,6 +38,10 @@
 
   <!-- Timer: status + start form -->
   <section id="screen-timer" class="screen" hidden>
+    <div id="interruption" class="card warn" hidden>
+      <p id="interruption-text"></p>
+      <button id="interruption-ok" class="btn secondary small" data-t="gotIt"></button>
+    </div>
     <div class="card status">
       <div id="state" class="state"></div>
       <div id="countdown" class="countdown idle">00:00</div>

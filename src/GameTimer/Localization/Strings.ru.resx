@@ -269,4 +269,25 @@
   <data name="Remote_FirewallFix" xml:space="preserve">
     <value>Разрешить в брандмауэре</value>
   </data>
+  <data name="Interruption_Title" xml:space="preserve">
+    <value>Таймер был прерван</value>
+  </data>
+  <data name="Interruption_Message" xml:space="preserve">
+    <value>GameTimer был закрыт в {0}, пока шёл таймер, и таймер продолжился при следующем запуске.</value>
+  </data>
+  <data name="Interruption_Dismiss" xml:space="preserve">
+    <value>Понятно</value>
+  </data>
+  <data name="Tamper_Label" xml:space="preserve">
+    <value>Защита от закрытия</value>
+  </data>
+  <data name="Tamper_Toggle" xml:space="preserve">
+    <value>Не давать закрыть через диспетчер задач</value>
+  </data>
+  <data name="Tamper_Hint" xml:space="preserve">
+    <value>Когда включено, приложение нельзя завершить через диспетчер задач. Выйти из него по-прежнему можно через трей (Windows Hello). Это работает, только если у ребёнка обычная (не администраторская) учётная запись Windows — на администраторской диспетчер задач всё равно сможет его закрыть.</value>
+  </data>
+  <data name="Tamper_Failed" xml:space="preserve">
+    <value>Не удалось изменить настройку защиты.</value>
+  </data>
 </root>
