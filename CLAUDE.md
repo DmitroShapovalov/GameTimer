@@ -115,7 +115,7 @@ dotnet build
 dotnet publish -c Release -r win-x64 --self-contained -o ../../publish
 ```
 
-Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTimerSetup.exe` and attaches it to the GitHub Release. Released so far: v1.0.0, v1.0.1, v1.1.0, v1.2.0. Bump `<Version>` in the csproj for local builds; CI takes the version from the tag.
+Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTimerSetup.exe` and attaches it to the GitHub Release. Released so far: v1.0.0, v1.0.1, v1.1.0, v1.2.0, v1.3.0. Bump `<Version>` in the csproj for local builds; CI takes the version from the tag.
 
 ## Agent environment notes (Cowork)
 
