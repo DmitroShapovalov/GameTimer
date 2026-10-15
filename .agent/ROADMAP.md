@@ -9,6 +9,7 @@
 | v1.1.0 | Single-instance guard; keyboard controls (Enter, arrows, Ctrl+1..4, Esc) |
 | v1.2.0 | Phone remote over home Wi-Fi (QR pairing, REST + WebSocket, mobile web UI), automatic firewall rule, monotonic clock (system clock changes no longer affect the timer), version in About |
 | v1.3.0 | Tamper resistance: the running timer survives close / kill / reboot / logoff and resumes (or enforces if expired) at launch; "closed at HH:MM" notice on PC and phone; opt-in "Protection from closing" (deny terminate, needs a standard child account) |
+| v1.4.0 | Game-session history (every event with its source) on a History tab on PC and phone; security review (docs/SECURITY.md) with server hardening (no Server header, 64 KB body cap) |
 
 ---
 
