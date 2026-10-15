@@ -98,6 +98,13 @@ The app can keep the running timer even if it is closed, and can make it hard fo
 
 Only one copy of the app can run at a time — launching it again just brings the existing window to the front.
 
+## Security
+
+Phone control is off by default, home-network only, and requires pairing with a one-time QR code; each
+phone gets its own token (stored only as a hash). The remote can only start/stop/extend the timer and
+change its settings — there is no way to run other commands through it. For the full threat model, the
+residual risks (e.g. plain HTTP on the LAN) and recommendations, see [`docs/SECURITY.md`](docs/SECURITY.md).
+
 ## Tech stack
 
 - .NET 8, WPF

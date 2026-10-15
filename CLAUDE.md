@@ -67,6 +67,7 @@ src/GameTimer/
 installer/setup.iss        Inno Setup script (per-user install, optional autostart)
 docs/remote-api.http       Every phone API request and WebSocket message, with examples (REST Client format)
 docs/ws-watch.ps1          PowerShell: pair with a code and print /ws events with timestamps
+docs/SECURITY.md           Threat model of the phone remote, residual risks, dependencies
 docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API and /ws events on the real PC (PASS/FAIL)
 .github/workflows/release.yml   On tag v*: publish + build installer + GitHub Release
 ```

@@ -84,7 +84,12 @@ public sealed partial class RemoteServer
                 ContentRootPath = AppContext.BaseDirectory
             });
             builder.Logging.ClearProviders();
-            builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port));
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.ListenAnyIP(port);
+                options.AddServerHeader = false;             // don't advertise the server software
+                options.Limits.MaxRequestBodySize = 64 * 1024; // every real payload is tiny; cap LAN abuse
+            });
 
             // Enums as camelCase strings ("running", "interval", "lock"); numbers are rejected
             builder.Services.ConfigureHttpJsonOptions(options =>
