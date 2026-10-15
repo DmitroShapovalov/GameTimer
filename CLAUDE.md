@@ -67,6 +67,7 @@ src/GameTimer/
 installer/setup.iss        Inno Setup script (per-user install, optional autostart)
 docs/remote-api.http       Every phone API request and WebSocket message, with examples (REST Client format)
 docs/ws-watch.ps1          PowerShell: pair with a code and print /ws events with timestamps
+docs/SECURITY.md           Threat model of the phone remote, residual risks, dependencies
 docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API and /ws events on the real PC (PASS/FAIL)
 .github/workflows/release.yml   On tag v*: publish + build installer + GitHub Release
 ```
@@ -89,6 +90,7 @@ docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API an
 - **Extend event order:** `Extended` is raised first, then `TimerService.EvaluateNow()` may raise an alert or the expiry.
 - **WebSocket `/ws`:** auth by bearer header or first message `{"type":"auth","token"}` (5 s). Events come from `TimerController` (`StateChanged`, `Tick` throttled to 5 s, `AlertTriggered`, `Extended`), `SettingsService.SettingsChanged` (sent only if the settings DTO changed) and `DeviceStore.Changed` (revoked devices are disconnected). Subscribed while the server runs.
 - **Resilience (parental control, opt-in):** a running timer is persisted to `timer-state.json` and resumed on next launch (close / kill / reboot / logoff) by `TimerController.TryResume`; if it expired while gone, the action runs at launch. A resume with leftover state is treated as an unclean close and surfaced as `LastInterruption` (PC InfoBar + phone). "Protection from closing" (Settings, Windows Hello, `AppSettings.TamperProtection`, off by default) calls `ProcessProtection.DenyTermination` to refuse Task Manager / taskkill; an admin token can still override it.
+- **Session history:** `SessionLog` appends every timer event (started / stopped / reset / extended / expired / resumed / closed) to `sessions.jsonl` with the source (PC, phone + device name, or system). Shown on a History tab on the PC and the phone; the phone reads `GET /api/history` and refreshes on the WS `history` event. `TimerController` records them (methods take `ActionSource source, string? device`).
 - **Clock:** remaining time is monotonic (`Environment.TickCount64`): system clock changes don't affect it, sleep time still counts. Time-of-day mode reads the wall clock once at start.
 - **Debug-only hotkeys:** Ctrl+Shift+Plus / Minus = `Extend(±1)` (temporary, for testing).
 - **Validation:** empty time field = 0; inline error text under inputs disables Start.

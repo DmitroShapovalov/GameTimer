@@ -27,6 +27,7 @@ public sealed class TimerController
     private readonly TimerService _timer;
     private readonly AppSettings _settings;
     private readonly TimerStateStore _store;
+    private readonly SessionLog _log;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _heartbeat;
 
@@ -59,10 +60,11 @@ public sealed class TimerController
     /// <summary>Wall-clock moment the timer ends (derived from the monotonic remaining time).</summary>
     public DateTime? TargetTime => IsRunning ? DateTime.Now + Remaining : null;
 
-    public TimerController(AppSettings settings, TimerStateStore store)
+    public TimerController(AppSettings settings, TimerStateStore store, SessionLog log)
     {
         _settings = settings;
         _store = store;
+        _log = log;
         _dispatcher = Dispatcher.CurrentDispatcher;
         _timer = new TimerService(settings);
         _timer.Tick += remaining => Tick?.Invoke(remaining);
@@ -93,6 +95,8 @@ public sealed class TimerController
         // timer after Windows Hello). That is the tamper signal shown to the parent.
         LastInterruption = saved.LastSeenUtc;
         InterruptionChanged?.Invoke();
+        // Backdated: the app was closed around when it was last seen
+        _log.Add(new SessionEvent { Time = saved.LastSeenUtc.ToLocalTime(), Type = SessionEventType.Closed, Source = ActionSource.System });
 
         // Same boot → trust the monotonic deadline (clock-change proof). Rebooted → fall back to wall clock.
         var bootNow = DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
@@ -107,6 +111,7 @@ public sealed class TimerController
         {
             // Time ran out while the app was not running — enforce the action now
             _store.Clear();
+            Log(SessionEventType.Expired, ActionSource.System, action: _settings.Action);
             SetState(TimerState.Expired);
             try { ShutdownService.Execute(_settings.Action); }
             catch (Exception ex) { DiagnosticLog.Write("resume: action failed: " + ex); }
@@ -115,6 +120,7 @@ public sealed class TimerController
 
         _timer.Start(remaining, saved.FiredAlerts);
         _heartbeat.Start();
+        Log(SessionEventType.Resumed, ActionSource.System);
         SetState(TimerState.Running);
         Tick?.Invoke(Remaining);
         Persist();
@@ -130,14 +136,14 @@ public sealed class TimerController
     }
 
     /// <summary>Starts a countdown of the given length. Returns false if running or input is invalid.</summary>
-    public bool StartInterval(int hours, int minutes)
+    public bool StartInterval(int hours, int minutes, ActionSource source = ActionSource.Pc, string? device = null)
     {
         _dispatcher.VerifyAccess();
         if (IsRunning) return false;
         if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return false;
         if (hours == 0 && minutes == 0) return false;
 
-        Begin(TimerMode.Interval, new TimeSpan(hours, minutes, 0));
+        Begin(TimerMode.Interval, new TimeSpan(hours, minutes, 0), source, device);
         return true;
     }
 
@@ -145,7 +151,7 @@ public sealed class TimerController
     /// Starts a countdown to the given time of day (tomorrow if it has already passed today).
     /// The wall clock is read once here; from then on only the monotonic clock counts.
     /// </summary>
-    public bool StartAbsolute(int hour, int minute)
+    public bool StartAbsolute(int hour, int minute, ActionSource source = ActionSource.Pc, string? device = null)
     {
         _dispatcher.VerifyAccess();
         if (IsRunning) return false;
@@ -156,12 +162,12 @@ public sealed class TimerController
         if (target <= now)
             target = target.AddDays(1);
 
-        Begin(TimerMode.Absolute, target - now);
+        Begin(TimerMode.Absolute, target - now, source, device);
         return true;
     }
 
     /// <summary>Stops a running timer and cancels any pending shutdown.</summary>
-    public bool Stop()
+    public bool Stop(ActionSource source = ActionSource.Pc, string? device = null)
     {
         _dispatcher.VerifyAccess();
         if (!IsRunning) return false;
@@ -170,19 +176,22 @@ public sealed class TimerController
         _heartbeat.Stop();
         _store.Clear();
         ShutdownService.CancelShutdown();
+        Log(SessionEventType.Stopped, source, device);
         SetState(TimerState.Stopped);
         return true;
     }
 
     /// <summary>Stops the timer (if any), cancels any pending shutdown and returns to "not started".</summary>
-    public void Reset()
+    public void Reset(ActionSource source = ActionSource.Pc, string? device = null)
     {
         _dispatcher.VerifyAccess();
+        bool had = State == TimerState.Running || Mode != null;
         _timer.Stop();
         _heartbeat.Stop();
         _store.Clear();
         ShutdownService.CancelShutdown();
         Mode = null;
+        if (had) Log(SessionEventType.Reset, source, device);
         SetState(TimerState.NotStarted);
     }
 
@@ -190,12 +199,13 @@ public sealed class TimerController
     /// Adds (positive) or removes (negative) minutes on a running timer. Never below zero:
     /// removing more than is left expires the timer. In time-of-day mode this shifts the target.
     /// </summary>
-    public bool Extend(int minutes)
+    public bool Extend(int minutes, ActionSource source = ActionSource.Pc, string? device = null)
     {
         _dispatcher.VerifyAccess();
         if (!IsRunning || minutes == 0 || Math.Abs(minutes) > MaxExtendMinutes) return false;
 
         _timer.Extend(TimeSpan.FromMinutes(minutes));
+        Log(SessionEventType.Extended, source, device, minutes: minutes);
 
         if (_timer.Remaining > TimeSpan.Zero)
             Persist(); // save the new deadline before any expiry clears it
@@ -207,12 +217,13 @@ public sealed class TimerController
         return true;
     }
 
-    private void Begin(TimerMode mode, TimeSpan duration)
+    private void Begin(TimerMode mode, TimeSpan duration, ActionSource source, string? device)
     {
         Mode = mode;
         _timer.Start(duration);
         _heartbeat.Start();
         Persist();
+        Log(SessionEventType.Started, source, device, mode: mode, minutes: (int)Math.Round(duration.TotalMinutes));
         SetState(TimerState.Running);
         Tick?.Invoke(Remaining);
     }
@@ -221,8 +232,24 @@ public sealed class TimerController
     {
         _heartbeat.Stop();
         _store.Clear();
+        Log(SessionEventType.Expired, ActionSource.System, action: _settings.Action);
         SetState(TimerState.Expired);
         ShutdownService.Execute(_settings.Action);
+    }
+
+    private void Log(SessionEventType type, ActionSource source, string? device = null,
+        TimerMode? mode = null, int? minutes = null, TimerAction? action = null)
+    {
+        _log.Add(new SessionEvent
+        {
+            Time = DateTimeOffset.Now,
+            Type = type,
+            Source = source,
+            Device = device,
+            Mode = mode,
+            Minutes = minutes,
+            Action = action
+        });
     }
 
     private void Persist()

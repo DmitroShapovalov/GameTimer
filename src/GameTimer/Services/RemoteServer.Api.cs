@@ -61,25 +61,29 @@ public sealed partial class RemoteServer
     {
         app.MapGet("/api/status", () => _ui.InvokeAsync(() => Results.Json(BuildStatus())));
 
-        app.MapPost("/api/timer/start", async (StartRequest? request) =>
+        app.MapPost("/api/timer/start", async (StartRequest? request, HttpContext context) =>
         {
             if (request?.Mode is not TimerMode mode)
                 return Error(StatusCodes.Status400BadRequest, "invalid_request");
 
+            var name = CurrentDevice(context).Name;
             return await _ui.InvokeAsync(() =>
             {
                 if (_timer.IsRunning)
                     return Error(StatusCodes.Status409Conflict, "already_running");
 
                 bool started = mode == TimerMode.Interval
-                    ? _timer.StartInterval(request.Hours, request.Minutes)
-                    : _timer.StartAbsolute(request.Hours, request.Minutes);
+                    ? _timer.StartInterval(request.Hours, request.Minutes, ActionSource.Phone, name)
+                    : _timer.StartAbsolute(request.Hours, request.Minutes, ActionSource.Phone, name);
 
                 return started
                     ? Results.Json(BuildStatus())
                     : Error(StatusCodes.Status400BadRequest, "invalid_time");
             });
         });
+
+        app.MapGet("/api/history", () =>
+            _ui.InvokeAsync(() => Results.Json(_sessionLog.Recent())));
 
         // Dismiss the "app was closed while a timer ran" note (shown after a tamper-style restart)
         app.MapPost("/api/interruption/ack", () => _ui.InvokeAsync(() =>
@@ -89,18 +93,23 @@ public sealed partial class RemoteServer
         }));
 
         // Stop also cancels a pending shutdown (TimerController.Stop)
-        app.MapPost("/api/timer/stop", () => _ui.InvokeAsync(() =>
-            _timer.Stop()
-                ? Results.Json(BuildStatus())
-                : Error(StatusCodes.Status409Conflict, "not_running")));
+        app.MapPost("/api/timer/stop", async (HttpContext context) =>
+        {
+            var name = CurrentDevice(context).Name;
+            return await _ui.InvokeAsync(() =>
+                _timer.Stop(ActionSource.Phone, name)
+                    ? Results.Json(BuildStatus())
+                    : Error(StatusCodes.Status409Conflict, "not_running"));
+        });
 
-        app.MapPost("/api/timer/extend", async (ExtendRequest? request) =>
+        app.MapPost("/api/timer/extend", async (ExtendRequest? request, HttpContext context) =>
         {
             if (request == null || request.Minutes == 0 || Math.Abs(request.Minutes) > MaxMinutes)
                 return Error(StatusCodes.Status400BadRequest, "invalid_minutes");
 
+            var name = CurrentDevice(context).Name;
             return await _ui.InvokeAsync(() =>
-                _timer.Extend(request.Minutes)
+                _timer.Extend(request.Minutes, ActionSource.Phone, name)
                     ? Results.Json(BuildStatus())
                     : Error(StatusCodes.Status409Conflict, "not_running"));
         });

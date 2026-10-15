@@ -11,3 +11,4 @@ installer/Output/
 
 diagnostics.log
 timer-state.json
+sessions.jsonl

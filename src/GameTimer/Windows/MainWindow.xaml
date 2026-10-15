@@ -345,6 +345,40 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
+
+            <!-- TAB: History -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="History24" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TabHistoryText" Text="History"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Margin="16,16,16,0">
+                    <TextBlock x:Name="HistoryEmpty" Text="No events yet" Visibility="Collapsed"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="HistoryList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4" >
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding When}" Width="120"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Who}" Margin="8,0,0,0"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
         </TabControl>
     </Grid>
 </ui:FluentWindow>

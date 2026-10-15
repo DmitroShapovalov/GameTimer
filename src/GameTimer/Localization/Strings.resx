@@ -290,4 +290,43 @@
   <data name="Tamper_Failed" xml:space="preserve">
     <value>Could not change the protection setting.</value>
   </data>
+  <data name="Tab_History" xml:space="preserve">
+    <value>History</value>
+  </data>
+  <data name="History_Empty" xml:space="preserve">
+    <value>No events yet</value>
+  </data>
+  <data name="Ev_Started" xml:space="preserve">
+    <value>Started</value>
+  </data>
+  <data name="Ev_Stopped" xml:space="preserve">
+    <value>Stopped</value>
+  </data>
+  <data name="Ev_Reset" xml:space="preserve">
+    <value>Reset</value>
+  </data>
+  <data name="Ev_Extended_Plus" xml:space="preserve">
+    <value>+{0} min</value>
+  </data>
+  <data name="Ev_Extended_Minus" xml:space="preserve">
+    <value>−{0} min</value>
+  </data>
+  <data name="Ev_Expired" xml:space="preserve">
+    <value>Time up</value>
+  </data>
+  <data name="Ev_Resumed" xml:space="preserve">
+    <value>Resumed after restart</value>
+  </data>
+  <data name="Ev_Closed" xml:space="preserve">
+    <value>App closed</value>
+  </data>
+  <data name="Who_Pc" xml:space="preserve">
+    <value>PC</value>
+  </data>
+  <data name="Who_Phone" xml:space="preserve">
+    <value>phone</value>
+  </data>
+  <data name="Who_System" xml:space="preserve">
+    <value>automatic</value>
+  </data>
 </root>

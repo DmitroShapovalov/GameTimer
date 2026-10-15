@@ -126,6 +126,7 @@ public sealed partial class RemoteServer
         _settingsService.SettingsChanged += OnSettingsChanged;
         _devices.Changed += OnDevicesChanged;
         _timer.InterruptionChanged += OnInterruptionChanged;
+        _sessionLog.Changed += OnHistoryChanged;
         _lastSettingsJson = JsonSerializer.Serialize(BuildSettings(), Json);
     }
 
@@ -138,6 +139,7 @@ public sealed partial class RemoteServer
         _settingsService.SettingsChanged -= OnSettingsChanged;
         _devices.Changed -= OnDevicesChanged;
         _timer.InterruptionChanged -= OnInterruptionChanged;
+        _sessionLog.Changed -= OnHistoryChanged;
     }
 
     private void OnTimerStateChanged(TimerState state)
@@ -180,6 +182,10 @@ public sealed partial class RemoteServer
     // The "app was closed while a timer ran" note appeared or was dismissed
     private void OnInterruptionChanged() =>
         Broadcast(new { type = "interruption", status = BuildStatus() });
+
+    // A new history event was recorded; the phone refetches the list
+    private void OnHistoryChanged() =>
+        Broadcast(new { type = "history" });
 
     // A revoked device loses its open socket immediately
     private void OnDevicesChanged()

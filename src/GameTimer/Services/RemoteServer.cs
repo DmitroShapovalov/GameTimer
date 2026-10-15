@@ -37,6 +37,7 @@ public sealed partial class RemoteServer
     private readonly TimerController _timer;
     private readonly AppSettings _settings;
     private readonly SettingsService _settingsService;
+    private readonly SessionLog _sessionLog;
 
     private WebApplication? _app;
     private PartitionedRateLimiter<string>? _authFailures;
@@ -52,7 +53,7 @@ public sealed partial class RemoteServer
     }
 
     public RemoteServer(DeviceStore devices, PairingService pairing, UiThread ui,
-        TimerController timer, AppSettings settings, SettingsService settingsService)
+        TimerController timer, AppSettings settings, SettingsService settingsService, SessionLog sessionLog)
     {
         _devices = devices;
         _pairing = pairing;
@@ -60,6 +61,7 @@ public sealed partial class RemoteServer
         _timer = timer;
         _settings = settings;
         _settingsService = settingsService;
+        _sessionLog = sessionLog;
     }
 
     public bool IsRunning => _app != null;
@@ -82,7 +84,12 @@ public sealed partial class RemoteServer
                 ContentRootPath = AppContext.BaseDirectory
             });
             builder.Logging.ClearProviders();
-            builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port));
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.ListenAnyIP(port);
+                options.AddServerHeader = false;             // don't advertise the server software
+                options.Limits.MaxRequestBodySize = 64 * 1024; // every real payload is tiny; cap LAN abuse
+            });
 
             // Enums as camelCase strings ("running", "interval", "lock"); numbers are rejected
             builder.Services.ConfigureHttpJsonOptions(options =>
