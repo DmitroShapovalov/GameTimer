@@ -9,6 +9,7 @@ Owner: Dmytro (GitHub: DmitroShapovalov/GameTimer). The app is used at home on t
 | File | What it is |
 |---|---|
 | `CLAUDE.md` | This file: current state, conventions, gotchas. Read first. |
+| `.agent/VISION.md` | **Product north star:** cross-device parental control (hub + pluggable agents), the no-server privacy model, honest per-platform limits, and the phased plan. Read for direction. |
 | `.agent/ROADMAP.md` | Released versions, the **next planned phase**, backlog and known gaps. |
 | `.agent/SPEC.md`, `.agent/PLAN.md` | Original v1.0 spec and plan (historical, RU). Implemented; some details superseded. |
 | `README.md` | Public user-facing docs (EN): features, shortcuts, build, download. |
