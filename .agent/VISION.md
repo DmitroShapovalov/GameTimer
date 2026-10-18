@@ -165,7 +165,7 @@ hub/agent/transport seam, not rewriting them.
 ## 9. Open decisions (to settle before Phase A)
 
 - ~~**Mobile stack**~~ — decided: **Flutter** (see §11).
-- ~~**E2E protocol**~~ — decided: **Noise_KK over libsodium primitives** (see §11, D2).
+- ~~**E2E protocol**~~ — decided: **Noise_IK over libsodium primitives** (see §11, D2).
 - **Relay hosting & cost:** small VPS vs. serverless WebSocket; domain, monitoring, a privacy page.
 - **Name / brand:** "GameTimer" is now too narrow (it's device & app control, not just game time).
   Possible rename — weigh against the churn (`AssemblyName=SystemMonitor`, repo, installer, stores).
@@ -212,11 +212,18 @@ rewriting it in Flutter Desktop (Win32 via FFI) is an option for later, not a go
 - The protocol and crypto must interoperate between **Dart (hub, phone agents)** and **C# (Windows
   agent)** — a constraint on decision D2 (both libsodium and Noise have Dart and .NET implementations).
 
-### D2 — End-to-end protocol: Noise_KK over libsodium primitives (2026-10-18)
+### D2 — End-to-end protocol: Noise_IK over libsodium primitives (2026-10-18, amended)
 
 **Decision.** Every hub ↔ agent session is protected by the **Noise Protocol Framework**, handshake
-pattern **KK** (`Noise_KK_25519_ChaChaPoly_BLAKE2b`): both sides already know each other's static
-public key from pairing. The primitives (X25519, ChaCha20-Poly1305, BLAKE2b) come from **libsodium**
+pattern **IK** (`Noise_IK_25519_ChaChaPoly_BLAKE2b`): the hub (initiator) knows the agent's static
+public key from the pairing QR, and sends its own static key *encrypted* in the first message.
+
+> *Amended during A1:* first chosen as **KK**, changed to **IK**. KK needs the agent to know *before* the
+> first message which parent is calling, so with several parent phones the parent would have to name
+> itself in clear text. IK carries the parent's key encrypted, the agent checks it against its
+> paired-parents list, and pairing uses the same handshake. Same guarantees (mutual authentication,
+> forward secrecy, replay protection); it is the pattern WireGuard uses. Full contract:
+> `docs/protocol.md`. The primitives (X25519, ChaCha20-Poly1305, BLAKE2b) come from **libsodium**
 (Dart `sodium`, .NET `NSec` / `Sodium.Core`). The same encrypted frames travel over the LAN and,
 later, through the relay — the transport only carries opaque bytes.
 
@@ -232,9 +239,10 @@ later, through the relay — the transport only carries opaque bytes.
 **Pairing (replaces the v1 QR flow for the new protocol).**
 - The agent's QR carries its address, a one-time code (2 min, single use, as today) and the agent's
   **static public key**.
-- On first contact the hub sends its own static public key together with the code; the agent stores
-  it (the parent is now a known peer). From then on every connection is a KK handshake — neither side
-  can be impersonated, even by whoever controls the Wi-Fi or the relay.
+- On first contact the hub runs the IK handshake with the code in the encrypted payload; the agent
+  stores the hub's static key (the parent is now a known peer). From then on every connection is an IK
+  handshake — neither side can be impersonated, even by whoever controls the Wi-Fi or the relay.
+- One QR serves both the v1 PWA (browser) and the app (in-app scanner reads the extra key parameter).
 - Revoking a parent device = deleting its public key on the agent (and vice versa).
 
 **Rules.**

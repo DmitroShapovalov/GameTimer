@@ -34,8 +34,8 @@ interop tests in lock-step.
 
 | # | Step | Done when | Status |
 |---|---|---|---|
-| A1 | **Protocol spec** `docs/protocol.md`: framing, message envelope + versioning, capability descriptor, commands / events mapped from today's API, pairing v2 | Owner has read and agreed the contract | ☐ |
-| A2 | **Crypto core**: Noise_KK over libsodium in Dart (`gt_protocol`) and C# (`GameTimer.Protocol`) | Both pass the official Noise test vectors; a Dart ↔ C# handshake + encrypted round-trip passes in CI | ☐ |
+| A1 | **Protocol spec** `docs/protocol.md`: framing, message envelope + versioning, capability descriptor, commands / events mapped from today's API, pairing v2 | Owner has read and agreed the contract | draft ✎ |
+| A2 | **Crypto core**: Noise_IK over libsodium in Dart (`gt_protocol`) and C# (`GameTimer.Protocol`) | Both pass the official Noise test vectors; a Dart ↔ C# handshake + encrypted round-trip passes in CI | ☐ |
 | A3 | **Windows agent endpoint**: new `/v2` WebSocket carrying Noise frames next to the v1 API; agent key pair (DPAPI-protected); pairing v2 QR; capability descriptor; commands routed to `TimerController` | A scripted Dart client pairs, handshakes and starts / stops / extends the timer on the real PC | ☐ |
 | A4 | **Flutter app skeleton**: QR-scan pairing, paired-device list, LAN connect + reconnect, live status screen; EN / RU / NL / UK | On the owner's phone: scan QR → see the live countdown | ☐ |
 | A5 | **Feature parity with the PWA**: start / stop / ±15, settings, schedule editor, history, revoke | Everything the PWA can do works from the app | ☐ |
