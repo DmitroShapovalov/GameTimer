@@ -21,6 +21,32 @@
 
 ---
 
+## Phase A — Parent app (Flutter) + Windows agent over the LAN — ☐ next
+
+**Goal:** a native parent app in Flutter that pairs with and controls the existing Windows app over
+the home network through the new encrypted protocol (`VISION.md` §3, D1, D2). The PWA keeps working
+unchanged alongside it. No relay yet (that is Phase B).
+
+**Repository layout (monorepo):** `src/GameTimer` (Windows agent, C#, as today) · `src/GameTimer.Protocol`
+(C# protocol + Noise) · `packages/gt_protocol` (Dart protocol + Noise) · `app/` (Flutter parent app) ·
+`docs/protocol.md` (the contract). One repo keeps the two protocol implementations and their
+interop tests in lock-step.
+
+| # | Step | Done when | Status |
+|---|---|---|---|
+| A1 | **Protocol spec** `docs/protocol.md`: framing, message envelope + versioning, capability descriptor, commands / events mapped from today's API, pairing v2 | Owner has read and agreed the contract | draft ✎ |
+| A2 | **Crypto core**: Noise_IK over libsodium in Dart (`gt_protocol`) and C# (`GameTimer.Protocol`) | Both pass the official Noise test vectors; a Dart ↔ C# handshake + encrypted round-trip passes in CI | ☐ |
+| A3 | **Windows agent endpoint**: new `/v2` WebSocket carrying Noise frames next to the v1 API; agent key pair (DPAPI-protected); pairing v2 QR; capability descriptor; commands routed to `TimerController` | A scripted Dart client pairs, handshakes and starts / stops / extends the timer on the real PC | ☐ |
+| A4 | **Flutter app skeleton**: QR-scan pairing, paired-device list, LAN connect + reconnect, live status screen; EN / RU / NL / UK | On the owner's phone: scan QR → see the live countdown | ☐ |
+| A5 | **Feature parity with the PWA**: start / stop / ±15, settings, schedule editor, history, revoke | Everything the PWA can do works from the app | ☐ |
+| A6 | **Discovery**: mDNS / DNS-SD announce + browse, so a PC IP change needs no re-pairing | Change the PC's IP → the app reconnects by itself | ☐ |
+| A7 | **Acceptance + release**: Windows v1.7.0; parent app as an Android APK (and iOS via TestFlight when the Apple account exists) | Checklist passes on real devices | ☐ |
+
+Notes:
+- The Windows agent keeps the v1 API so the PWA and existing pairings keep working; v1 can be retired later.
+- The owner reviews the Dart side; the C# side gets plain-language PR descriptions as before.
+- Native code is not needed in Phase A (the parent app uses only standard Flutter plugins: camera / QR, mDNS, secure storage).
+
 ## Phase 1 — Phone remote over home Wi-Fi (released in v1.2.0)
 
 **Goal:** the parent sees the timer and controls it from a phone on the same Wi-Fi. No cloud, no app store: the PC app serves a mobile web UI (PWA) itself.
