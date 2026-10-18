@@ -165,7 +165,7 @@ hub/agent/transport seam, not rewriting them.
 ## 9. Open decisions (to settle before Phase A)
 
 - ~~**Mobile stack**~~ — decided: **Flutter** (see §11).
-- **E2E protocol:** Noise Protocol Framework vs. libsodium `crypto_box` vs. TLS-with-pinning only.
+- ~~**E2E protocol**~~ — decided: **Noise_KK over libsodium primitives** (see §11, D2).
 - **Relay hosting & cost:** small VPS vs. serverless WebSocket; domain, monitoring, a privacy page.
 - **Name / brand:** "GameTimer" is now too narrow (it's device & app control, not just game time).
   Possible rename — weigh against the churn (`AssemblyName=SystemMonitor`, repo, installer, stores).
@@ -211,4 +211,40 @@ rewriting it in Flutter Desktop (Win32 via FFI) is an option for later, not a go
   - tests, and a plain-language description of what each adapter does in every PR touching it.
 - The protocol and crypto must interoperate between **Dart (hub, phone agents)** and **C# (Windows
   agent)** — a constraint on decision D2 (both libsodium and Noise have Dart and .NET implementations).
+
+### D2 — End-to-end protocol: Noise_KK over libsodium primitives (2026-10-18)
+
+**Decision.** Every hub ↔ agent session is protected by the **Noise Protocol Framework**, handshake
+pattern **KK** (`Noise_KK_25519_ChaChaPoly_BLAKE2b`): both sides already know each other's static
+public key from pairing. The primitives (X25519, ChaCha20-Poly1305, BLAKE2b) come from **libsodium**
+(Dart `sodium`, .NET `NSec` / `Sodium.Core`). The same encrypted frames travel over the LAN and,
+later, through the relay — the transport only carries opaque bytes.
+
+**Why.**
+- Pinned TLS is simple on a direct connection but awkward to carry end-to-end *through* a relay
+  (tunnelling a raw TLS stream inside a WebSocket is clumsy in Dart) — it would mean one design for
+  home and another for remote.
+- Bare libsodium boxes would force us to invent our own handshake, which is where real-world crypto
+  goes wrong (replay, forward secrecy, binding keys to the session).
+- Noise is a small, well-analysed spec used by WireGuard and WhatsApp: mutual authentication, forward
+  secrecy and replay protection are designed in, and it is transport-agnostic.
+
+**Pairing (replaces the v1 QR flow for the new protocol).**
+- The agent's QR carries its address, a one-time code (2 min, single use, as today) and the agent's
+  **static public key**.
+- On first contact the hub sends its own static public key together with the code; the agent stores
+  it (the parent is now a known peer). From then on every connection is a KK handshake — neither side
+  can be impersonated, even by whoever controls the Wi-Fi or the relay.
+- Revoking a parent device = deleting its public key on the agent (and vice versa).
+
+**Rules.**
+- Implement the Noise state machine **strictly to the spec** on top of libsodium — no custom
+  constructions. Both implementations (Dart and C#) are checked against the **official Noise test
+  vectors**, and a Dart ↔ C# live handshake runs in CI, so neither side can drift.
+- Private keys never leave the device; stored with the platform's protected storage (DPAPI on Windows,
+  Keychain / Keystore on phones).
+
+**Honest limit (metadata).** The relay — and anyone on the network — can still see *which* devices
+talk, *when*, and *how much* data flows, but not the content. Hiding that too would need Tor-class
+mixing, which is out of scope. The privacy promise states this plainly.
 
