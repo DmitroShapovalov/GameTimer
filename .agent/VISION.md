@@ -140,7 +140,7 @@ be true for remote control, and claiming it would be dishonest.
 ## 7. Roadmap (phases, each gated by a spike for the external walls)
 
 - **Phase A — Generalize the core + parent app over LAN.** Extract hub/agent/transport and the
-  capability protocol from the Windows code; build the parent app (MAUI reuses the C# models) and have
+  capability protocol from the Windows code; build the parent app (Flutter, see §11) and have
   it control the *existing Windows agent* over pinned-TLS/E2E on the LAN. Lowest risk — both sides are
   ours. Delivers a real cross-platform parent app and sets the contract.
 - **Phase B — Zero-knowledge relay + remote + push.** Design the E2E protocol first; the relay is a
@@ -164,7 +164,7 @@ hub/agent/transport seam, not rewriting them.
 
 ## 9. Open decisions (to settle before Phase A)
 
-- **Mobile stack:** .NET MAUI (shares C# with the existing code) vs. Flutter vs. native. Leaning MAUI.
+- ~~**Mobile stack**~~ — decided: **Flutter** (see §11).
 - **E2E protocol:** Noise Protocol Framework vs. libsodium `crypto_box` vs. TLS-with-pinning only.
 - **Relay hosting & cost:** small VPS vs. serverless WebSocket; domain, monitoring, a privacy page.
 - **Name / brand:** "GameTimer" is now too narrow (it's device & app control, not just game time).
@@ -183,3 +183,32 @@ hub/agent/transport seam, not rewriting them.
   on-device agent.
 - "No server" in the literal sense is impossible for remote; "no data on our servers" is both possible
   and the thing worth promising.
+
+## 11. Decisions log
+
+### D1 — Mobile stack: Flutter (2026-10-18)
+
+**Decision.** The parent app and the phone agents (Android, iOS) are written in **Flutter / Dart** — one
+stack for every new client. The existing **Windows agent stays in C#** for now, behind the protocol;
+rewriting it in Flutter Desktop (Win32 via FFI) is an option for later, not a goal.
+
+**Why.**
+- The owner reads and reviews Dart, not C#, Swift or Kotlin. Being able to follow and control the code
+  outweighs reusing the existing C# (which would only be reused by the agent, not reviewed by the owner).
+- One stack across iOS, Android, desktop and web; the most mature cross-platform option for mobile.
+- .NET MAUI does target iOS/Android, but its mobile ecosystem is smaller and less mature; without the C#
+  reuse argument it has no advantage here.
+- Capacitor / React Native were considered: their plugins can reach native APIs, but the hard parts
+  stay native anyway and a WebView/JS app is weaker in the background, which is what an agent needs.
+  Capacitor remains a possible shortcut to wrap the existing PWA, but it would mean two stacks.
+
+**Consequences.**
+- **Native adapters are unavoidable** in the phone agents, whatever the stack: iOS Family Controls needs
+  a Swift app extension (out of process, data shared via App Groups); Android usage / blocking /
+  tamper-resistance is Kotlin behind platform channels. Rules for them:
+  - keep them **thin** — only the OS call; all logic (schedules, budgets, decisions) lives in Dart;
+  - a **narrow, documented contract** to Dart ("block app X", "usage for day D", "lock now");
+  - tests, and a plain-language description of what each adapter does in every PR touching it.
+- The protocol and crypto must interoperate between **Dart (hub, phone agents)** and **C# (Windows
+  agent)** — a constraint on decision D2 (both libsodium and Noise have Dart and .NET implementations).
+
