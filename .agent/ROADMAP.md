@@ -1,5 +1,11 @@
 # GameTimer — Roadmap
 
+> **Product direction.** GameTimer is growing from a Windows game-time limiter into a cross-device,
+> privacy-first parental-control product: one parent app (the hub) controlling pluggable agents on
+> Windows / Android / iOS, with data living only on the family's own devices. The north-star shape,
+> architecture and the honest platform limits are in **`VISION.md`**. Everything below is the
+> Windows-era plan; the shipped Windows app becomes the first *agent module* in the vision.
+
 ## Released
 
 | Version | Highlights |
@@ -10,7 +16,8 @@
 | v1.2.0 | Phone remote over home Wi-Fi (QR pairing, REST + WebSocket, mobile web UI), automatic firewall rule, monotonic clock (system clock changes no longer affect the timer), version in About |
 | v1.3.0 | Tamper resistance: the running timer survives close / kill / reboot / logoff and resumes (or enforces if expired) at launch; "closed at HH:MM" notice on PC and phone; opt-in "Protection from closing" (deny terminate, needs a standard child account) |
 | v1.4.0 | Game-session history (every event with its source) on a History tab on PC and phone; security review (docs/SECURITY.md) with server hardening (no Server header, 64 KB body cap) |
-| v1.5.0 | Daily schedule: per-weekday minute budget and allowed-hours window; automatic mode (starts the day's allowance at launch/unlock, locks when the budget or the window ends, caps manual timers); editable on the PC (Schedule tab, Windows Hello) and the phone; off by default |
+| v1.5.0 | Daily schedule: per-weekday minute budget and allowed-hours window; automatic mode (starts the day's allowance at launch/unlock, locks when the budget or the window ends, caps manual timers); editable on the PC (Schedule tab, Windows Hello) and the phone; off by default. Also: Dutch & Ukrainian added (UI now EN / RU / NL / UK on PC and phone) |
+| v1.6.0 | Tamper-resistant state files: settings / usage / timer-state DPAPI-encrypted per-user, with `.bak` rollback and a "settings tampered" history event (PC + phone) |
 
 ---
 
