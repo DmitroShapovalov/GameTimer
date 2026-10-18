@@ -151,7 +151,7 @@ Draft design:
 Estimate: a larger effort than all of Phase 1; decide after v1.2.0 is released and used.
 
 ## Phase 3 — Native app (only if needed)
-For reliable background push notifications ("time is up", "timer was stopped"). .NET MAUI (shared C# models) or Flutter.
+For reliable background push notifications ("time is up", "timer was stopped"). Superseded by `VISION.md`: the parent app and phone agents are **Flutter** (decision D1).
 
 ---
 
