@@ -119,12 +119,20 @@ public sealed class TimerController
             return;
         }
 
-        // A leftover running state means the app did not exit cleanly through the tray (which stops the
-        // timer after Windows Hello). That is the tamper signal shown to the parent.
-        LastInterruption = saved.LastSeenUtc;
-        InterruptionChanged?.Invoke();
-        // Backdated: the app was closed around when it was last seen
-        _log.Add(new SessionEvent { Time = saved.LastSeenUtc.ToLocalTime(), Type = SessionEventType.Closed, Source = ActionSource.System });
+        if (saved.ClosedForUpdate)
+        {
+            // The parent confirmed closing for an update: not a tamper signal
+            DiagnosticLog.Write("resume: after a confirmed update exit");
+        }
+        else
+        {
+            // A leftover running state means the app did not exit cleanly through the tray (which stops the
+            // timer after Windows Hello). That is the tamper signal shown to the parent.
+            LastInterruption = saved.LastSeenUtc;
+            InterruptionChanged?.Invoke();
+            // Backdated: the app was closed around when it was last seen
+            _log.Add(new SessionEvent { Time = saved.LastSeenUtc.ToLocalTime(), Type = SessionEventType.Closed, Source = ActionSource.System });
+        }
 
         // Same boot → trust the monotonic deadline (clock-change proof). Rebooted → fall back to wall clock.
         var bootNow = DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
@@ -153,6 +161,20 @@ public sealed class TimerController
         SetState(TimerState.Running);
         Tick?.Invoke(Remaining);
         Persist();
+    }
+
+    /// <summary>
+    /// Clean exit for an update or uninstall that the parent confirmed. A running timer keeps running:
+    /// it is saved (flagged) so the new version resumes it — the update's downtime still counts — and
+    /// the next start doesn't report it as an unclean close. Call right before shutting down.
+    /// </summary>
+    public void PrepareForUpdate()
+    {
+        _dispatcher.VerifyAccess();
+        Log(SessionEventType.Updated, ActionSource.Pc);
+        if (!IsRunning) return;
+        _heartbeat.Stop();
+        Persist(closedForUpdate: true);
     }
 
     /// <summary>Clears the "app was closed while running" note once the parent has seen it.</summary>
@@ -385,11 +407,12 @@ public sealed class TimerController
         });
     }
 
-    private void Persist()
+    private void Persist(bool closedForUpdate = false)
     {
         if (Mode is not TimerMode mode) return;
         _store.Save(new PersistedTimer
         {
+            ClosedForUpdate = closedForUpdate,
             Mode = mode,
             DeadlineTick = _timer.DeadlineTick,
             TargetUtc = DateTimeOffset.UtcNow + Remaining,

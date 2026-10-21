@@ -12,10 +12,13 @@ public partial class App : System.Windows.Application
     // "Local\" = per Windows session, so different users on one PC don't block each other
     private const string MutexName = @"Local\SystemMonitor_7F3A2C1E_Instance";
     private const string ShowEventName = @"Local\SystemMonitor_7F3A2C1E_Show";
+    // Set by the installer (setup.iss) to ask the running copy to close for an update / uninstall
+    private const string ExitEventName = @"Local\SystemMonitor_7F3A2C1E_Exit";
 
     // Kept as fields so the GC never releases them while the app runs
     private Mutex? _instanceMutex;
     private EventWaitHandle? _showEvent;
+    private EventWaitHandle? _exitEvent;
 
     private RemoteServer? _remoteServer;
 
@@ -131,6 +134,16 @@ public partial class App : System.Windows.Application
         })
         { IsBackground = true, Name = "SingleInstanceListener" };
         listener.Start();
+
+        // Installer listener: close for an update / uninstall once the parent confirms (MainWindow.ExitForUpdate)
+        _exitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEventName);
+        var exitListener = new Thread(() =>
+        {
+            while (_exitEvent.WaitOne())
+                Dispatcher.BeginInvoke(() => mainWindow.ExitForUpdate());
+        })
+        { IsBackground = true, Name = "UpdateExitListener" };
+        exitListener.Start();
     }
 
     protected override void OnExit(System.Windows.ExitEventArgs e)

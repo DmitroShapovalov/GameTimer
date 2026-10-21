@@ -1,9 +1,14 @@
 name: Build & Release
 
+# Tags (v*) build and publish a GitHub Release. Pull requests and manual runs build the same
+# installer and attach it as a workflow artifact, so it can be tested on a real PC before release
+# (and a broken setup.iss is caught before a tag is pushed).
 on:
   push:
     tags:
       - 'v*'
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,20 +25,33 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Publish
+      - name: Version
+        id: ver
+        shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}" -replace '^v',''
-          dotnet publish src/GameTimer/GameTimer.csproj -c Release -r win-x64 --self-contained -o publish -p:Version=$version
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}" -replace '^v','' }
+          else { $v = "0.0.0-ci.${{ github.run_number }}" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Publish
+        run: dotnet publish src/GameTimer/GameTimer.csproj -c Release -r win-x64 --self-contained -o publish -p:Version=${{ steps.ver.outputs.version }}
 
       - name: Install Inno Setup
         run: choco install innosetup -y
 
       - name: Build Installer
-        run: |
-          $version = "${{ github.ref_name }}" -replace '^v',''
-          iscc installer/setup.iss /DAppVersion=$version
+        run: iscc installer/setup.iss /DAppVersion=${{ steps.ver.outputs.version }}
+
+      - name: Upload installer (PR / manual builds)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameTimerSetup-${{ steps.ver.outputs.version }}
+          path: installer/Output/GameTimerSetup.exe
+          retention-days: 14
 
       - name: Create Release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           files: installer/Output/GameTimerSetup.exe

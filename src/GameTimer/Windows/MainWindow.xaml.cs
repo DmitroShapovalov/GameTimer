@@ -627,6 +627,7 @@ public partial class MainWindow : FluentWindow
             GameTimer.Models.SessionEventType.Resumed => Loc.Get("Ev_Resumed"),
             GameTimer.Models.SessionEventType.Closed => Loc.Get("Ev_Closed"),
             GameTimer.Models.SessionEventType.Tampered => Loc.Get("Ev_Tampered"),
+            GameTimer.Models.SessionEventType.Updated => Loc.Get("Ev_Updated"),
             _ => e.Type.ToString()
         };
         string who = e.Source switch
@@ -1145,19 +1146,48 @@ public partial class MainWindow : FluentWindow
         FocusTimeInput();
     }
 
+    // Exiting needs the parent while the app is enforcing something: a running timer or the daily schedule
+    private bool ExitNeedsAuth => _timer.IsRunning || _settings.ScheduleEnabled;
+
     private async void TrayExit()
     {
-        if (_timer.IsRunning)
-        {
-            if (!await RequireAuth()) return;
-            _timer.Stop();
-        }
+        if (ExitNeedsAuth && !await RequireAuth()) return;
+        if (_timer.IsRunning) _timer.Stop();
+        CloseApp();
+    }
 
+    private bool _updateExitPending;
+
+    /// <summary>
+    /// The installer asked the app to close for an update or uninstall (named event, see App). Same
+    /// gate as the tray exit — a child sending the signal can't close the app without the parent —
+    /// but a running timer is kept: it is saved and the new version resumes it.
+    /// </summary>
+    public async void ExitForUpdate()
+    {
+        if (_updateExitPending) return;
+        _updateExitPending = true;
+        try
+        {
+            BringToFront();
+            if (ExitNeedsAuth && !await RequireAuth("AuthPrompt_Update")) return; // installer times out and offers Retry
+            _timer.PrepareForUpdate();
+            CloseApp();
+        }
+        finally
+        {
+            _updateExitPending = false;
+        }
+    }
+
+    private void CloseApp()
+    {
         HideOverlay();
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
+            _trayIcon = null;
         }
         System.Windows.Application.Current.Shutdown();
     }
@@ -1423,7 +1453,7 @@ public partial class MainWindow : FluentWindow
 
     #region Authentication
 
-    private async Task<bool> RequireAuth()
+    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt")
     {
         try
         {
@@ -1431,7 +1461,7 @@ public partial class MainWindow : FluentWindow
             if (availability == global::Windows.Security.Credentials.UI.UserConsentVerifierAvailability.Available)
             {
                 var result = await global::Windows.Security.Credentials.UI.UserConsentVerifier.RequestVerificationAsync(
-                    Loc.Get("AuthPrompt"));
+                    Loc.Get(promptKey));
                 return result == global::Windows.Security.Credentials.UI.UserConsentVerificationResult.Verified;
             }
         }

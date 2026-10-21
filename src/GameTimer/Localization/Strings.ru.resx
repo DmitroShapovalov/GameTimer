@@ -383,4 +383,10 @@
   <data name="Ev_Tampered" xml:space="preserve">
     <value>Обнаружена подмена настроек — восстановлено</value>
   </data>
+  <data name="Ev_Updated" xml:space="preserve">
+    <value>Закрыто для обновления</value>
+  </data>
+  <data name="AuthPrompt_Update" xml:space="preserve">
+    <value>GameTimer: подтвердите закрытие для обновления</value>
+  </data>
 </root>

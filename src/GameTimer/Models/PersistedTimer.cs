@@ -26,4 +26,10 @@ public sealed class PersistedTimer
 
     /// <summary>Alert points already played, so they are not repeated after a resume.</summary>
     public int[] FiredAlerts { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Saved by a parent-confirmed exit for an update / uninstall: the next start resumes the timer
+    /// without reporting an unclean close.
+    /// </summary>
+    public bool ClosedForUpdate { get; set; }
 }
