@@ -27,9 +27,20 @@ public static class SetupSignals
 
     public static bool SetupIsWaiting()
     {
-        if (!Mutex.TryOpenExisting(SetupWaitingMutex, out var mutex)) return false;
-        mutex.Dispose();
-        return true;
+        try
+        {
+            Mutex.OpenExisting(SetupWaitingMutex).Dispose();
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Created by an elevated Setup ("Run as administrator"): it exists, we just can't open it
+            return true;
+        }
+        catch (WaitHandleCannotBeOpenedException)
+        {
+            return false;
+        }
     }
 }
 
