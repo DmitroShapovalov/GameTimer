@@ -32,4 +32,10 @@ public sealed class PersistedTimer
     /// without reporting an unclean close.
     /// </summary>
     public bool ClosedForUpdate { get; set; }
+
+    /// <summary>Version that wrote this state. An update exit counts as clean only if the next start is a different version.</summary>
+    public string? AppVersion { get; set; }
+
+    /// <summary>A "closed at HH:MM" notice the parent hasn't acknowledged yet, carried across restarts.</summary>
+    public DateTimeOffset? PendingInterruption { get; set; }
 }

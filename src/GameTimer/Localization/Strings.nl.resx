@@ -389,4 +389,7 @@
   <data name="AuthPrompt_Update" xml:space="preserve">
     <value>GameTimer: bevestig het sluiten voor de update</value>
   </data>
+  <data name="AuthPrompt_Uninstall" xml:space="preserve">
+    <value>GameTimer: bevestig het sluiten om te verwijderen</value>
+  </data>
 </root>

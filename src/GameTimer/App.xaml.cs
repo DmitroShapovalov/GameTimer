@@ -9,16 +9,14 @@ namespace GameTimer;
 
 public partial class App : System.Windows.Application
 {
-    // "Local\" = per Windows session, so different users on one PC don't block each other
-    private const string MutexName = @"Local\SystemMonitor_7F3A2C1E_Instance";
-    private const string ShowEventName = @"Local\SystemMonitor_7F3A2C1E_Show";
-    // Set by the installer (setup.iss) to ask the running copy to close for an update / uninstall
-    private const string ExitEventName = @"Local\SystemMonitor_7F3A2C1E_Exit";
+    // Names are shared with the installer: see SetupSignals ("Local\" = per Windows session)
+    private const string MutexName = SetupSignals.InstanceMutex;
+    private const string ShowEventName = SetupSignals.ShowEvent;
 
     // Kept as fields so the GC never releases them while the app runs
     private Mutex? _instanceMutex;
     private EventWaitHandle? _showEvent;
-    private EventWaitHandle? _exitEvent;
+    private readonly List<EventWaitHandle> _setupEvents = new();
 
     private RemoteServer? _remoteServer;
 
@@ -135,15 +133,31 @@ public partial class App : System.Windows.Application
         { IsBackground = true, Name = "SingleInstanceListener" };
         listener.Start();
 
-        // Installer listener: close for an update / uninstall once the parent confirms (MainWindow.ExitForUpdate)
-        _exitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEventName);
-        var exitListener = new Thread(() =>
+        // Installer listeners: close for an update / uninstall once the parent confirms (MainWindow.ExitForSetup)
+        ListenForSetup(SetupSignals.UpdateEvent, () => mainWindow.ExitForSetup(uninstall: false));
+        ListenForSetup(SetupSignals.UninstallEvent, () => mainWindow.ExitForSetup(uninstall: true));
+    }
+
+    private void ListenForSetup(string eventName, Action onSignal)
+    {
+        try
         {
-            while (_exitEvent.WaitOne())
-                Dispatcher.BeginInvoke(() => mainWindow.ExitForUpdate());
-        })
-        { IsBackground = true, Name = "UpdateExitListener" };
-        exitListener.Start();
+            // Create-or-open. If something else squatted the name (other object type, hostile DACL) this
+            // throws: then updates fall back to "exit from the tray" — never a crash.
+            var signal = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
+            _setupEvents.Add(signal);
+            var thread = new Thread(() =>
+            {
+                while (signal.WaitOne())
+                    Dispatcher.BeginInvoke(onSignal);
+            })
+            { IsBackground = true, Name = "SetupListener" };
+            thread.Start();
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write($"setup listener {eventName} unavailable: {ex.Message}");
+        }
     }
 
     protected override void OnExit(System.Windows.ExitEventArgs e)
@@ -159,11 +173,9 @@ public partial class App : System.Windows.Application
             DiagnosticLog.Write("server stop on exit failed: " + ex);
         }
 
-        if (_instanceMutex != null)
-        {
-            _instanceMutex.ReleaseMutex();
-            _instanceMutex.Dispose();
-        }
+        // The instance mutex is deliberately NOT released here: Windows releases it when the process is
+        // torn down, together with unmapping the exe. Setup waits for the mutex to disappear before
+        // replacing files, so releasing it early would let Setup hit a still-locked exe ("file in use").
         base.OnExit(e);
     }
 }

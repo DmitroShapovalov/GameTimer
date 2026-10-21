@@ -173,11 +173,7 @@ public partial class MainWindow : FluentWindow
     }
 
     // From <Version> (CI passes the tag: -p:Version=1.2.0); drop the "+commit" suffix the SDK appends
-    private static string AppVersion =>
-        (typeof(MainWindow).Assembly
-             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
-             .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute)?
-        .InformationalVersion.Split('+')[0] ?? "?";
+    private static string AppVersion => AppInfo.Version;
 
     private void RefreshAlertsList()
     {
@@ -1156,27 +1152,44 @@ public partial class MainWindow : FluentWindow
         CloseApp();
     }
 
-    private bool _updateExitPending;
+    private bool _setupExitPending;
 
     /// <summary>
-    /// The installer asked the app to close for an update or uninstall (named event, see App). Same
-    /// gate as the tray exit — a child sending the signal can't close the app without the parent —
-    /// but a running timer is kept: it is saved and the new version resumes it.
+    /// The installer or uninstaller asked the app to close (named events, see App / SetupSignals). Same
+    /// gate as the tray exit — a child sending the signal can't close the app without the parent.
+    /// Update: a running timer is kept, saved and resumed by the new version.
+    /// Uninstall: a running timer is stopped and its saved state cleared, so a later reinstall doesn't
+    /// start with an "expired" timer and lock the PC.
     /// </summary>
-    public async void ExitForUpdate()
+    public async void ExitForSetup(bool uninstall)
     {
-        if (_updateExitPending) return;
-        _updateExitPending = true;
+        if (_setupExitPending) return;
+        _setupExitPending = true;
         try
         {
             BringToFront();
-            if (ExitNeedsAuth && !await RequireAuth("AuthPrompt_Update")) return; // installer times out and offers Retry
-            _timer.PrepareForUpdate();
+            bool asked = ExitNeedsAuth;
+            if (asked && !await RequireAuth(uninstall ? "AuthPrompt_Uninstall" : "AuthPrompt_Update"))
+                return; // Setup offers Retry
+            if (!SetupSignals.SetupIsWaiting())
+            {
+                // Setup gave up while the prompt was open, or the signal didn't come from Setup at all
+                DiagnosticLog.Write("setup exit ignored: no installer is waiting");
+                return;
+            }
+            if (uninstall)
+            {
+                if (_timer.IsRunning) _timer.Stop();
+            }
+            else
+            {
+                _timer.PrepareForUpdate(parentConfirmed: asked);
+            }
             CloseApp();
         }
         finally
         {
-            _updateExitPending = false;
+            _setupExitPending = false;
         }
     }
 
