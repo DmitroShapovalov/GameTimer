@@ -21,6 +21,12 @@ A game time limiter for Windows — designed for parents who want to manage thei
 
 Download the latest installer from the [Releases](../../releases/latest) page.
 
+**Updating.** Just run the new installer while GameTimer is running. Setup asks the app to close; if a
+timer is running or the daily schedule is on, the app first asks for Windows Hello (so a child can't
+use this to close it). A running timer keeps counting: after the update the new version starts again
+by itself and continues where it was. The history shows "Closed for update". (Updating *from* v1.6.0
+or older: exit GameTimer from its tray icon first — those versions don't know this signal yet.)
+
 ## Building from source
 
 ### Prerequisites

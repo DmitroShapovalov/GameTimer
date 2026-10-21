@@ -173,11 +173,7 @@ public partial class MainWindow : FluentWindow
     }
 
     // From <Version> (CI passes the tag: -p:Version=1.2.0); drop the "+commit" suffix the SDK appends
-    private static string AppVersion =>
-        (typeof(MainWindow).Assembly
-             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
-             .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute)?
-        .InformationalVersion.Split('+')[0] ?? "?";
+    private static string AppVersion => AppInfo.Version;
 
     private void RefreshAlertsList()
     {
@@ -627,6 +623,7 @@ public partial class MainWindow : FluentWindow
             GameTimer.Models.SessionEventType.Resumed => Loc.Get("Ev_Resumed"),
             GameTimer.Models.SessionEventType.Closed => Loc.Get("Ev_Closed"),
             GameTimer.Models.SessionEventType.Tampered => Loc.Get("Ev_Tampered"),
+            GameTimer.Models.SessionEventType.Updated => Loc.Get("Ev_Updated"),
             _ => e.Type.ToString()
         };
         string who = e.Source switch
@@ -1145,19 +1142,65 @@ public partial class MainWindow : FluentWindow
         FocusTimeInput();
     }
 
+    // Exiting needs the parent while the app is enforcing something: a running timer or the daily schedule
+    private bool ExitNeedsAuth => _timer.IsRunning || _settings.ScheduleEnabled;
+
     private async void TrayExit()
     {
-        if (_timer.IsRunning)
-        {
-            if (!await RequireAuth()) return;
-            _timer.Stop();
-        }
+        if (ExitNeedsAuth && !await RequireAuth()) return;
+        if (_timer.IsRunning) _timer.Stop();
+        CloseApp();
+    }
 
+    private bool _setupExitPending;
+
+    /// <summary>
+    /// The installer or uninstaller asked the app to close (named events, see App / SetupSignals). Same
+    /// gate as the tray exit — a child sending the signal can't close the app without the parent.
+    /// Update: a running timer is kept, saved and resumed by the new version.
+    /// Uninstall: a running timer is stopped and its saved state cleared, so a later reinstall doesn't
+    /// start with an "expired" timer and lock the PC.
+    /// </summary>
+    public async void ExitForSetup(bool uninstall)
+    {
+        if (_setupExitPending) return;
+        _setupExitPending = true;
+        try
+        {
+            BringToFront();
+            bool asked = ExitNeedsAuth;
+            if (asked && !await RequireAuth(uninstall ? "AuthPrompt_Uninstall" : "AuthPrompt_Update"))
+                return; // Setup offers Retry
+            if (!SetupSignals.SetupIsWaiting())
+            {
+                // Setup gave up while the prompt was open, or the signal didn't come from Setup at all
+                DiagnosticLog.Write("setup exit ignored: no installer is waiting");
+                return;
+            }
+            if (uninstall)
+            {
+                if (_timer.IsRunning) _timer.Stop();
+            }
+            else
+            {
+                _timer.PrepareForUpdate(parentConfirmed: asked);
+            }
+            CloseApp();
+        }
+        finally
+        {
+            _setupExitPending = false;
+        }
+    }
+
+    private void CloseApp()
+    {
         HideOverlay();
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
+            _trayIcon = null;
         }
         System.Windows.Application.Current.Shutdown();
     }
@@ -1423,7 +1466,7 @@ public partial class MainWindow : FluentWindow
 
     #region Authentication
 
-    private async Task<bool> RequireAuth()
+    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt")
     {
         try
         {
@@ -1431,7 +1474,7 @@ public partial class MainWindow : FluentWindow
             if (availability == global::Windows.Security.Credentials.UI.UserConsentVerifierAvailability.Available)
             {
                 var result = await global::Windows.Security.Credentials.UI.UserConsentVerifier.RequestVerificationAsync(
-                    Loc.Get("AuthPrompt"));
+                    Loc.Get(promptKey));
                 return result == global::Windows.Security.Credentials.UI.UserConsentVerificationResult.Verified;
             }
         }

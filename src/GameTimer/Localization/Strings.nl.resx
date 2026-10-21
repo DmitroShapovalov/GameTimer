@@ -383,4 +383,13 @@
   <data name="Ev_Tampered" xml:space="preserve">
     <value>Instellingen gemanipuleerd — hersteld</value>
   </data>
+  <data name="Ev_Updated" xml:space="preserve">
+    <value>Gesloten voor update</value>
+  </data>
+  <data name="AuthPrompt_Update" xml:space="preserve">
+    <value>GameTimer: bevestig het sluiten voor de update</value>
+  </data>
+  <data name="AuthPrompt_Uninstall" xml:space="preserve">
+    <value>GameTimer: bevestig het sluiten om te verwijderen</value>
+  </data>
 </root>
