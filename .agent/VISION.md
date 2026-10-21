@@ -141,7 +141,7 @@ be true for remote control, and claiming it would be dishonest.
 ## 7. Roadmap (phases, each gated by a spike for the external walls)
 
 - **Phase A — Generalize the core + parent app over LAN.** Extract hub/agent/transport and the
-  capability protocol from the Windows code; build the parent app (Flutter, see §11) and have
+  capability protocol from the Windows code; build the parent app (Android first, native UI on a Kotlin Multiplatform core — D7) and have
   it control the *existing Windows agent* over pinned-TLS/E2E on the LAN. Lowest risk — both sides are
   ours. Delivers a real cross-platform parent app and sets the contract.
 - **Phase B — Zero-knowledge relay + remote + push.** Design the E2E protocol first; the relay is a
@@ -165,7 +165,7 @@ hub/agent/transport seam, not rewriting them.
 
 ## 9. Open decisions (to settle before Phase A)
 
-- ~~**Mobile stack**~~ — decided: **Flutter** (see §11).
+- ~~**Mobile stack**~~ — decided: **native apps on a Kotlin Multiplatform core** (D7, replaces D1).
 - ~~**E2E protocol**~~ — decided: **Noise_IK over libsodium primitives** (see §11, D2).
 - **Relay hosting & cost:** small VPS vs. serverless WebSocket; domain, monitoring, a privacy page.
 - **Name / brand:** "GameTimer" is now too narrow (it's device & app control, not just game time).
@@ -187,7 +187,10 @@ hub/agent/transport seam, not rewriting them.
 
 ## 11. Decisions log
 
-### D1 — Mobile stack: Flutter (2026-10-18)
+### D1 — Mobile stack: Flutter (2026-10-18) — *superseded by D7*
+
+> Kept for the record. Replaced on 2026-10-21: its main premise (the owner reviews Dart line by line)
+> turned out not to hold — see D7.
 
 **Decision.** The parent app and the phone agents (Android, iOS) are written in **Flutter / Dart** — one
 stack for every new client. The existing **Windows agent stays in C#** for now, behind the protocol;
@@ -227,12 +230,12 @@ public key from the pairing QR, and sends its own static key *encrypted* in the 
 > sensitive and the agent acts only after the parent's first encrypted message (the `ready` rule). It is
 > the pattern WireGuard uses. Pairing uses the PSK variant `Noise_IKpsk1` with the one-time secret from
 > the QR. Full contract: `docs/protocol.md` (reviewed independently twice before approval). The primitives (X25519, ChaCha20-Poly1305, BLAKE2b) come from **libsodium**
-(Dart `sodium`, .NET `NSec` / `Sodium.Core`). The same encrypted frames travel over the LAN and,
+(Kotlin Multiplatform libsodium bindings on the phones, .NET `NSec` / `Sodium.Core` on Windows; see D7). The same encrypted frames travel over the LAN and,
 later, through the relay — the transport only carries opaque bytes.
 
 **Why.**
 - Pinned TLS is simple on a direct connection but awkward to carry end-to-end *through* a relay
-  (tunnelling a raw TLS stream inside a WebSocket is clumsy in Dart) — it would mean one design for
+  (tunnelling a raw TLS stream inside a WebSocket is clumsy on mobile stacks) — it would mean one design for
   home and another for remote.
 - Bare libsodium boxes would force us to invent our own handshake, which is where real-world crypto
   goes wrong (replay, forward secrecy, binding keys to the session).
@@ -251,8 +254,8 @@ later, through the relay — the transport only carries opaque bytes.
 
 **Rules.**
 - Implement the Noise state machine **strictly to the spec** on top of libsodium — no custom
-  constructions. Both implementations (Dart and C#) are checked against **published Noise test
-  vectors** (cacophony; snow as cross-check), and a Dart ↔ C# live handshake runs in CI, so neither
+  constructions. Both implementations (Kotlin and C#) are checked against **published Noise test
+  vectors** (cacophony; snow as cross-check), and a Kotlin ↔ C# live handshake runs in CI, so neither
   side can drift.
 - Private keys never leave the device; stored with the platform's protected storage (DPAPI on Windows,
   Keychain / Keystore on phones).
@@ -290,4 +293,42 @@ which needs an in-app parent PIN and/or the agent as a Windows service.
 
 **Lost phone (related, low priority).** The parent app asks for the phone's biometrics / PIN only
 before admin actions and if it wasn't unlocked for 14 days; daily controls don't ask every time.
+
+### D7 — Mobile stack: native apps on a Kotlin Multiplatform core (2026-10-21, replaces D1)
+
+**Decision.**
+- Phone apps are **native**: Android in **Kotlin + Jetpack Compose**, iOS in **Swift + SwiftUI**.
+- Their shared, non-UI core is **Kotlin Multiplatform** (`shared/`): protocol v2 messages, Noise IK /
+  IKpsk1 on libsodium, models, schedule and policy logic, the transport client. One implementation,
+  compiled to an Android library and an iOS framework.
+- Agent OS integration is native with no bridge layer: Swift app extensions for Family Controls on
+  iOS, Kotlin services on Android.
+- The Windows agent stays in C#.
+
+**Why.**
+- D1 rested on the owner reading Dart. In practice the owner validates **behaviour**, not code line by
+  line, in any language — so "one language I can read" is no longer the deciding factor; product
+  quality and maintenance are.
+- The phone agents are native anyway. A native app removes the framework ↔ OS bridge (platform
+  channels), so there are fewer moving parts and the best background behaviour, which an agent needs.
+- KMP instead of two fully separate native apps: the logic and the crypto are written **once** for both
+  phones, and the protocol exists in **two** languages (Kotlin, C#) instead of three. KMP is stable
+  (since late 2023) and used in large production apps.
+
+**Honest notes.**
+- Store review depends on *what* the app does (Apple's Family Controls entitlement, Google's
+  Accessibility / device-policy rules), not on the framework — native is not a shortcut there.
+- The UI is written twice (Compose, SwiftUI). Accepted; Android comes first.
+- Kotlin/Native on iOS has some friction (build times, Swift interop through generated headers).
+  Mitigation: keep the shared API small and plain.
+- iOS builds need macOS (a CI runner) and an Apple developer account.
+
+**How the code is validated.** The owner tests on real devices and accepts each step. CI enforces the
+Noise test vectors and a live Kotlin ↔ C# interop test. Security-relevant changes get an independent
+reviewer agent, as done for the protocol. Every PR has a plain-language description.
+
+**Consequences.**
+- Phase A builds the **Android** parent app first; the iOS app follows on the same `shared` core.
+- D2's Kotlin side uses KMP libsodium bindings (e.g. `multiplatform-crypto-libsodium-bindings`).
+  A2 starts by confirming they cover X25519, ChaCha20-Poly1305 (IETF) and BLAKE2b on Android and iOS.
 

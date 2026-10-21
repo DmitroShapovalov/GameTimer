@@ -1,8 +1,8 @@
 # GameTimer protocol v2 (hub ↔ agent)
 
-> Status: **draft 3 for approval (Phase A, step A1).** The contract every module speaks: the Flutter
+> Status: **draft 3 for approval (Phase A, step A1).** The contract every module speaks: the native
 > parent app (the *hub*), the Windows app (the first *agent*), and later the Android / iOS / network
-> agents. Background and decisions: `.agent/VISION.md` (§3 architecture, decisions D1–D6).
+> agents. Background and decisions: `.agent/VISION.md` (§3 architecture, decisions D2–D7).
 > Drafts 2 and 3 address two rounds of independent review — see §13.
 
 The v1 API (`/api/*`, `/ws`, bearer tokens, used by the PWA) stays unchanged next to v2.
@@ -16,7 +16,7 @@ recommended app behaviour that the other side cannot check.
   can do (§6) and the hub shows only those controls.
 - **End-to-end security on every path.** The same encrypted messages travel over the home network
   today and through a relay later (§10). Whoever carries the bytes can neither read nor forge them.
-- **Readable.** Messages are small JSON documents, easy to review in Dart and C#.
+- **Readable.** Messages are small JSON documents, easy to review in Kotlin, Swift and C#.
 
 ## 2. Layers
 
@@ -123,7 +123,7 @@ protocol error.
 - Each agent install and each hub install has one **static X25519 key pair**, generated on first
   run with a CSPRNG. Private keys never leave the device.
   - Windows agent: in `ProtectedStore` (DPAPI, per-user). See the assumption in §11.
-  - Phones: Android Keystore / iOS Keychain (via `flutter_secure_storage`), stored **device-only**:
+  - Phones: Android Keystore / iOS Keychain, stored **device-only**:
     not synced and excluded from backups (Keychain `…ThisDeviceOnly`, non-exportable Keystore key),
     so one hub key never ends up on two devices.
 - **Ids** (not secret, used in the UI, lists and logs):
@@ -153,13 +153,13 @@ protocol error.
 
 ### 4.6 Implementations and tests
 
-- Dart: `packages/gt_protocol`. C#: `src/GameTimer.Protocol`. Both implement the Noise state machine
+- Kotlin Multiplatform: `shared/` (Android and iOS). C#: `src/GameTimer.Protocol`. Both implement the Noise state machine
   strictly per the spec (rev 34) on libsodium primitives — no custom constructions.
 - Both **must** pass published test vectors for both protocol names (the *cacophony* vector set;
   *snow* as a cross-check). Whether a published set covers `IKpsk1` with 25519 / ChaChaPoly / BLAKE2b
   is checked first thing in A2; if none does, vectors are generated with an independent
   implementation (e.g. `snow`) and committed to the repo.
-- CI runs a **live Dart ↔ C# test**: pairing, IK handshake with `ready`, an encrypted request/response
+- CI runs a **live Kotlin ↔ C# test**: pairing, IK handshake with `ready`, an encrypted request/response
   round-trip, and a replayed msg 1 that never turns into a session.
 
 ## 5. Message envelope (inside Noise)
