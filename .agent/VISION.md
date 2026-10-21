@@ -130,8 +130,9 @@ be true for remote control, and claiming it would be dishonest.
   Never on the relay, never with us. No telemetry.
 - **In transit:** E2E encrypted + authenticated end to end; the relay and the Wi-Fi both see only
   ciphertext.
-- **Keys:** derived from the pairing secret carried by the QR, shown once, device-to-device. Tokens
-  stored hashed, as today.
+- **Keys:** every hub and agent has its own static key pair; the pairing QR carries the agent's
+  public key and a one-time secret, and the parent's key is learned during a pairing the PC owner
+  confirms. Private keys never leave the device. (v1 PWA tokens stay stored hashed, as today.)
 - **Local tamper:** the same stance already shipped on Windows (DPAPI-protected state, rollback,
   tamper event) generalizes per platform (Android Device Owner, iOS Family Sharing child).
 - **Transparency / legal:** parental monitoring must be visible, not hidden (store rules; and consent
@@ -221,9 +222,11 @@ public key from the pairing QR, and sends its own static key *encrypted* in the 
 > *Amended during A1:* first chosen as **KK**, changed to **IK**. KK needs the agent to know *before* the
 > first message which parent is calling, so with several parent phones the parent would have to name
 > itself in clear text. IK carries the parent's key encrypted, the agent checks it against its
-> paired-parents list, and pairing uses the same handshake. Same guarantees (mutual authentication,
-> forward secrecy, replay protection); it is the pattern WireGuard uses. Full contract:
-> `docs/protocol.md`. The primitives (X25519, ChaCha20-Poly1305, BLAKE2b) come from **libsodium**
+> paired-parents list. Session guarantees: mutual authentication and forward secrecy for everything
+> after the handshake. The first handshake message itself can be replayed, so it carries nothing
+> sensitive and the agent acts only after the parent's first encrypted message (the `ready` rule). It is
+> the pattern WireGuard uses. Pairing uses the PSK variant `Noise_IKpsk1` with the one-time secret from
+> the QR. Full contract: `docs/protocol.md` (reviewed independently twice before approval). The primitives (X25519, ChaCha20-Poly1305, BLAKE2b) come from **libsodium**
 (Dart `sodium`, .NET `NSec` / `Sodium.Core`). The same encrypted frames travel over the LAN and,
 later, through the relay — the transport only carries opaque bytes.
 
@@ -233,26 +236,58 @@ later, through the relay — the transport only carries opaque bytes.
   home and another for remote.
 - Bare libsodium boxes would force us to invent our own handshake, which is where real-world crypto
   goes wrong (replay, forward secrecy, binding keys to the session).
-- Noise is a small, well-analysed spec used by WireGuard and WhatsApp: mutual authentication, forward
-  secrecy and replay protection are designed in, and it is transport-agnostic.
+- Noise is a small, well-analysed spec used by WireGuard and WhatsApp: mutual authentication and
+  forward secrecy are designed in, its limits are documented per message, and it is transport-agnostic.
 
 **Pairing (replaces the v1 QR flow for the new protocol).**
-- The agent's QR carries its address, a one-time code (2 min, single use, as today) and the agent's
-  **static public key**.
-- On first contact the hub runs the IK handshake with the code in the encrypted payload; the agent
-  stores the hub's static key (the parent is now a known peer). From then on every connection is an IK
-  handshake — neither side can be impersonated, even by whoever controls the Wi-Fi or the relay.
-- One QR serves both the v1 PWA (browser) and the app (in-app scanner reads the extra key parameter).
+- One QR serves both: the v1 PWA code in the URL, and in the URL *fragment* (never sent to a server)
+  the agent's **static public key** and a separate 32-byte one-time secret.
+- The app runs `Noise_IKpsk1` with that secret; the phone shows a 6-digit code derived from the
+  handshake, the PC owner **types it in** and confirms with Windows Hello (D4). Only then does the
+  agent store the parent's key. If a second phone uses the same QR, the pairing is cancelled.
+- From then on every connection is an IK handshake — neither side can be impersonated, even by
+  whoever controls the Wi-Fi or the relay.
 - Revoking a parent device = deleting its public key on the agent (and vice versa).
 
 **Rules.**
 - Implement the Noise state machine **strictly to the spec** on top of libsodium — no custom
-  constructions. Both implementations (Dart and C#) are checked against the **official Noise test
-  vectors**, and a Dart ↔ C# live handshake runs in CI, so neither side can drift.
+  constructions. Both implementations (Dart and C#) are checked against **published Noise test
+  vectors** (cacophony; snow as cross-check), and a Dart ↔ C# live handshake runs in CI, so neither
+  side can drift.
 - Private keys never leave the device; stored with the platform's protected storage (DPAPI on Windows,
   Keychain / Keystore on phones).
 
 **Honest limit (metadata).** The relay — and anyone on the network — can still see *which* devices
 talk, *when*, and *how much* data flows, but not the content. Hiding that too would need Tor-class
 mixing, which is out of scope. The privacy promise states this plainly.
+
+### D3 — Parent roles (2026-10-18)
+
+One **admin** by default: the first phone paired to a PC. An admin can make another parent admin; the
+last admin can't be removed from a phone. Other parents (**parent** role) have all daily controls but
+can't remove other parents or change roles. The PC owner (Windows Hello) can always change roles and
+remove anyone, including a lost admin phone. Details: `docs/protocol.md` §8.1.
+
+### D4 — Pairing confirmed on the PC (2026-10-18)
+
+A new phone is paired only after the PC owner **types in** the 6-digit code shown on that phone and
+confirms with Windows Hello. Typing, not glancing, so a child who photographed the QR can't slip their
+phone in. Other parents are notified of every new device.
+
+### D5 — Rotating identifiers, per parent (2026-10-18)
+
+Nothing on the network carries a stable PC identifier: mDNS discovery tags and (Phase B) relay routing
+tokens rotate daily and are derived from a secret each parent phone shares with the PC (one per
+phone, so revoking one phone never disturbs the others). Service and host names in mDNS are random.
+
+### D6 — Windows agent runs in the parent's account (2026-10-18)
+
+Design for the common home set-up, and the owner's: the child uses the parent's Windows account, so
+Windows Hello verifies the parent. Accepted residual risk: anyone at the unlocked session can run code
+as that user and read DPAPI-protected keys and state — the same ceiling as "Protection from closing".
+Known gap for later: a separate standard child account (there Windows Hello would verify the child),
+which needs an in-app parent PIN and/or the agent as a Windows service.
+
+**Lost phone (related, low priority).** The parent app asks for the phone's biometrics / PIN only
+before admin actions and if it wasn't unlocked for 14 days; daily controls don't ask every time.
 
