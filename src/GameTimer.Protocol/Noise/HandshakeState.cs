@@ -22,6 +22,7 @@ public sealed class HandshakeState
     private byte[]? _re;
     private int _messageIndex;
     private bool _failed;
+    private bool _split;
 
     /// <param name="pattern">IK for sessions, IKpsk1 for pairing.</param>
     /// <param name="initiator">True for the hub, false for the agent.</param>
@@ -29,9 +30,16 @@ public sealed class HandshakeState
     /// <param name="localStatic">This side's static key pair.</param>
     /// <param name="remoteStatic">Initiator: the agent's pinned public key (required). Responder: must be null — it is learned from message 1.</param>
     /// <param name="psk">32-byte pairing secret for PSK patterns; null otherwise.</param>
-    /// <param name="ephemeralForTesting">Fixed ephemeral key, for test vectors only. Never set in production.</param>
     public HandshakeState(NoisePattern pattern, bool initiator, ReadOnlySpan<byte> prologue, KeyPair localStatic,
-        byte[]? remoteStatic = null, byte[]? psk = null, KeyPair? ephemeralForTesting = null)
+        byte[]? remoteStatic = null, byte[]? psk = null)
+        : this(pattern, initiator, prologue, localStatic, remoteStatic, psk, ephemeralForTesting: null)
+    {
+    }
+
+    /// <param name="ephemeralForTesting">Fixed ephemeral key, for test vectors only. Internal on purpose:
+    /// a reused ephemeral key reuses the message-1 keystream across sessions.</param>
+    internal HandshakeState(NoisePattern pattern, bool initiator, ReadOnlySpan<byte> prologue, KeyPair localStatic,
+        byte[]? remoteStatic, byte[]? psk, KeyPair? ephemeralForTesting)
     {
         _pattern = HandshakePattern.For(pattern);
         _initiator = initiator;
@@ -62,7 +70,7 @@ public sealed class HandshakeState
         _ss = new SymmetricState(HandshakePattern.ProtocolName(pattern));
         _ss.MixHash(prologue);
         // Pre-message "<- s": the responder's static public key
-        _ss.MixHash(initiator ? _rs! : _s.PublicKey);
+        _ss.MixHash(initiator ? _rs! : _s.PublicKeyRef);
     }
 
     public bool IsHandshakeComplete => _messageIndex == _pattern.Messages.Length;
@@ -91,12 +99,12 @@ public sealed class HandshakeState
                 {
                     case Token.E:
                         _e = _fixedEphemeral ?? KeyPair.Generate();
-                        output.Write(_e.PublicKey);
-                        _ss.MixHash(_e.PublicKey);
-                        if (_pattern.IsPsk) _ss.MixKey(_e.PublicKey);
+                        output.Write(_e.PublicKeyRef);
+                        _ss.MixHash(_e.PublicKeyRef);
+                        if (_pattern.IsPsk) _ss.MixKey(_e.PublicKeyRef);
                         break;
                     case Token.S:
-                        output.Write(_ss.EncryptAndHash(_s.PublicKey));
+                        output.Write(_ss.EncryptAndHash(_s.PublicKeyRef));
                         break;
                     case Token.Psk:
                         _ss.MixKeyAndHash(_psk!);
@@ -159,12 +167,17 @@ public sealed class HandshakeState
 
     /// <summary>
     /// After the handshake: (send, receive) for this side. The initiator sends with the first Noise
-    /// CipherState, the responder with the second.
+    /// CipherState, the responder with the second. Allowed once: a second pair would restart the
+    /// nonces at 0 under the same keys.
     /// </summary>
     public (CipherState Send, CipherState Receive) Split()
     {
         if (_failed || !IsHandshakeComplete) throw new InvalidOperationException("handshake not complete");
+        if (_split) throw new InvalidOperationException("Split already called");
+        _split = true;
         var (c1, c2) = _ss.Split();
+        if (_fixedEphemeral == null) _e?.Dispose(); // the ephemeral key is not needed any more
+        _e = null;
         return _initiator ? (c1, c2) : (c2, c1);
     }
 
@@ -173,10 +186,10 @@ public sealed class HandshakeState
     {
         byte[] shared = token switch
         {
-            Token.EE => Primitives.Dh(_e!.PrivateKey, _re!),
-            Token.ES => _initiator ? Primitives.Dh(_e!.PrivateKey, _rs!) : Primitives.Dh(_s.PrivateKey, _re!),
-            Token.SE => _initiator ? Primitives.Dh(_s.PrivateKey, _re!) : Primitives.Dh(_e!.PrivateKey, _rs!),
-            Token.SS => Primitives.Dh(_s.PrivateKey, _rs!),
+            Token.EE => Primitives.Dh(_e!.PrivateKeyRef, _re!),
+            Token.ES => _initiator ? Primitives.Dh(_e!.PrivateKeyRef, _rs!) : Primitives.Dh(_s.PrivateKeyRef, _re!),
+            Token.SE => _initiator ? Primitives.Dh(_s.PrivateKeyRef, _re!) : Primitives.Dh(_e!.PrivateKeyRef, _rs!),
+            Token.SS => Primitives.Dh(_s.PrivateKeyRef, _rs!),
             _ => throw new InvalidOperationException(token.ToString()),
         };
         _ss.MixKey(shared);

@@ -13,17 +13,27 @@ package com.gametimer.protocol.noise
  * @param localStatic this side's static key pair.
  * @param remoteStatic initiator: the agent's pinned public key (required). Responder: must be null.
  * @param psk 32-byte pairing secret for PSK patterns; null otherwise.
- * @param ephemeralForTesting fixed ephemeral key, for test vectors only. Never set in production.
  */
-public class HandshakeState(
+public class HandshakeState internal constructor(
     private val pattern: NoisePattern,
     private val initiator: Boolean,
     prologue: ByteArray,
     private val localStatic: KeyPair,
-    remoteStatic: ByteArray? = null,
-    psk: ByteArray? = null,
-    private val ephemeralForTesting: KeyPair? = null,
+    remoteStatic: ByteArray?,
+    psk: ByteArray?,
+    /** Fixed ephemeral key, for test vectors only. Internal on purpose: a reused ephemeral key reuses
+     *  the message-1 keystream across sessions. */
+    private val ephemeralForTesting: KeyPair?,
 ) {
+    public constructor(
+        pattern: NoisePattern,
+        initiator: Boolean,
+        prologue: ByteArray,
+        localStatic: KeyPair,
+        remoteStatic: ByteArray? = null,
+        psk: ByteArray? = null,
+    ) : this(pattern, initiator, prologue, localStatic, remoteStatic, psk, ephemeralForTesting = null)
+
     private val ss: SymmetricState
     private val psk: ByteArray?
     private var e: KeyPair? = null
@@ -31,6 +41,7 @@ public class HandshakeState(
     private var re: ByteArray? = null
     private var messageIndex = 0
     private var failed = false
+    private var splitDone = false
 
     init {
         if (initiator) {
@@ -53,7 +64,7 @@ public class HandshakeState(
         ss = SymmetricState(pattern.protocolName)
         ss.mixHash(prologue)
         // Pre-message "<- s": the responder's static public key
-        ss.mixHash(if (initiator) rs!! else localStatic.publicKey)
+        ss.mixHash(if (initiator) rs!! else localStatic.publicKeyRef)
     }
 
     public val isHandshakeComplete: Boolean get() = messageIndex == pattern.messages.size
@@ -78,11 +89,11 @@ public class HandshakeState(
                     Token.E -> {
                         val eph = ephemeralForTesting ?: KeyPair.generate()
                         e = eph
-                        out += eph.publicKey
-                        ss.mixHash(eph.publicKey)
-                        if (pattern.isPsk) ss.mixKey(eph.publicKey)
+                        out += eph.publicKeyRef
+                        ss.mixHash(eph.publicKeyRef)
+                        if (pattern.isPsk) ss.mixKey(eph.publicKeyRef)
                     }
-                    Token.S -> out += ss.encryptAndHash(localStatic.publicKey)
+                    Token.S -> out += ss.encryptAndHash(localStatic.publicKeyRef)
                     Token.PSK -> ss.mixKeyAndHash(psk!!)
                     else -> mixDh(token)
                 }
@@ -135,11 +146,16 @@ public class HandshakeState(
 
     /**
      * After the handshake: (send, receive) for this side. The initiator sends with the first Noise
-     * CipherState, the responder with the second.
+     * CipherState, the responder with the second. Allowed once: a second pair would restart the
+     * nonces at 0 under the same keys.
      */
     public fun split(): Pair<CipherState, CipherState> {
         check(!failed && isHandshakeComplete) { "handshake not complete" }
+        check(!splitDone) { "split already called" }
+        splitDone = true
         val (c1, c2) = ss.split()
+        if (ephemeralForTesting == null) e?.destroy() // the ephemeral key is not needed any more
+        e = null
         return if (initiator) c1 to c2 else c2 to c1
     }
 

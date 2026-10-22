@@ -85,6 +85,8 @@ internal static class Primitives
         Hash(inner).CopyTo(outer, BlockLen);
         var result = Hash(outer);
         CryptographicOperations.ZeroMemory(k);
+        CryptographicOperations.ZeroMemory(inner);
+        CryptographicOperations.ZeroMemory(outer);
         return result;
     }
 

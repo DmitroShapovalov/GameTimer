@@ -118,4 +118,73 @@ public class NoiseBehaviourTests
         Assert.Throws<NoiseException>(() => agent.ReadMessage(bad));
         Assert.Throws<InvalidOperationException>(() => agent.ReadMessage(msg1));
     }
+
+    [Fact]
+    public void Tampered_message_2_is_rejected()
+    {
+        var (hub, agent, _, _) = Pair();
+        agent.ReadMessage(hub.WriteMessage(ReadOnlySpan<byte>.Empty));
+        var msg2 = agent.WriteMessage("{\"t\":\"hello\"}"u8);
+        msg2[0] ^= 0x01; // the agent's ephemeral key
+        Assert.Throws<NoiseException>(() => hub.ReadMessage(msg2));
+    }
+
+    [Fact]
+    public void Failed_transport_decrypt_does_not_advance_the_counter()
+    {
+        var (hub, agent, _, _) = Pair();
+        agent.ReadMessage(hub.WriteMessage(ReadOnlySpan<byte>.Empty));
+        hub.ReadMessage(agent.WriteMessage(ReadOnlySpan<byte>.Empty));
+        var (hubSend, _) = hub.Split();
+        var (_, agentRecv) = agent.Split();
+        var good = hubSend.Encrypt("ready"u8);
+        var bad = (byte[])good.Clone(); bad[0] ^= 0x01;
+        Assert.Throws<NoiseException>(() => agentRecv.Decrypt(bad));
+        Assert.Equal("ready", Encoding.UTF8.GetString(agentRecv.Decrypt(good)));
+    }
+
+    [Fact]
+    public void Oversized_message_is_refused_on_read_and_in_transport()
+    {
+        var (hub, agent, _, _) = Pair();
+        Assert.Throws<NoiseException>(() => agent.ReadMessage(new byte[HandshakeState.MaxMessageLength + 1]));
+
+        var (hub2, agent2, _, _) = Pair();
+        agent2.ReadMessage(hub2.WriteMessage(ReadOnlySpan<byte>.Empty));
+        hub2.ReadMessage(agent2.WriteMessage(ReadOnlySpan<byte>.Empty));
+        var (send, recv) = hub2.Split();
+        Assert.Throws<NoiseException>(() => send.Encrypt(new byte[HandshakeState.MaxMessageLength - 15]));
+        Assert.Throws<NoiseException>(() => recv.Decrypt(new byte[HandshakeState.MaxMessageLength + 1]));
+        Assert.Equal(HandshakeState.MaxMessageLength, send.Encrypt(new byte[HandshakeState.MaxMessageLength - 16]).Length);
+        _ = hub;
+    }
+
+    [Fact]
+    public void Split_is_allowed_once()
+    {
+        // A second Split would hand out the same keys with nonces back at 0 (keystream reuse)
+        var (hub, agent, _, _) = Pair();
+        agent.ReadMessage(hub.WriteMessage(ReadOnlySpan<byte>.Empty));
+        hub.ReadMessage(agent.WriteMessage(ReadOnlySpan<byte>.Empty));
+        hub.Split();
+        Assert.Throws<InvalidOperationException>(() => hub.Split());
+    }
+
+    [Fact]
+    public void Disposed_key_pair_cannot_be_used()
+    {
+        var key = KeyPair.Generate();
+        key.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => key.PrivateKey);
+        Assert.Throws<ObjectDisposedException>(() => new HandshakeState(NoisePattern.IK, false, Prologue, key));
+    }
+
+    [Fact]
+    public void Key_getters_return_copies()
+    {
+        var key = KeyPair.Generate();
+        var pub = key.PublicKey;
+        pub[0] ^= 0xFF;
+        Assert.NotEqual(pub, key.PublicKey);
+    }
 }

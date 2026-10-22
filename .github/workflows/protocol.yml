@@ -2,7 +2,7 @@ name: Protocol core
 
 # Protocol v2 crypto core (docs/protocol.md §4.6): the C# and Kotlin Noise implementations each run the
 # published vectors and their behaviour tests, then talk to each other live (Kotlin <-> C# interop).
-# iOS: the same Kotlin core is compiled and its common tests run on the iOS simulator.
+# iOS: the same Kotlin core is compiled and its common tests (vectors + behaviour) run on the iOS simulator.
 on:
   pull_request:
     paths:
@@ -13,6 +13,10 @@ on:
       - '*.gradle.kts'
       - 'gradle.properties'
       - 'gradlew'
+      - '.gitattributes'
+      - 'global.json'
+      - 'Directory.Build.*'
+      - 'NuGet.config'
       - '.github/workflows/protocol.yml'
   push:
     branches: [master]
@@ -24,16 +28,26 @@ on:
       - '*.gradle.kts'
       - 'gradle.properties'
       - 'gradlew'
+      - '.gitattributes'
+      - 'global.json'
+      - 'Directory.Build.*'
+      - 'NuGet.config'
       - '.github/workflows/protocol.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# A new push to the same PR cancels the run in progress (the macOS job is the slow one)
+concurrency:
+  group: protocol-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core:
     name: C# + Kotlin (JVM) + interop
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -68,6 +82,7 @@ jobs:
   ios:
     name: Kotlin (iOS)
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 

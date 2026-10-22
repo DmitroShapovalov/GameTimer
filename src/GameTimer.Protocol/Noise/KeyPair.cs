@@ -2,16 +2,41 @@ using System.Security.Cryptography;
 
 namespace GameTimer.Protocol.Noise;
 
-/// <summary>An X25519 key pair (static or ephemeral).</summary>
+/// <summary>An X25519 key pair (static or ephemeral). Not usable after <see cref="Dispose"/>.</summary>
 public sealed class KeyPair : IDisposable
 {
-    public byte[] PrivateKey { get; }
-    public byte[] PublicKey { get; }
+    private readonly byte[] _privateKey;
+    private readonly byte[] _publicKey;
+    private bool _disposed;
 
     private KeyPair(byte[] privateKey)
     {
-        PrivateKey = privateKey;
-        PublicKey = Primitives.PublicKeyFor(privateKey);
+        _privateKey = privateKey;
+        _publicKey = Primitives.PublicKeyFor(privateKey);
+    }
+
+    /// <summary>A copy of the private key, for storing it (DPAPI on the agent).</summary>
+    public byte[] PrivateKey => (byte[])PrivateKeyRef.Clone();
+
+    /// <summary>A copy of the public key.</summary>
+    public byte[] PublicKey => (byte[])PublicKeyRef.Clone();
+
+    internal byte[] PrivateKeyRef
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _privateKey;
+        }
+    }
+
+    internal byte[] PublicKeyRef
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _publicKey;
+        }
     }
 
     /// <summary>A new key pair from the OS CSPRNG.</summary>
@@ -24,5 +49,11 @@ public sealed class KeyPair : IDisposable
         return new KeyPair(privateKey.ToArray());
     }
 
-    public void Dispose() => CryptographicOperations.ZeroMemory(PrivateKey);
+    /// <summary>Overwrites the private key in memory; any later use throws.</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        CryptographicOperations.ZeroMemory(_privateKey);
+    }
 }

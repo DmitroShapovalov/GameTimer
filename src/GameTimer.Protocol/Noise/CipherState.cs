@@ -3,6 +3,8 @@ namespace GameTimer.Protocol.Noise;
 /// <summary>
 /// Noise CipherState (§5.1): a key and a 64-bit nonce counter. After the handshake one is used per
 /// direction. Decrypting a replayed or reordered message fails because the counter has moved on.
+/// Not thread-safe: each instance must be used by one sender (or one receiver) at a time, or two
+/// messages could take the same nonce.
 /// </summary>
 public sealed class CipherState
 {
@@ -13,12 +15,14 @@ public sealed class CipherState
 
     internal void InitializeKey(byte[]? key)
     {
+        if (_key != null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(_key);
         _key = key;
         _nonce = 0;
     }
 
     public byte[] EncryptWithAd(ReadOnlySpan<byte> ad, ReadOnlySpan<byte> plaintext)
     {
+        if (plaintext.Length > HandshakeState.MaxMessageLength - Primitives.TagLen) throw new NoiseException("message too long");
         if (_key == null) return plaintext.ToArray();
         // 2^64-1 is reserved (§5.1): refuse rather than wrap
         if (_nonce == ulong.MaxValue) throw new NoiseException("nonce exhausted");
@@ -29,6 +33,7 @@ public sealed class CipherState
 
     public byte[] DecryptWithAd(ReadOnlySpan<byte> ad, ReadOnlySpan<byte> ciphertext)
     {
+        if (ciphertext.Length > HandshakeState.MaxMessageLength) throw new NoiseException("message too long");
         if (_key == null) return ciphertext.ToArray();
         if (_nonce == ulong.MaxValue) throw new NoiseException("nonce exhausted");
         var plaintext = Primitives.Decrypt(_key, _nonce, ad, ciphertext); // throws without advancing

@@ -84,6 +84,8 @@ internal object Primitives {
         hash(inner).copyInto(outer, BLOCK_LEN)
         val result = hash(outer)
         k.fill(0)
+        inner.fill(0)
+        outer.fill(0)
         return result
     }
 

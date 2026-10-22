@@ -1,6 +1,5 @@
 package com.gametimer.protocol.noise
 
-import java.io.File
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,7 +12,8 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Runs the published Noise test vectors (cacophony, snow) from tests/vectors — the same file the C#
- * tests use. Both sides are driven with the vector's fixed keys and must reproduce its ciphertexts.
+ * tests use, embedded at build time (NOISE_VECTORS_JSON). Common code: runs on JVM and the iOS simulator.
+ * Both sides are driven with the vector's fixed keys and must reproduce its ciphertexts.
  */
 class NoiseVectorTests {
     @BeforeTest
@@ -26,9 +26,10 @@ class NoiseVectorTests {
 
     @Test
     fun allVectorsMatch() {
-        val path = System.getProperty("noiseVectors") ?: error("noiseVectors system property not set")
-        val vectors = Json.parseToJsonElement(File(path).readText()).jsonObject["vectors"]!!.jsonArray
+        val vectors = Json.parseToJsonElement(NOISE_VECTORS_JSON).jsonObject["vectors"]!!.jsonArray
+        val names = vectors.map { it.jsonObject["protocol_name"]!!.jsonPrimitive.content }
         assertTrue(vectors.size >= 4, "expected at least 4 vectors")
+        assertTrue("Noise_IK_25519_ChaChaPoly_BLAKE2b" in names && "Noise_IKpsk1_25519_ChaChaPoly_BLAKE2b" in names)
         for (element in vectors) runVector(element.jsonObject)
     }
 
@@ -49,7 +50,7 @@ class NoiseVectorTests {
         )
         val responder = HandshakeState(
             pattern, false, v.bytes("resp_prologue"), KeyPair.fromPrivateKey(v.bytes("resp_static")),
-            psk = v.psk("resp_psks"), ephemeralForTesting = KeyPair.fromPrivateKey(v.bytes("resp_ephemeral")),
+            remoteStatic = null, psk = v.psk("resp_psks"), ephemeralForTesting = KeyPair.fromPrivateKey(v.bytes("resp_ephemeral")),
         )
 
         var iSend: CipherState? = null

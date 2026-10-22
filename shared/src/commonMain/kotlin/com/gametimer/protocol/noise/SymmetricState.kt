@@ -18,8 +18,14 @@ internal class SymmetricState(protocolName: String) {
 
     fun mixKey(inputKeyMaterial: ByteArray) {
         val o = Primitives.hkdf(ck, inputKeyMaterial, 2)
-        ck = o[0]
+        replaceCk(o[0])
         cipher.initializeKey(o[1].copyOf(Primitives.KEY_LEN)) // HASHLEN 64 → truncate to 32
+        o[1].fill(0)
+    }
+
+    private fun replaceCk(newCk: ByteArray) {
+        ck.fill(0)
+        ck = newCk
     }
 
     fun mixHash(data: ByteArray) {
@@ -28,9 +34,10 @@ internal class SymmetricState(protocolName: String) {
 
     fun mixKeyAndHash(inputKeyMaterial: ByteArray) {
         val o = Primitives.hkdf(ck, inputKeyMaterial, 3)
-        ck = o[0]
+        replaceCk(o[0])
         mixHash(o[1])
         cipher.initializeKey(o[2].copyOf(Primitives.KEY_LEN))
+        o[2].fill(0)
     }
 
     fun encryptAndHash(plaintext: ByteArray): ByteArray {
@@ -45,10 +52,14 @@ internal class SymmetricState(protocolName: String) {
         return plaintext
     }
 
+    /** Noise §5.2 Split. Afterwards the chaining key and the handshake cipher key are wiped. */
     fun split(): Pair<CipherState, CipherState> {
         val o = Primitives.hkdf(ck, ByteArray(0), 2)
         val c1 = CipherState().apply { initializeKey(o[0].copyOf(Primitives.KEY_LEN)) }
         val c2 = CipherState().apply { initializeKey(o[1].copyOf(Primitives.KEY_LEN)) }
+        o.forEach { it.fill(0) }
+        ck.fill(0)
+        cipher.initializeKey(null)
         return c1 to c2
     }
 }

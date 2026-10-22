@@ -2,18 +2,33 @@ package com.gametimer.protocol.noise
 
 import com.ionspin.kotlin.crypto.util.LibsodiumRandom
 
-/** An X25519 key pair (static or ephemeral). */
-public class KeyPair private constructor(privateKey: ByteArray) {
-    private val priv: ByteArray = privateKey
-    public val publicKey: ByteArray = Primitives.publicKeyFor(privateKey)
+/** An X25519 key pair (static or ephemeral). Not usable after [destroy]. */
+public class KeyPair private constructor(private val priv: ByteArray) {
+    private val pub: ByteArray = Primitives.publicKeyFor(priv)
+    private var destroyed = false
 
     /** A copy of the private key, for storing it in the platform keystore. */
-    public val privateKey: ByteArray get() = priv.copyOf()
+    public val privateKey: ByteArray get() = privateKeyRef.copyOf()
 
-    internal val privateKeyRef: ByteArray get() = priv
+    /** A copy of the public key. */
+    public val publicKey: ByteArray get() = publicKeyRef.copyOf()
 
-    /** Overwrites the private key in memory. The pair is unusable afterwards. */
+    internal val privateKeyRef: ByteArray
+        get() {
+            check(!destroyed) { "key pair destroyed" }
+            return priv
+        }
+
+    internal val publicKeyRef: ByteArray
+        get() {
+            check(!destroyed) { "key pair destroyed" }
+            return pub
+        }
+
+    /** Overwrites the private key in memory; any later use throws. */
     public fun destroy() {
+        if (destroyed) return
+        destroyed = true
         priv.fill(0)
     }
 

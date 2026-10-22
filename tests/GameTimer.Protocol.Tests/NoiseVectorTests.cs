@@ -18,6 +18,16 @@ public class NoiseVectorTests
             yield return new object[] { v.GetProperty("source").GetString()!, v.GetProperty("protocol_name").GetString()!, v.GetRawText() };
     }
 
+    [Fact]
+    public void Vector_file_covers_every_pattern_we_use()
+    {
+        // Guards against a vector silently dropped from the file (the theory would just run fewer cases)
+        var names = Vectors().Select(v => (string)v[1]).ToList();
+        Assert.True(names.Count >= 4);
+        Assert.Contains("Noise_IK_25519_ChaChaPoly_BLAKE2b", names);
+        Assert.Contains("Noise_IKpsk1_25519_ChaChaPoly_BLAKE2b", names);
+    }
+
     [Theory]
     [MemberData(nameof(Vectors))]
     public void Vector_matches(string source, string protocolName, string json)
@@ -37,7 +47,7 @@ public class NoiseVectorTests
             KeyPair.FromPrivateKey(Hex(v, "init_static")), remoteStatic: Hex(v, "init_remote_static"),
             psk: Psk(v, "init_psks"), ephemeralForTesting: KeyPair.FromPrivateKey(Hex(v, "init_ephemeral")));
         var responder = new HandshakeState(pattern, initiator: false, Hex(v, "resp_prologue"),
-            KeyPair.FromPrivateKey(Hex(v, "resp_static")),
+            KeyPair.FromPrivateKey(Hex(v, "resp_static")), remoteStatic: null,
             psk: Psk(v, "resp_psks"), ephemeralForTesting: KeyPair.FromPrivateKey(Hex(v, "resp_ephemeral")));
 
         var messages = v.GetProperty("messages").EnumerateArray().ToArray();
