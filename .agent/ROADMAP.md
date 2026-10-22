@@ -18,6 +18,7 @@
 | v1.4.0 | Game-session history (every event with its source) on a History tab on PC and phone; security review (docs/SECURITY.md) with server hardening (no Server header, 64 KB body cap) |
 | v1.5.0 | Daily schedule: per-weekday minute budget and allowed-hours window; automatic mode (starts the day's allowance at launch/unlock, locks when the budget or the window ends, caps manual timers); editable on the PC (Schedule tab, Windows Hello) and the phone; off by default. Also: Dutch & Ukrainian added (UI now EN / RU / NL / UK on PC and phone) |
 | v1.6.0 | Tamper-resistant state files: settings / usage / timer-state DPAPI-encrypted per-user, with `.bak` rollback and a "settings tampered" history event (PC + phone) |
+| v1.6.1 | Clean update / uninstall: Setup asks the app to close, the app asks Windows Hello (timer or schedule active), a running timer continues after the update; uninstall stops the timer so a reinstall can't start "expired"; installer built on every PR |
 
 ---
 
