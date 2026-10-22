@@ -106,7 +106,7 @@ public class NoiseBehaviourTests
     public void Oversized_message_is_refused()
     {
         var (hub, _, _, _) = Pair();
-        Assert.Throws<NoiseException>(() => hub.WriteMessage(new byte[HandshakeState.MaxMessageLength]));
+        TooLong(() => hub.WriteMessage(new byte[HandshakeState.MaxMessageLength]));
     }
 
     [Fact]
@@ -143,20 +143,29 @@ public class NoiseBehaviourTests
         Assert.Equal("ready", Encoding.UTF8.GetString(agentRecv.Decrypt(good)));
     }
 
+    private static void TooLong(Action a) => Assert.Equal("message too long", Assert.Throws<NoiseException>(a).Message);
+
     [Fact]
     public void Oversized_message_is_refused_on_read_and_in_transport()
     {
-        var (hub, agent, _, _) = Pair();
-        Assert.Throws<NoiseException>(() => agent.ReadMessage(new byte[HandshakeState.MaxMessageLength + 1]));
+        // Each case asserts the length check itself, not just any NoiseException (a MAC failure would also throw)
+        var (_, agent, _, _) = Pair();
+        TooLong(() => agent.ReadMessage(new byte[HandshakeState.MaxMessageLength + 1]));
+
+        // IK msg 1 = e (32) + encrypted s (48) + payload + tag (16): the payload fits a CipherState,
+        // but the whole message would be 65536 bytes
+        var (hub1, _, _, _) = Pair();
+        TooLong(() => hub1.WriteMessage(new byte[HandshakeState.MaxMessageLength - 96 + 1]));
+        var (hub1b, _, _, _) = Pair();
+        Assert.Equal(HandshakeState.MaxMessageLength, hub1b.WriteMessage(new byte[HandshakeState.MaxMessageLength - 96]).Length);
 
         var (hub2, agent2, _, _) = Pair();
         agent2.ReadMessage(hub2.WriteMessage(ReadOnlySpan<byte>.Empty));
         hub2.ReadMessage(agent2.WriteMessage(ReadOnlySpan<byte>.Empty));
         var (send, recv) = hub2.Split();
-        Assert.Throws<NoiseException>(() => send.Encrypt(new byte[HandshakeState.MaxMessageLength - 15]));
-        Assert.Throws<NoiseException>(() => recv.Decrypt(new byte[HandshakeState.MaxMessageLength + 1]));
+        TooLong(() => send.Encrypt(new byte[HandshakeState.MaxMessageLength - 15]));
+        TooLong(() => recv.Decrypt(new byte[HandshakeState.MaxMessageLength + 1]));
         Assert.Equal(HandshakeState.MaxMessageLength, send.Encrypt(new byte[HandshakeState.MaxMessageLength - 16]).Length);
-        _ = hub;
     }
 
     [Fact]
@@ -186,5 +195,8 @@ public class NoiseBehaviourTests
         var pub = key.PublicKey;
         pub[0] ^= 0xFF;
         Assert.NotEqual(pub, key.PublicKey);
+        var priv = key.PrivateKey;
+        priv[0] ^= 0xFF;
+        Assert.NotEqual(priv, key.PrivateKey);
     }
 }

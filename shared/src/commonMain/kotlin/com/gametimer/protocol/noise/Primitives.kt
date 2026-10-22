@@ -94,15 +94,18 @@ internal object Primitives {
         require(outputs in 2..3) { "outputs must be 2 or 3" }
         val tempKey = hmac(chainingKey, inputKeyMaterial)
         val o1 = hmac(tempKey, byteArrayOf(0x01))
-        val o2 = hmac(tempKey, o1 + 0x02.toByte())
+        val o2 = hmacWiped(tempKey, o1 + 0x02.toByte())
         if (outputs == 2) {
             tempKey.fill(0)
             return listOf(o1, o2)
         }
-        val o3 = hmac(tempKey, o2 + 0x03.toByte())
+        val o3 = hmacWiped(tempKey, o2 + 0x03.toByte())
         tempKey.fill(0)
         return listOf(o1, o2, o3)
     }
+
+    /** HMAC over a temporary buffer that holds key material, wiped afterwards. */
+    private fun hmacWiped(key: ByteArray, data: ByteArray): ByteArray = hmac(key, data).also { data.fill(0) }
 
     fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean {
         if (a.size != b.size) return false

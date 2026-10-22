@@ -121,7 +121,7 @@ public sealed class HandshakeState
         }
         catch
         {
-            _failed = true;
+            Fail();
             throw;
         }
     }
@@ -160,7 +160,7 @@ public sealed class HandshakeState
         }
         catch
         {
-            _failed = true;
+            Fail();
             throw;
         }
     }
@@ -176,9 +176,21 @@ public sealed class HandshakeState
         if (_split) throw new InvalidOperationException("Split already called");
         _split = true;
         var (c1, c2) = _ss.Split();
-        if (_fixedEphemeral == null) _e?.Dispose(); // the ephemeral key is not needed any more
-        _e = null;
+        WipeSecrets(); // the ephemeral key and the PSK are not needed any more
         return _initiator ? (c1, c2) : (c2, c1);
+    }
+
+    private void Fail()
+    {
+        _failed = true;
+        WipeSecrets();
+    }
+
+    private void WipeSecrets()
+    {
+        if (_fixedEphemeral == null) _e?.Dispose();
+        _e = null;
+        if (_psk != null) System.Security.Cryptography.CryptographicOperations.ZeroMemory(_psk);
     }
 
     // es / se / ee / ss, from this side's point of view (Noise §5.3)

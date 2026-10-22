@@ -96,15 +96,23 @@ internal static class Primitives
         if (outputs is < 2 or > 3) throw new ArgumentOutOfRangeException(nameof(outputs));
         var tempKey = Hmac(chainingKey, inputKeyMaterial);
         var o1 = Hmac(tempKey, new byte[] { 0x01 });
-        var o2 = Hmac(tempKey, Concat(o1, 0x02));
+        var o2 = HmacWiped(tempKey, Concat(o1, 0x02));
         if (outputs == 2)
         {
             CryptographicOperations.ZeroMemory(tempKey);
             return new[] { o1, o2 };
         }
-        var o3 = Hmac(tempKey, Concat(o2, 0x03));
+        var o3 = HmacWiped(tempKey, Concat(o2, 0x03));
         CryptographicOperations.ZeroMemory(tempKey);
         return new[] { o1, o2, o3 };
+    }
+
+    /// <summary>HMAC over a temporary buffer that holds key material, wiped afterwards.</summary>
+    private static byte[] HmacWiped(byte[] key, byte[] data)
+    {
+        var r = Hmac(key, data);
+        CryptographicOperations.ZeroMemory(data);
+        return r;
     }
 
     private static byte[] Concat(byte[] a, byte b)

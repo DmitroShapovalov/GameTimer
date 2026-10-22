@@ -102,7 +102,7 @@ class NoiseBehaviourTests {
     @Test
     fun oversizedMessageIsRefused() {
         val s = pair()
-        assertFailsWith<NoiseException> { s.hub.writeMessage(ByteArray(HandshakeState.MAX_MESSAGE_LENGTH)) }
+        tooLong { s.hub.writeMessage(ByteArray(HandshakeState.MAX_MESSAGE_LENGTH)) }
     }
 
     @Test
@@ -139,14 +139,23 @@ class NoiseBehaviourTests {
         assertEquals("ready", agent.second.decrypt(good).decodeToString())
     }
 
+    private fun tooLong(block: () -> Unit) =
+        assertEquals("message too long", assertFailsWith<NoiseException> { block() }.message)
+
     @Test
     fun oversizedMessageIsRefusedOnReadAndInTransport() {
-        val s = pair()
-        assertFailsWith<NoiseException> { s.agent.readMessage(ByteArray(HandshakeState.MAX_MESSAGE_LENGTH + 1)) }
-        val (hub, _) = session()
+        // Each case asserts the length check itself, not just any NoiseException (a MAC failure would also throw)
         val max = HandshakeState.MAX_MESSAGE_LENGTH
-        assertFailsWith<NoiseException> { hub.first.encrypt(ByteArray(max - 15)) }
-        assertFailsWith<NoiseException> { hub.second.decrypt(ByteArray(max + 1)) }
+        tooLong { pair().agent.readMessage(ByteArray(max + 1)) }
+
+        // IK msg 1 = e (32) + encrypted s (48) + payload + tag (16): the payload fits a CipherState,
+        // but the whole message would be 65536 bytes
+        tooLong { pair().hub.writeMessage(ByteArray(max - 96 + 1)) }
+        assertEquals(max, pair().hub.writeMessage(ByteArray(max - 96)).size)
+
+        val (hub, _) = session()
+        tooLong { hub.first.encrypt(ByteArray(max - 15)) }
+        tooLong { hub.second.decrypt(ByteArray(max + 1)) }
         assertEquals(max, hub.first.encrypt(ByteArray(max - 16)).size)
     }
 
@@ -174,5 +183,8 @@ class NoiseBehaviourTests {
         val pub = key.publicKey
         pub[0] = (pub[0].toInt() xor 0xff).toByte()
         assertFalse(pub.contentEquals(key.publicKey))
+        val priv = key.privateKey
+        priv[0] = (priv[0].toInt() xor 0xff).toByte()
+        assertFalse(priv.contentEquals(key.privateKey))
     }
 }

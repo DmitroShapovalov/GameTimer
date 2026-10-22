@@ -103,7 +103,7 @@ public class HandshakeState internal constructor(
             messageIndex++
             return out
         } catch (t: Throwable) {
-            failed = true
+            fail()
             throw t
         }
     }
@@ -139,7 +139,7 @@ public class HandshakeState internal constructor(
             messageIndex++
             return payload
         } catch (t: Throwable) {
-            failed = true
+            fail()
             throw t
         }
     }
@@ -154,9 +154,19 @@ public class HandshakeState internal constructor(
         check(!splitDone) { "split already called" }
         splitDone = true
         val (c1, c2) = ss.split()
-        if (ephemeralForTesting == null) e?.destroy() // the ephemeral key is not needed any more
-        e = null
+        wipeSecrets() // the ephemeral key and the PSK are not needed any more
         return if (initiator) c1 to c2 else c2 to c1
+    }
+
+    private fun fail() {
+        failed = true
+        wipeSecrets()
+    }
+
+    private fun wipeSecrets() {
+        if (ephemeralForTesting == null) e?.destroy()
+        e = null
+        psk?.fill(0)
     }
 
     // es / se / ee / ss, from this side's point of view (Noise §5.3)
