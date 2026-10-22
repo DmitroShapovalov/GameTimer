@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Protocol v2 (docs/protocol.md): Noise handshake + transport, shared by the Windows agent and the
+       interop tests. Plain net8.0 (no WPF), so it builds and tests on Linux CI too. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GameTimer.Protocol</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- libsodium primitives (decision D2): X25519, ChaCha20-Poly1305 (IETF), BLAKE2b -->
+    <PackageReference Include="Sodium.Core" Version="1.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="GameTimer.Protocol.Tests" />
+  </ItemGroup>
+
+</Project>
