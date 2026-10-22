@@ -35,8 +35,8 @@ interop tests in lock-step.
 
 | # | Step | Done when | Status |
 |---|---|---|---|
-| A1 | **Protocol spec** `docs/protocol.md`: framing, message envelope + versioning, capability descriptor, commands / events mapped from today's API, pairing v2 | Owner has read and agreed the contract | draft 3, reviewed ✎ |
-| A2 | **Crypto core**: Noise IK + IKpsk1 over libsodium in Kotlin (`shared`) and C# (`GameTimer.Protocol`) | Both pass the official Noise test vectors; a Kotlin ↔ C# handshake + encrypted round-trip passes in CI | ☐ |
+| A1 | **Protocol spec** `docs/protocol.md`: framing, message envelope + versioning, capability descriptor, commands / events mapped from today's API, pairing v2 | Owner has read and agreed the contract | ✓ agreed (draft 3) |
+| A2 | **Crypto core**: Noise IK + IKpsk1 over libsodium in Kotlin (`shared`) and C# (`GameTimer.Protocol`) | Both pass the official Noise test vectors; a Kotlin ↔ C# handshake + encrypted round-trip passes in CI | in review ✎ (C# + Kotlin jvm/iOS, vectors, live interop CI) |
 | A3 | **Windows agent endpoint**: new `/v2` WebSocket carrying Noise frames next to the v1 API; agent key pair (DPAPI-protected); pairing v2 QR; capability descriptor; commands routed to `TimerController` | A scripted Kotlin client pairs, handshakes and starts / stops / extends the timer on the real PC | ☐ |
 | A4 | **Android app skeleton** (Compose): QR-scan pairing, paired-device list, LAN connect + reconnect, live status screen; EN / RU / NL / UK | On the owner's phone: scan QR → see the live countdown | ☐ |
 | A5 | **Feature parity with the PWA**: start / stop / ±15, settings, schedule editor, history, revoke | Everything the PWA can do works from the app | ☐ |

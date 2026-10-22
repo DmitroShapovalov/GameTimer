@@ -1,0 +1,82 @@
+name: Protocol core
+
+# Protocol v2 crypto core (docs/protocol.md §4.6): the C# and Kotlin Noise implementations each run the
+# published vectors and their behaviour tests, then talk to each other live (Kotlin <-> C# interop).
+# iOS: the same Kotlin core is compiled and its common tests run on the iOS simulator.
+on:
+  pull_request:
+    paths:
+      - 'src/GameTimer.Protocol/**'
+      - 'shared/**'
+      - 'tests/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - '.github/workflows/protocol.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'src/GameTimer.Protocol/**'
+      - 'shared/**'
+      - 'tests/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - '.github/workflows/protocol.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: C# + Kotlin (JVM) + interop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: C# vectors + behaviour tests
+        run: dotnet test tests/GameTimer.Protocol.Tests/GameTimer.Protocol.Tests.csproj -c Release
+
+      - name: Build the C# interop peer
+        run: dotnet build tests/interop/NoisePeer/NoisePeer.csproj -c Release -o "$RUNNER_TEMP/peer"
+
+      - name: Kotlin vectors + behaviour + live interop tests
+        run: ./gradlew :shared:jvmTest -PcsharpPeer="$RUNNER_TEMP/peer/NoisePeer.dll"
+
+      - name: Test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-test-report
+          path: shared/build/reports/tests
+          retention-days: 7
+
+  ios:
+    name: Kotlin (iOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile for devices, run common tests on the simulator
+        run: ./gradlew :shared:compileKotlinIosArm64 :shared:iosSimulatorArm64Test

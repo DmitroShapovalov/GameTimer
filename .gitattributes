@@ -1,0 +1,4 @@
+# Shell scripts must keep LF on Windows checkouts (CI runs them on Linux/macOS)
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
