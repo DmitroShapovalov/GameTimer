@@ -64,6 +64,9 @@ public sealed partial class AgentHost : IDisposable
     /// <summary>Peers were added, revoked or changed role (any thread). The PC's settings page refreshes.</summary>
     public event Action? PeersChanged;
 
+    /// <summary>A hub completed pairing (any thread), also when a known hub paired again.</summary>
+    public event Action<Peer>? Paired;
+
     public AgentHost(IAgentStore store, IAgentBackend backend, IPairingUi pairingUi, TimeProvider? time = null)
     {
         _store = store;

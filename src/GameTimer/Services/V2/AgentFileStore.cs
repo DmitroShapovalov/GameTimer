@@ -23,7 +23,8 @@ public sealed class AgentFileStore : IAgentStore
     {
         try
         {
-            var json = ProtectedStore.Read(StorePath);
+            // Never written in plaintext: a planted plaintext file is tampering, not a migration
+            var json = ProtectedStore.Read(StorePath, allowLegacyPlaintext: false);
             return json == null ? null : JsonSerializer.Deserialize<AgentState>(json, Json);
         }
         catch (Exception ex)

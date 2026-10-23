@@ -21,7 +21,6 @@ public partial class ConnectPhoneDialog : FluentWindow
     private readonly PairingService _pairing;
     private readonly AgentHost _agent;
     private readonly WindowsPairingUi _pairingUi;
-    private readonly HashSet<string> _knownPeers;
     private readonly DispatcherTimer _countdown;
     private bool _connected;
     private bool _aborted;
@@ -32,7 +31,7 @@ public partial class ConnectPhoneDialog : FluentWindow
         _pairing = pairing;
         _agent = agent;
         _pairingUi = pairingUi;
-        _knownPeers = agent.Peers.Select(p => p.Id).ToHashSet();
+
 
         Title = Loc.Get("ConnectPhone");
         DialogTitleBar.Title = Loc.Get("ConnectPhone");
@@ -47,7 +46,7 @@ public partial class ConnectPhoneDialog : FluentWindow
         QrImage.Source = RenderQr(url);
 
         _pairing.Paired += OnPaired;
-        _agent.PeersChanged += OnPeersChanged;
+        _agent.Paired += OnV2Paired;
         _pairingUi.Aborted += OnPairingAborted;
         _countdown = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _countdown.Tick += (_, _) => UpdateCountdown();
@@ -59,7 +58,7 @@ public partial class ConnectPhoneDialog : FluentWindow
             _countdown.Stop();
             _pairing.Paired -= OnPaired;
             _pairing.Cancel();
-            _agent.PeersChanged -= OnPeersChanged;
+            _agent.Paired -= OnV2Paired;
             _pairingUi.Aborted -= OnPairingAborted;
             _agent.CancelPairing();
         };
@@ -92,11 +91,10 @@ public partial class ConnectPhoneDialog : FluentWindow
         StatusText.Text = string.Format(Loc.Get("ConnectPhone_Connected"), device.Name);
     }
 
-    // v2: a parent app was added (any thread)
-    private void OnPeersChanged() => Dispatcher.BeginInvoke(() =>
+    // v2: a parent app finished pairing (any thread)
+    private void OnV2Paired(Peer added) => Dispatcher.BeginInvoke(() =>
     {
-        var added = _agent.Peers.FirstOrDefault(p => !_knownPeers.Contains(p.Id));
-        if (added == null || _connected) return;
+        if (_connected) return;
         _connected = true;
         _countdown.Stop();
         QrImage.Visibility = Visibility.Hidden;

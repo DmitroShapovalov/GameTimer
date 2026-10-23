@@ -32,7 +32,14 @@ try
         case "peers": return await Request("peers.list", null);
         case "history": return await Request("history.get", new JsonObject { ["limit"] = 10 });
         case "settings": return await Request("settings.get", null);
-        case "watch": return await Session(async s => { Print(s.Hello); while (true) { var ev = await s.Receive(); if (ev == null) break; Print(ev); } });
+        case "watch": return await Session(async s =>
+        {
+            Print(s.Hello);
+            using var stop = new CancellationTokenSource();
+            var pinger = Task.Run(async () => { while (!stop.IsCancellationRequested) { await Task.Delay(30_000, stop.Token); await s.Ping(); } });
+            while (true) { var ev = await s.Receive(); if (ev == null) break; if (ev["t"]?.GetValue<string>() != "pong") Print(ev); }
+            stop.Cancel();
+        });
         case "replay-test": return await ReplayTest();
         default: return Usage();
     }
@@ -181,6 +188,9 @@ sealed class HubSession
     }
 
     public Task<JsonNode?> Receive() => ReceiveJson(_ws, _recv);
+
+    /// <summary>§3 keepalive: the agent closes a session after 90 s of silence.</summary>
+    public Task Ping() => SendJson(_ws, _send, new JsonObject { ["t"] = "ping" });
 
     public async Task<JsonNode?> Request(string type, JsonObject? fields)
     {

@@ -170,6 +170,7 @@ public sealed partial class AgentHost
         await SendDirectAsync(transport, send, result).ConfigureAwait(false);
         PublishPeers("added", peer.Id, origin: null);
         PeersChanged?.Invoke();
+        Paired?.Invoke(peer);
     }
 
     /// <summary>Stores the hub (§8.2 step 7). A hub key paired before keeps its role and gets a new ak. Under the lock.</summary>

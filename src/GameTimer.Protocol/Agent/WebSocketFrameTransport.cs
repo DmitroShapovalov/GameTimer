@@ -105,10 +105,11 @@ public sealed class WebSocketFrameTransport : IFrameTransport
                 if (tooLong || result.MessageType != WebSocketMessageType.Binary || length > MaxMessage)
                 {
                     violated = true;
-                    await _frames.Writer.WriteAsync(new Frame(null, true)).ConfigureAwait(false);
+                    await _frames.Writer.WriteAsync(new Frame(null, true), _stop.Token).ConfigureAwait(false);
                     continue;
                 }
-                await _frames.Writer.WriteAsync(new Frame(buffer.AsSpan(0, length).ToArray(), false)).ConfigureAwait(false);
+                // Cancellable: a session that stopped reading (failed handshake, bye) must not pin this loop
+                await _frames.Writer.WriteAsync(new Frame(buffer.AsSpan(0, length).ToArray(), false), _stop.Token).ConfigureAwait(false);
             }
         }
         catch

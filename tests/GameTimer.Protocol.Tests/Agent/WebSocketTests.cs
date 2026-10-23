@@ -45,7 +45,10 @@ public sealed class WebSocketTests : IAsyncLifetime
         if (ticket == null) { context.Response.StatusCode = 503; return; }
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         await _f.Host.RunWebSocketAsync(socket, ticket, pairing, context.RequestAborted);
+        Interlocked.Increment(ref _handlersDone);
     }
+
+    private int _handlersDone;
 
     public async Task DisposeAsync()
     {
@@ -148,6 +151,19 @@ public sealed class WebSocketTests : IAsyncLifetime
         var (ws, _, recv, _) = await SessionOverSocket(key);
         await ws.SendAsync("{\"t\":\"ping\"}"u8.ToArray(), WebSocketMessageType.Text, true, TestHub.Timeout());
         Assert.Equal("protocol_error", (await ReceiveJson(ws, recv))!.Value.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task A_flood_of_junk_frames_does_not_pin_the_connection()
+    {
+        // Regression: the read loop blocked on a full queue once the agent stopped reading, so the
+        // handler (and its socket) never finished
+        using var ws = await Connect("/v2");
+        for (int i = 0; i < 40; i++) await Send(ws, new byte[100]);
+        Assert.Null(await Receive(ws)); // the agent closes after the bad msg 1
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline && _handlersDone == 0) await Task.Delay(50);
+        Assert.Equal(1, _handlersDone);
     }
 
     [Fact]

@@ -1055,7 +1055,8 @@ public partial class MainWindow : FluentWindow
     private Task<string?> AskPairingCodeAsync(string hubName, CancellationToken cancel)
     {
         Window owner = OwnedWindows.OfType<ConnectPhoneDialog>().FirstOrDefault() ?? (Window)this;
-        var dialog = new PairingCodeDialog(hubName, () => RequireAuth()) { Owner = owner };
+        PairingCodeDialog? dialog = null;
+        dialog = new PairingCodeDialog(hubName, () => RequireAuth(owner: dialog)) { Owner = owner };
         var registration = cancel.Register(() => Dispatcher.BeginInvoke(dialog.Close));
         dialog.Closed += (_, _) => registration.Dispose();
         dialog.Show();
@@ -1079,7 +1080,10 @@ public partial class MainWindow : FluentWindow
     }
 
     /// <summary>A paired v2 parent app, as the Settings list shows it.</summary>
-    public sealed record PeerItem(string Id, string Name, string Subtitle, bool IsAdmin, string RoleButtonTip);
+    public sealed record PeerItem(string Id, string Name, string Subtitle, bool IsAdmin, string RoleButtonTip)
+    {
+        public string RevokeTip => Loc.Get("Delete");
+    }
 
     private async void RevokeDevice_Click(object sender, RoutedEventArgs e)
     {
@@ -1511,7 +1515,7 @@ public partial class MainWindow : FluentWindow
 
     #region Authentication
 
-    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt")
+    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt", Window? owner = null)
     {
         try
         {
@@ -1525,7 +1529,7 @@ public partial class MainWindow : FluentWindow
         }
         catch { }
 
-        var dialog = new PasswordDialog { Owner = this };
+        var dialog = new PasswordDialog { Owner = owner ?? this };
         return dialog.ShowDialog() == true;
     }
 

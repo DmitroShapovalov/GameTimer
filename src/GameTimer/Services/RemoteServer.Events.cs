@@ -128,9 +128,16 @@ public sealed partial class RemoteServer
         _devices.Changed += OnDevicesChanged;
         _timer.InterruptionChanged += OnInterruptionChanged;
         _sessionLog.Changed += OnHistoryChanged;
+        _sessionLog.Added += V2History;
         _timer.ScheduleStateChanged += OnScheduleChanged;
-        _lastSettingsJson = JsonSerializer.Serialize(BuildSettings(), Json);
-        _lastScheduleJson = JsonSerializer.Serialize(BuildSchedule(), Json);
+
+        // Changes made while the server was off still bump the v2 revs (a stale ifRev must not win)
+        var settings = JsonSerializer.Serialize(BuildSettings(), Json);
+        var schedule = JsonSerializer.Serialize(BuildSchedule(), Json);
+        if (_lastSettingsJson != null && settings != _lastSettingsJson) _v2Backend!.SettingsRev++;
+        if (_lastScheduleJson != null && schedule != _lastScheduleJson) _v2Backend!.ScheduleRev++;
+        _lastSettingsJson = settings;
+        _lastScheduleJson = schedule;
     }
 
     private void UnsubscribeEvents()
@@ -143,6 +150,7 @@ public sealed partial class RemoteServer
         _devices.Changed -= OnDevicesChanged;
         _timer.InterruptionChanged -= OnInterruptionChanged;
         _sessionLog.Changed -= OnHistoryChanged;
+        _sessionLog.Added -= V2History;
         _timer.ScheduleStateChanged -= OnScheduleChanged;
     }
 
@@ -205,17 +213,13 @@ public sealed partial class RemoteServer
     }
 
     // A new history event was recorded; the phone refetches the list
-    private void OnHistoryChanged()
-    {
-        Broadcast(new { type = "history" });
-        V2History();
-    }
+    private void OnHistoryChanged() => Broadcast(new { type = "history" });
 
     // The schedule allowed/blocked state or the day's remaining allowance changed
     private void OnScheduleChanged()
     {
         Broadcast(new { type = "schedule", status = BuildStatus() });
-        V2State();
+        V2ScheduleState();
     }
 
     // A revoked device loses its open socket immediately

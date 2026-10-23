@@ -66,6 +66,10 @@ public sealed partial class RemoteServer
 
     private void V2State() => V2Publish("ev.state", () => new JsonObject { ["state"] = _v2Backend!.State() });
 
+    /// <summary>A schedule allowed ↔ blocked change: a side effect, never the mirror of a reply (§5).</summary>
+    private void V2ScheduleState() =>
+        V2Publish("ev.state", () => new JsonObject { ["state"] = _v2Backend!.State() }, sideEffect: true);
+
     private void V2Tick()
     {
         var now = Environment.TickCount64;
@@ -90,17 +94,19 @@ public sealed partial class RemoteServer
         }
     }
 
-    private void V2History()
-    {
-        var latest = _sessionLog.Recent(1);
-        if (latest.Count == 0) return;
-        V2Publish("ev.history", () => new JsonObject { ["event"] = JsonSerializer.SerializeToNode(latest[0], Json) });
-    }
+    private void V2History(SessionEvent e) =>
+        V2Publish("ev.history", () => new JsonObject { ["event"] = JsonSerializer.SerializeToNode(e, Json) }, sideEffect: true);
 
-    private void V2Publish(string type, Func<JsonObject> body)
+    /// <summary>
+    /// §5: the requester gets the <c>result</c> instead of the event that mirrors it (ev.state for timer.*,
+    /// ev.settings for settings.put, ev.schedule for schedule.put). Side effects (history, schedule status)
+    /// go to every hub, the requester included.
+    /// </summary>
+    private void V2Publish(string type, Func<JsonObject> body, bool sideEffect = false)
     {
         if (_app == null) return;
-        Agent.Publish(type, body(), _v2Backend!.CurrentOrigin);
+        var origin = sideEffect ? null : _v2Backend!.OriginFor(type);
+        Agent.Publish(type, body(), origin);
     }
 
     /// <summary>
@@ -115,8 +121,8 @@ public sealed partial class RemoteServer
         public V2Backend(RemoteServer server)
         {
             _s = server;
-            // §5 rev: +1 on every change. Starts at the launch time so it keeps increasing across restarts.
-            var start = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            // §5 rev: +1 on every change. Starts at the launch time in ms, so it keeps increasing across restarts.
+            var start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             SettingsRev = start;
             ScheduleRev = start;
             Info = new AgentInfo(Environment.MachineName, "windows", AppInfo.Version);
@@ -126,8 +132,23 @@ public sealed partial class RemoteServer
 
         public IReadOnlyCollection<string> Capabilities { get; } = new[] { "timer", "schedule", "settings", "history" };
 
-        /// <summary>UI thread only.</summary>
-        public RequestOrigin? CurrentOrigin { get; private set; }
+        /// <summary>The request being executed on the UI thread, and its type (UI thread only).</summary>
+        private RequestOrigin? _origin;
+        private string? _requestType;
+
+        /// <summary>The origin to attribute <paramref name="eventType"/> to: only the event mirroring the current request's reply.</summary>
+        public RequestOrigin? OriginFor(string eventType)
+        {
+            if (_origin == null || _requestType == null) return null;
+            bool mirrors = eventType switch
+            {
+                "ev.state" => _requestType.StartsWith("timer.", StringComparison.Ordinal) || _requestType == "interruption.ack",
+                "ev.settings" => _requestType == "settings.put",
+                "ev.schedule" => _requestType == "schedule.put",
+                _ => false,
+            };
+            return mirrors ? _origin : null;
+        }
 
         public long SettingsRev { get; set; }
         public long ScheduleRev { get; set; }
@@ -137,9 +158,10 @@ public sealed partial class RemoteServer
         public Task<Reply> HandleAsync(string type, JsonElement m, RequestContext context) =>
             _s._ui.InvokeAsync(() =>
             {
-                CurrentOrigin = context.Origin;
+                var (prevOrigin, prevType) = (_origin, _requestType); // restored: safe even under a nested dispatcher frame
+                (_origin, _requestType) = (context.Origin, type);
                 try { return Handle(type, m, context); }
-                finally { CurrentOrigin = null; }
+                finally { (_origin, _requestType) = (prevOrigin, prevType); }
             });
 
         // UI thread
@@ -254,28 +276,38 @@ public sealed partial class RemoteServer
             return o;
         }
 
-        /// <summary>§7.2 history.get: newest first, <c>limit</c> 1–100 (default 50), cursor <c>before</c>.</summary>
+        /// <summary>
+        /// §7.2 history.get: newest first (= recording order; times can be backdated or the clock changed),
+        /// <c>limit</c> 1–100 (default 50), opaque cursor <c>before</c> = the last event of the previous page.
+        /// A cursor whose event has been trimmed from the log → bad_request (start again from the top).
+        /// </summary>
         private Reply History(JsonElement m)
         {
             int limit = 50;
             if (m.TryGetProperty("limit", out var l) && (!l.TryGetInt32(out limit) || limit is < 1 or > 100)) return Reply.Error("bad_request");
-            DateTimeOffset? before = null;
-            if (Str(m, "before") is { } b)
-            {
-                if (!DateTimeOffset.TryParse(b, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)) return Reply.Error("bad_request");
-                before = parsed;
-            }
 
-            var all = _s._sessionLog.Recent(int.MaxValue);
-            var page = all.Where(e => before == null || e.Time < before).Take(limit + 1).ToList();
+            var all = _s._sessionLog.Recent(int.MaxValue).Select(e => (Event: e, Json: JsonSerializer.Serialize(e, Json))).ToList();
+            int start = 0;
+            if (Str(m, "before") is { } cursor)
+            {
+                // The newest occurrence of that event (identical events: the first match is the one the page ended on)
+                int at = all.FindIndex(x => Cursor(x.Json) == cursor);
+                if (at < 0) return Reply.Error("bad_request");
+                start = at + 1;
+            }
+            var page = all.Skip(start).Take(limit + 1).ToList();
             bool more = page.Count > limit;
             if (more) page.RemoveAt(page.Count - 1);
             var events = new JsonArray();
-            foreach (var e in page) events.Add(JsonSerializer.SerializeToNode(e, Json));
+            foreach (var x in page) events.Add(JsonNode.Parse(x.Json));
             var reply = new JsonObject { ["events"] = events, ["more"] = more };
-            if (more) reply["next"] = page[^1].Time.ToString("o", CultureInfo.InvariantCulture);
+            if (more) reply["next"] = Cursor(page[^1].Json);
             return Reply.Ok(reply);
         }
+
+        private static string Cursor(string eventJson) =>
+            GameTimer.Protocol.Encodings.Base64Url.Encode(
+                System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(eventJson)).AsSpan(0, 12));
 
         private static string Enum<T>(T value) where T : struct, System.Enum => JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
 

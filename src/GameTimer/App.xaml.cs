@@ -89,6 +89,23 @@ public partial class App : System.Windows.Application
         _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService, sessionLog,
             new GameTimer.Services.V2.AgentFileStore(), pairingUi);
 
+        var agentId = _remoteServer.Agent.AgentId;
+        if (settings.V2AgentId != agentId)
+        {
+            if (settings.V2AgentId != null)
+            {
+                DiagnosticLog.Write($"v2 identity changed ({settings.V2AgentId} → {agentId}): remote-v2.json lost or replaced");
+                sessionLog.Add(new GameTimer.Models.SessionEvent
+                {
+                    Time = DateTimeOffset.Now,
+                    Type = GameTimer.Models.SessionEventType.Tampered,
+                    Source = GameTimer.Models.ActionSource.System
+                });
+            }
+            settings.V2AgentId = agentId;
+            settingsService.Save(settings);
+        }
+
         var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing, sessionLog, pairingUi);
         MainWindow = mainWindow;
         mainWindow.Show();

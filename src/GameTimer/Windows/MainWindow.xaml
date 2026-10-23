@@ -350,7 +350,7 @@
                                         </ui:Button>
                                         <ui:Button Grid.Column="2" Appearance="Secondary"
                                                    Width="30" Height="30" Padding="0"
-                                                   Click="RevokePeer_Click" Tag="{Binding}">
+                                                   Click="RevokePeer_Click" Tag="{Binding}" ToolTip="{Binding RevokeTip}">
                                             <ui:SymbolIcon Symbol="Delete24" FontSize="14"/>
                                         </ui:Button>
                                     </Grid>
