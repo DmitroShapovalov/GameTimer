@@ -62,7 +62,8 @@ recommended app behaviour that the other side cannot check.
 **Errors**
 - **Before** the handshake is confirmed (§4.3): any failure → close silently (no oracle).
 - **After**: send `{ "t": "bye", "code": "<reason>" }` (§5), then close. Reasons: `protocol_error`,
-  `revoked`, `expired`, `denied`, `code_used`, `busy`, `shutdown`.
+  `revoked`, `expired`, `denied`, `code_used`, `busy`, `shutdown`, `internal`. A peer that doesn't
+  read the `bye` within 2 s is cut off; nothing it sends after the `bye` is executed.
 
 ## 4. Security
 
@@ -184,20 +185,23 @@ Rules:
 - **Unknown fields are ignored.** Unknown request type → `error` `unknown_command`. Request for a
   capability not announced → `error` `unsupported`. Not allowed for this hub's role → `error`
   `forbidden`.
-- **At most 16 outstanding requests** per session; more → `error` `busy`.
+- **At most 16 outstanding requests** per session; more → `error` `busy`. (An agent may also handle a
+  session's requests strictly one after another; then the limit never triggers and later requests
+  just wait.)
 - **Idempotency.** For each hub the agent keeps a cache: `rid` → (hash of the request body, reply).
   - Entries live **10 minutes**, at most **256 per hub** (oldest dropped first), and are **persisted**
     in `ProtectedStore`, so a PC restart doesn't make a resent `timer.extend` run twice.
   - A known `rid` with the **same** body is not executed again; the stored reply is returned. A known
-    `rid` with a **different** body → `error` `bad_request`.
-  - `error` replies are cached too, except `busy`.
+    `rid` with a **different** body → `error` `bad_request`. "Same body" = the request without `id`,
+    byte for byte: a hub resends the message it sent before, with only `id` changed.
+  - `error` replies are cached too, except `busy` and `internal`.
   - A hub's entries are deleted when it is revoked.
   - The hub stops resending after **5 minutes** (well inside the 10-minute window) and asks the user.
 - **Concurrency.** `settings` and `schedule` carry a `rev` (integer, +1 on every change). A write may
   include `ifRev`; if it doesn't match → `error` `conflict` with the current value in `value`.
-- **Ordering.** For a successful state-changing request the agent sends the `result` to the
-  requesting session first, then the matching `ev.*` to **all other** sessions (not back to the
-  requester).
+- **Ordering.** For a successful state-changing request the requesting session gets the `result`
+  and **not** the matching `ev.*`; all other sessions get the `ev.*`, in the order the agent's state
+  changed. (Across different sessions there is no "before": each hub orders only its own stream.)
 
 ## 6. Session start: `ready` → `hello`
 
@@ -268,15 +272,16 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 | `schedule.put` | `schedule` | ✓ | any | full schedule, optional `ifRev` | `schedule` |
 | `history.get` | `history` | — | any | `limit` (1–100, default 50), optional `before` (cursor) | `events[]` newest first, `more`, `next` (cursor) |
 | `peers.list` | `peers` | — | any | — | `peers[]` |
-| `peers.revoke` | `peers` | ✓ | admin (or self) | `id` | `peers[]` |
-| `peers.setRole` | `peers` | ✓ | admin | `id`, `role` (`admin` / `parent`) | `peers[]` |
+| `peers.revoke` | `peers` | ✓ | admin (or self) | `peer` (hub id) | `peers[]` |
+| `peers.setRole` | `peers` | ✓ | admin | `peer` (hub id), `role` (`admin` / `parent`) | `peers[]` |
 
 `peers[]` entries: `id`, `name`, `role`, `pairedAt`, `lastSeen`, `current` (= this is the hub making
 the request).
 
 Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `invalid_minutes`,
 `invalid_threshold`, `invalid_alerts`, `invalid_color`, `invalid_language`, `invalid_schedule`) plus
-`bad_request`, `unknown_command`, `unsupported`, `forbidden`, `conflict`, `busy`, `last_admin`.
+`bad_request`, `unknown_command`, `unsupported`, `forbidden`, `conflict`, `busy`, `last_admin`, and
+`internal` (the agent failed unexpectedly; the request may be retried with the same `rid`).
 
 ### 7.3 Events (agent → hub)
 
@@ -288,7 +293,7 @@ Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `in
 | `ev.settings` | settings changed (on the PC or by another parent) | `settings` |
 | `ev.schedule` | schedule changed | `schedule` |
 | `ev.history` | a history event was recorded | `event` |
-| `ev.peers` | a parent was added, revoked or changed role | `peers[]`, `change` (`added` / `revoked` / `role`), `id` |
+| `ev.peers` | a parent was added, revoked or changed role | `peers[]`, `change` (`added` / `revoked` / `role`), `peer` (hub id) |
 
 ## 8. Roles and pairing
 

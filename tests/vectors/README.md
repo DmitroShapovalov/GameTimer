@@ -12,3 +12,9 @@ Both the C# (`tests/GameTimer.Protocol.Tests`) and the Kotlin tests read this fi
 implementation that breaks a vector fails CI. Each vector has fixed static and ephemeral keys, the
 prologue and PSKs, the expected ciphertext of every message (two handshake messages, then transport
 messages alternating initiator / responder), and the final handshake hash.
+
+## Protocol vectors
+
+`protocol-vectors.json` holds ids (§4.4), pairing codes (§8.2), base32 and base64url (§4.5), computed
+by `gen_protocol_vectors.py` with Python's `hashlib` / `base64` — an implementation independent of
+both the C# and the Kotlin code, which are both tested against it.

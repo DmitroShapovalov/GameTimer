@@ -2,24 +2,30 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
 
-// The published Noise vectors (tests/vectors, shared with the C# tests) become a Kotlin constant, so the
-// vector test is common code and runs on every target, the iOS simulator included.
-val vectorsJson: File = rootProject.file("tests/vectors/noise-vectors.json")
+// The test vectors in tests/vectors (shared with the C# tests) become Kotlin constants, so the vector
+// tests are common code and run on every target, the iOS simulator included.
+val vectorFiles: Map<String, File> = mapOf(
+    "NOISE_VECTORS_JSON" to rootProject.file("tests/vectors/noise-vectors.json"),
+    "PROTOCOL_VECTORS_JSON" to rootProject.file("tests/vectors/protocol-vectors.json"),
+)
 val generateNoiseVectors = tasks.register("generateNoiseVectors") {
-    val source = vectorsJson
+    val sources = vectorFiles
     val outDir = layout.buildDirectory.dir("generated/noiseVectors/kotlin")
-    inputs.file(source).withPathSensitivity(PathSensitivity.NONE)
+    sources.forEach { (name, file) -> inputs.file(file).withPropertyName(name).withPathSensitivity(PathSensitivity.NONE) }
     outputs.dir(outDir)
     doLast {
-        val json = source.readText()
-        require("\"\"\"" !in json && "$" !in json) { "vectors JSON cannot be embedded in a raw string" }
-        val file = outDir.get().file("com/gametimer/protocol/noise/NoiseVectorsData.kt").asFile
-        file.parentFile.mkdirs()
-        file.writeText(
-            "// Generated from tests/vectors/noise-vectors.json by :shared:generateNoiseVectors. Do not edit.\n" +
-                "package com.gametimer.protocol.noise\n\n" +
-                "internal val NOISE_VECTORS_JSON: String = \"\"\"\n$json\n\"\"\"\n",
-        )
+        outDir.get().asFile.deleteRecursively() // no stale files from earlier layouts
+        val text = StringBuilder()
+        text.append("// Generated from tests/vectors by :shared:generateNoiseVectors. Do not edit.\n")
+        text.append("package com.gametimer.protocol.noise\n")
+        for ((name, file) in sources) {
+            val json = file.readText()
+            require("\"\"\"" !in json && "$" !in json) { "${file.name} cannot be embedded in a raw string" }
+            text.append("\ninternal val $name: String = \"\"\"\n$json\n\"\"\"\n")
+        }
+        val out = outDir.get().file("com/gametimer/protocol/noise/VectorsData.kt").asFile
+        out.parentFile.mkdirs()
+        out.writeText(text.toString())
     }
 }
 
