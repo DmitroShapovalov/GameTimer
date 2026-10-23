@@ -84,9 +84,31 @@ public partial class App : System.Windows.Application
         var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
         var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
         var pairing = new PairingService();
-        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService, sessionLog);
+        // Protocol v2 (native parent app): identity + paired apps in a DPAPI file; pairing asks the owner here
+        var pairingUi = new GameTimer.Services.V2.WindowsPairingUi(ui);
+        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService, sessionLog,
+            new GameTimer.Services.V2.AgentFileStore(), pairingUi);
 
-        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing, sessionLog);
+        var agentId = _remoteServer.Agent.AgentId;
+        if (_remoteServer.Agent.InitialSaveError is { } saveError)
+            DiagnosticLog.Write("v2 identity not saved: " + saveError.Message); // not remembered: no false tamper report next run
+        else if (settings.V2AgentId != agentId)
+        {
+            if (settings.V2AgentId != null)
+            {
+                DiagnosticLog.Write($"v2 identity changed ({settings.V2AgentId} → {agentId}): remote-v2.json lost or replaced");
+                sessionLog.Add(new GameTimer.Models.SessionEvent
+                {
+                    Time = DateTimeOffset.Now,
+                    Type = GameTimer.Models.SessionEventType.Tampered,
+                    Source = GameTimer.Models.ActionSource.System
+                });
+            }
+            settings.V2AgentId = agentId;
+            settingsService.Save(settings);
+        }
+
+        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing, sessionLog, pairingUi);
         MainWindow = mainWindow;
         mainWindow.Show();
 

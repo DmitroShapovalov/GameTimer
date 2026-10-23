@@ -24,6 +24,7 @@ public sealed partial class RemoteServer
     private readonly WebSocketHub _hub = new();
     private long _lastTickSentMs;
     private string? _lastSettingsJson;
+    private string? _lastScheduleJson;
 
     private sealed record AuthMessage(string? Type, string? Token);
 
@@ -127,8 +128,16 @@ public sealed partial class RemoteServer
         _devices.Changed += OnDevicesChanged;
         _timer.InterruptionChanged += OnInterruptionChanged;
         _sessionLog.Changed += OnHistoryChanged;
+        _sessionLog.Added += V2History;
         _timer.ScheduleStateChanged += OnScheduleChanged;
-        _lastSettingsJson = JsonSerializer.Serialize(BuildSettings(), Json);
+
+        // Changes made while the server was off still bump the v2 revs (a stale ifRev must not win)
+        var settings = JsonSerializer.Serialize(BuildSettings(), Json);
+        var schedule = JsonSerializer.Serialize(BuildSchedule(), Json);
+        if (_lastSettingsJson != null && settings != _lastSettingsJson) _v2Backend!.SettingsRev++;
+        if (_lastScheduleJson != null && schedule != _lastScheduleJson) _v2Backend!.ScheduleRev++;
+        _lastSettingsJson = settings;
+        _lastScheduleJson = schedule;
     }
 
     private void UnsubscribeEvents()
@@ -141,6 +150,7 @@ public sealed partial class RemoteServer
         _devices.Changed -= OnDevicesChanged;
         _timer.InterruptionChanged -= OnInterruptionChanged;
         _sessionLog.Changed -= OnHistoryChanged;
+        _sessionLog.Added -= V2History;
         _timer.ScheduleStateChanged -= OnScheduleChanged;
     }
 
@@ -153,45 +163,64 @@ public sealed partial class RemoteServer
             _ => "stopped" // Stopped and NotStarted (reset)
         };
         _lastTickSentMs = Environment.TickCount64; // next tick a full interval after start
+        _lastV2TickMs = _lastTickSentMs;
         Broadcast(new { type, status = BuildStatus() });
+        V2State();
     }
 
     private void OnTimerTick(TimeSpan remaining)
     {
         var now = Environment.TickCount64;
         // Small tolerance: the 1 s DispatcherTimer drifts a little
+        V2Tick(); // its own 30 s interval
         if (now - _lastTickSentMs < TickInterval.TotalMilliseconds - 250) return;
         _lastTickSentMs = now;
         Broadcast(new { type = "tick", status = BuildStatus() });
     }
 
-    private void OnAlert(int minutes) =>
+    private void OnAlert(int minutes)
+    {
         Broadcast(new { type = "alert", minutes, status = BuildStatus() });
+        V2Alert(minutes);
+    }
 
-    private void OnExtended(int minutes) =>
+    private void OnExtended(int minutes)
+    {
         Broadcast(new { type = "extended", minutes, status = BuildStatus() });
+        V2State();
+    }
 
     // SettingsChanged also fires for desktop-only fields (last typed times etc.): send only real changes
     private void OnSettingsChanged(object source)
     {
+        var schedule = JsonSerializer.Serialize(BuildSchedule(), Json);
+        bool scheduleChanged = schedule != _lastScheduleJson;
+        _lastScheduleJson = schedule;
+
         var settings = BuildSettings();
         var json = JsonSerializer.Serialize(settings, Json);
-        if (json == _lastSettingsJson) return;
+        bool settingsChanged = json != _lastSettingsJson;
         _lastSettingsJson = json;
-        Broadcast(new { type = "settingsChanged", settings });
+        if (settingsChanged) Broadcast(new { type = "settingsChanged", settings });
+        V2SettingsChanged(settingsChanged, scheduleChanged);
     }
 
     // The "app was closed while a timer ran" note appeared or was dismissed
-    private void OnInterruptionChanged() =>
+    private void OnInterruptionChanged()
+    {
         Broadcast(new { type = "interruption", status = BuildStatus() });
+        V2State();
+    }
 
     // A new history event was recorded; the phone refetches the list
-    private void OnHistoryChanged() =>
-        Broadcast(new { type = "history" });
+    private void OnHistoryChanged() => Broadcast(new { type = "history" });
 
     // The schedule allowed/blocked state or the day's remaining allowance changed
-    private void OnScheduleChanged() =>
+    private void OnScheduleChanged()
+    {
         Broadcast(new { type = "schedule", status = BuildStatus() });
+        V2ScheduleState();
+    }
 
     // A revoked device loses its open socket immediately
     private void OnDevicesChanged()

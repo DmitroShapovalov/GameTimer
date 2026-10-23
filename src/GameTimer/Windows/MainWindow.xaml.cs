@@ -19,6 +19,7 @@ public partial class MainWindow : FluentWindow
     private readonly DeviceStore _devices;
     private readonly PairingService _pairing;
     private readonly SessionLog _sessionLog;
+    private readonly GameTimer.Services.V2.WindowsPairingUi _pairingUi;
     private bool _isRemoteBusy;
     private bool? _firewallOk; // null = not checked yet
     private bool _isTamperBusy;
@@ -51,7 +52,8 @@ public partial class MainWindow : FluentWindow
     private static readonly int[] ScheduleDayOrder = { 1, 2, 3, 4, 5, 6, 0 };
 
     public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer,
-        RemoteServer remote, DeviceStore devices, PairingService pairing, SessionLog sessionLog)
+        RemoteServer remote, DeviceStore devices, PairingService pairing, SessionLog sessionLog,
+        GameTimer.Services.V2.WindowsPairingUi pairingUi)
     {
         InitializeComponent();
         _settingsService = settingsService;
@@ -70,6 +72,9 @@ public partial class MainWindow : FluentWindow
         _sessionLog = sessionLog;
         _sessionLog.Changed += () => Dispatcher.BeginInvoke(RefreshHistory);
         _devices.Changed += RefreshDevicesList;
+        _pairingUi = pairingUi;
+        _pairingUi.AskForCode = AskPairingCodeAsync;
+        _remote.Agent.PeersChanged += () => Dispatcher.BeginInvoke(RefreshDevicesList);
         _settingsService.SettingsChanged += OnSettingsChanged;
 
         LoadSettingsToUI();
@@ -1043,7 +1048,41 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        new ConnectPhoneDialog(_pairing, address.ToString(), port) { Owner = this }.ShowDialog();
+        new ConnectPhoneDialog(_pairing, _remote.Agent, _pairingUi, address.ToString(), port) { Owner = this }.ShowDialog();
+    }
+
+    /// <summary>Protocol v2 pairing: the owner types the phone's 6-digit code, then Windows Hello (§8.2).</summary>
+    private Task<string?> AskPairingCodeAsync(string hubName, CancellationToken cancel)
+    {
+        Window owner = OwnedWindows.OfType<ConnectPhoneDialog>().FirstOrDefault() ?? (Window)this;
+        PairingCodeDialog? dialog = null;
+        dialog = new PairingCodeDialog(hubName, () => RequireAuth(owner: dialog)) { Owner = owner };
+        var registration = cancel.Register(() => Dispatcher.BeginInvoke(dialog.Close));
+        dialog.Closed += (_, _) => registration.Dispose();
+        dialog.Show();
+        dialog.Activate();
+        return dialog.Result;
+    }
+
+    private async void RevokePeer_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: PeerItem peer }) return;
+        if (!await RequireAuth()) return;
+        _remote.Agent.RevokeByOwner(peer.Id); // closes its sessions at once (bye revoked)
+    }
+
+    private async void TogglePeerRole_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: PeerItem peer }) return;
+        if (!await RequireAuth()) return;
+        _remote.Agent.SetRoleByOwner(peer.Id,
+            peer.IsAdmin ? GameTimer.Protocol.Agent.PeerRole.Parent : GameTimer.Protocol.Agent.PeerRole.Admin);
+    }
+
+    /// <summary>A paired v2 parent app, as the Settings list shows it.</summary>
+    public sealed record PeerItem(string Id, string Name, string Subtitle, bool IsAdmin, string RoleButtonTip)
+    {
+        public string RevokeTip => Loc.Get("Delete");
     }
 
     private async void RevokeDevice_Click(object sender, RoutedEventArgs e)
@@ -1057,7 +1096,17 @@ public partial class MainWindow : FluentWindow
     {
         DevicesList.ItemsSource = null;
         DevicesList.ItemsSource = _devices.Devices;
-        NoDevicesText.Visibility = _devices.Devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        var peers = _remote.Agent.Peers.Select(p =>
+        {
+            bool admin = p.Role == GameTimer.Protocol.Agent.PeerRole.Admin;
+            var role = Loc.Get(admin ? "PeerRole_Admin" : "PeerRole_Parent");
+            var seen = p.LastSeen is { } t ? " · " + string.Format(Loc.Get("Device_LastSeen"), t.ToLocalTime().ToString("g")) : "";
+            return new PeerItem(p.Id, p.Name, string.Format(Loc.Get("Peer_App"), role) + seen, admin,
+                Loc.Get(admin ? "Peer_MakeParent" : "Peer_MakeAdmin"));
+        }).ToList();
+        PeersList.ItemsSource = peers;
+        NoDevicesText.Visibility = _devices.Devices.Count == 0 && peers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void UpdateRemoteStatus()
@@ -1466,7 +1515,7 @@ public partial class MainWindow : FluentWindow
 
     #region Authentication
 
-    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt")
+    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt", Window? owner = null)
     {
         try
         {
@@ -1480,7 +1529,7 @@ public partial class MainWindow : FluentWindow
         }
         catch { }
 
-        var dialog = new PasswordDialog { Owner = this };
+        var dialog = new PasswordDialog { Owner = owner ?? this };
         return dialog.ShowDialog() == true;
     }
 

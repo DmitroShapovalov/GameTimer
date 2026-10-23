@@ -9,6 +9,7 @@ on:
       - 'src/GameTimer.Protocol/**'
       - 'shared/**'
       - 'tests/**'
+      - 'tools/**'
       - 'gradle/**'
       - '*.gradle.kts'
       - 'gradle.properties'
@@ -24,6 +25,7 @@ on:
       - 'src/GameTimer.Protocol/**'
       - 'shared/**'
       - 'tests/**'
+      - 'tools/**'
       - 'gradle/**'
       - '*.gradle.kts'
       - 'gradle.properties'
@@ -70,6 +72,16 @@ jobs:
 
       - name: Kotlin vectors + behaviour + live interop tests
         run: ./gradlew :shared:jvmTest -PcsharpPeer="$RUNNER_TEMP/peer/NoisePeer.dll"
+
+      - name: Publish gt-testhub (scripted parent app for testing on a real PC)
+        run: dotnet publish tools/GameTimer.TestHub/GameTimer.TestHub.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "$RUNNER_TEMP/testhub"
+
+      - name: Upload gt-testhub
+        uses: actions/upload-artifact@v4
+        with:
+          name: gt-testhub-win-x64
+          path: ${{ runner.temp }}/testhub/
+          retention-days: 14
 
       - name: Test report
         if: failure()

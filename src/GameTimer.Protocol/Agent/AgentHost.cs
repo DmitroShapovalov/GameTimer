@@ -64,6 +64,9 @@ public sealed partial class AgentHost : IDisposable
     /// <summary>Peers were added, revoked or changed role (any thread). The PC's settings page refreshes.</summary>
     public event Action? PeersChanged;
 
+    /// <summary>A hub completed pairing (any thread), also when a known hub paired again.</summary>
+    public event Action<Peer>? Paired;
+
     public AgentHost(IAgentStore store, IAgentBackend backend, IPairingUi pairingUi, TimeProvider? time = null)
     {
         _store = store;
@@ -83,7 +86,8 @@ public sealed partial class AgentHost : IDisposable
             // First run (or an unreadable store): a new identity. Existing hubs must pair again.
             _key = KeyPair.Generate();
             _state = new AgentState { PrivateKey = Base64Url.Encode(_key.PrivateKey) };
-            store.Save(_state);
+            try { store.Save(_state); }
+            catch (Exception ex) { InitialSaveError = ex; } // keep running with the identity in memory
         }
         if (priv != null) CryptographicOperations.ZeroMemory(priv);
         AgentId = Ids.AgentId(_key.PublicKey);
@@ -93,6 +97,12 @@ public sealed partial class AgentHost : IDisposable
     public byte[] AgentPublicKey => _key.PublicKey;
 
     public string AgentId { get; }
+
+    /// <summary>
+    /// A new identity was created but could not be saved (e.g. disk full): it lives only until the app
+    /// exits, and the next start creates another one. Null when the identity is on disk.
+    /// </summary>
+    public Exception? InitialSaveError { get; }
 
     internal IReadOnlyCollection<string> Capabilities
     {

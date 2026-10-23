@@ -23,6 +23,11 @@
     <Using Include="System.Windows.Input" />
   </ItemGroup>
 
+  <!-- Protocol v2 core (Noise, agent host): docs/protocol.md -->
+  <ItemGroup>
+    <ProjectReference Include="..\GameTimer.Protocol\GameTimer.Protocol.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="WPF-UI" Version="3.0.5" />
     <PackageReference Include="QRCoder" Version="1.8.0" />

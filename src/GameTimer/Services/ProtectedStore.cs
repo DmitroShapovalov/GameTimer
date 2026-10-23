@@ -52,7 +52,13 @@ public static class ProtectedStore
     /// (or null if nothing good remains, so the caller uses defaults). A legacy plaintext file
     /// (pre-DPAPI, with no .bak yet) is returned as-is once for migration; the caller re-saves it protected.
     /// </summary>
-    public static string? Read(string path)
+    public static string? Read(string path) => Read(path, allowLegacyPlaintext: true);
+
+    /// <summary>
+    /// As <see cref="Read(string)"/>; with <paramref name="allowLegacyPlaintext"/> false a file without
+    /// the magic is always treated as tampering (for files that were never written in plaintext).
+    /// </summary>
+    public static string? Read(string path, bool allowLegacyPlaintext)
     {
         if (!File.Exists(path)) return null;
         byte[] raw;
@@ -68,7 +74,7 @@ public static class ProtectedStore
         // No magic: a genuine legacy plaintext file (first run after update), or a plaintext file
         // planted to replace a protected one. If we were protecting this file before (.bak exists),
         // a plaintext file now is tampering.
-        if (File.Exists(path + ".bak")) return Rollback(path);
+        if (!allowLegacyPlaintext || File.Exists(path + ".bak")) return Rollback(path);
 
         try { return Encoding.UTF8.GetString(raw); } catch { return null; } // one-time legacy migration
     }
