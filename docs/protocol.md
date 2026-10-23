@@ -190,7 +190,7 @@ Rules:
     in `ProtectedStore`, so a PC restart doesn't make a resent `timer.extend` run twice.
   - A known `rid` with the **same** body is not executed again; the stored reply is returned. A known
     `rid` with a **different** body → `error` `bad_request`.
-  - `error` replies are cached too, except `busy`.
+  - `error` replies are cached too, except `busy` and `internal`.
   - A hub's entries are deleted when it is revoked.
   - The hub stops resending after **5 minutes** (well inside the 10-minute window) and asks the user.
 - **Concurrency.** `settings` and `schedule` carry a `rev` (integer, +1 on every change). A write may
@@ -268,15 +268,16 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 | `schedule.put` | `schedule` | ✓ | any | full schedule, optional `ifRev` | `schedule` |
 | `history.get` | `history` | — | any | `limit` (1–100, default 50), optional `before` (cursor) | `events[]` newest first, `more`, `next` (cursor) |
 | `peers.list` | `peers` | — | any | — | `peers[]` |
-| `peers.revoke` | `peers` | ✓ | admin (or self) | `id` | `peers[]` |
-| `peers.setRole` | `peers` | ✓ | admin | `id`, `role` (`admin` / `parent`) | `peers[]` |
+| `peers.revoke` | `peers` | ✓ | admin (or self) | `peer` (hub id) | `peers[]` |
+| `peers.setRole` | `peers` | ✓ | admin | `peer` (hub id), `role` (`admin` / `parent`) | `peers[]` |
 
 `peers[]` entries: `id`, `name`, `role`, `pairedAt`, `lastSeen`, `current` (= this is the hub making
 the request).
 
 Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `invalid_minutes`,
 `invalid_threshold`, `invalid_alerts`, `invalid_color`, `invalid_language`, `invalid_schedule`) plus
-`bad_request`, `unknown_command`, `unsupported`, `forbidden`, `conflict`, `busy`, `last_admin`.
+`bad_request`, `unknown_command`, `unsupported`, `forbidden`, `conflict`, `busy`, `last_admin`, and
+`internal` (the agent failed unexpectedly; the request may be retried with the same `rid`).
 
 ### 7.3 Events (agent → hub)
 
@@ -288,7 +289,7 @@ Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `in
 | `ev.settings` | settings changed (on the PC or by another parent) | `settings` |
 | `ev.schedule` | schedule changed | `schedule` |
 | `ev.history` | a history event was recorded | `event` |
-| `ev.peers` | a parent was added, revoked or changed role | `peers[]`, `change` (`added` / `revoked` / `role`), `id` |
+| `ev.peers` | a parent was added, revoked or changed role | `peers[]`, `change` (`added` / `revoked` / `role`), `peer` (hub id) |
 
 ## 8. Roles and pairing
 
