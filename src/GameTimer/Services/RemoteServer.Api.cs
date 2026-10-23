@@ -129,27 +129,12 @@ public sealed partial class RemoteServer
 
         app.MapPut("/api/schedule", async (ScheduleDto? update) =>
         {
-            if (update?.Week == null || update.Week.Count != 7)
-                return Error(StatusCodes.Status400BadRequest, "invalid_request");
-            foreach (var d in update.Week)
-            {
-                if (d == null || d.LimitMinutes is < 0 or > 1440
-                    || d.WindowStartMinutes is < 0 or > 1440 || d.WindowEndMinutes is < 0 or > 1440)
-                    return Error(StatusCodes.Status400BadRequest, "invalid_schedule");
-            }
+            var error = ValidateSchedule(update);
+            if (error != null)
+                return Error(StatusCodes.Status400BadRequest, error);
             return await _ui.InvokeAsync(() =>
             {
-                _settings.ScheduleEnabled = update.Enabled;
-                _settings.Week = update.Week.Select(d => new DaySchedule
-                {
-                    Allowed = d.Allowed,
-                    LimitMinutes = d.LimitMinutes,
-                    WindowStartMinutes = d.WindowStartMinutes,
-                    WindowEndMinutes = d.WindowEndMinutes
-                }).ToList();
-                _settingsService.Save(_settings);
-                _settingsService.NotifyChanged(this);
-                _timer.ReevaluateSchedule();
+                ApplySchedule(update!);
                 return Results.Json(BuildSchedule());
             });
         });
@@ -210,6 +195,36 @@ public sealed partial class RemoteServer
         _settings.ScheduleEnabled,
         (_settings.Week ?? new List<DaySchedule>()).Select(d =>
             new DayDto(d.Allowed, d.LimitMinutes, d.WindowStartMinutes, d.WindowEndMinutes)).ToList());
+
+    /// <summary>Shared by v1 PUT /api/schedule and v2 schedule.put.</summary>
+    private string? ValidateSchedule(ScheduleDto? update)
+    {
+        if (update?.Week == null || update.Week.Count != 7)
+            return "invalid_request";
+        foreach (var d in update.Week)
+        {
+            if (d == null || d.LimitMinutes is < 0 or > 1440
+                || d.WindowStartMinutes is < 0 or > 1440 || d.WindowEndMinutes is < 0 or > 1440)
+                return "invalid_schedule";
+        }
+        return null;
+    }
+
+    // UI thread only
+    private void ApplySchedule(ScheduleDto update)
+    {
+        _settings.ScheduleEnabled = update.Enabled;
+        _settings.Week = update.Week.Select(d => new DaySchedule
+        {
+            Allowed = d.Allowed,
+            LimitMinutes = d.LimitMinutes,
+            WindowStartMinutes = d.WindowStartMinutes,
+            WindowEndMinutes = d.WindowEndMinutes
+        }).ToList();
+        _settingsService.Save(_settings);
+        _settingsService.NotifyChanged(this);
+        _timer.ReevaluateSchedule();
+    }
 
     private static string? Validate(SettingsUpdate u)
     {

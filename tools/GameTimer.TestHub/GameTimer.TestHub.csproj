@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A scripted protocol v2 parent app for testing the Windows agent on a real PC (ROADMAP A3).
+       Not shipped with the app. CI publishes it as a win-x64 single-file artifact. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>gt-testhub</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GameTimer.Protocol\GameTimer.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -328,6 +328,35 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <!-- Protocol v2 parent apps (role, revoke) -->
+                        <ItemsControl x:Name="PeersList" Margin="0,-12,0,16">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}"/>
+                                            <TextBlock Text="{Binding Subtitle}" FontSize="11"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <ui:Button Grid.Column="1" Appearance="Secondary" Margin="0,0,4,0"
+                                                   Width="30" Height="30" Padding="0" ToolTip="{Binding RoleButtonTip}"
+                                                   Click="TogglePeerRole_Click" Tag="{Binding}">
+                                            <ui:SymbolIcon Symbol="PersonKey20" FontSize="14"/>
+                                        </ui:Button>
+                                        <ui:Button Grid.Column="2" Appearance="Secondary"
+                                                   Width="30" Height="30" Padding="0"
+                                                   Click="RevokePeer_Click" Tag="{Binding}">
+                                            <ui:SymbolIcon Symbol="Delete24" FontSize="14"/>
+                                        </ui:Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <TextBlock x:Name="TamperLabel" Text="Protection from closing" Style="{StaticResource SectionLabel}"/>
                         <ui:ToggleSwitch x:Name="TamperToggle" Content="Prevent closing from Task Manager"

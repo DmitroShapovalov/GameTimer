@@ -30,6 +30,18 @@ public sealed partial class AgentHost
         }
     }
 
+    /// <summary>
+    /// Runs an accepted <c>/v2</c> or <c>/v2/pair</c> WebSocket (the web server has checked the path, the
+    /// LAN filter and the missing Origin header, and reserved <paramref name="ticket"/>). Returns once the
+    /// socket is closed, so the server can dispose it.
+    /// </summary>
+    public async Task RunWebSocketAsync(System.Net.WebSockets.WebSocket socket, HandshakeTicket ticket, bool pairing, CancellationToken cancel)
+    {
+        var transport = new WebSocketFrameTransport(socket);
+        await RunAsync(transport, ticket, pairing, cancel).ConfigureAwait(false);
+        await transport.ReadLoop.ConfigureAwait(false);
+    }
+
     // ---------------- /v2: IK, ready rule, session ----------------
 
     private async Task RunSessionAsync(IFrameTransport transport, HandshakeTicket ticket, CancellationToken cancel)

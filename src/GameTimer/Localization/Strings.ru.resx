@@ -392,4 +392,37 @@
   <data name="AuthPrompt_Uninstall" xml:space="preserve">
     <value>GameTimer: подтвердите закрытие для удаления</value>
   </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Отмена</value>
+  </data>
+  <data name="PairCode_Title" xml:space="preserve">
+    <value>Подтверждение телефона</value>
+  </data>
+  <data name="PairCode_Prompt" xml:space="preserve">
+    <value>«{0}» хочет подключиться. Введите код, который показан на телефоне.</value>
+  </data>
+  <data name="PairCode_Hint" xml:space="preserve">
+    <value>Подтверждайте только телефон, который держите в руках. Неверный код отменяет подключение.</value>
+  </data>
+  <data name="PairCode_Confirm" xml:space="preserve">
+    <value>Подключить</value>
+  </data>
+  <data name="ConnectPhone_TwoPhones" xml:space="preserve">
+    <value>С этим кодом пытались подключиться два телефона — возможно, его сфотографировали. Закройте окно и начните заново.</value>
+  </data>
+  <data name="Peer_App" xml:space="preserve">
+    <value>Приложение родителя · {0}</value>
+  </data>
+  <data name="PeerRole_Admin" xml:space="preserve">
+    <value>админ</value>
+  </data>
+  <data name="PeerRole_Parent" xml:space="preserve">
+    <value>родитель</value>
+  </data>
+  <data name="Peer_MakeAdmin" xml:space="preserve">
+    <value>Сделать админом</value>
+  </data>
+  <data name="Peer_MakeParent" xml:space="preserve">
+    <value>Сделать родителем (не админом)</value>
+  </data>
 </root>
