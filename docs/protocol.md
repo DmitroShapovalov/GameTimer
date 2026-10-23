@@ -62,7 +62,8 @@ recommended app behaviour that the other side cannot check.
 **Errors**
 - **Before** the handshake is confirmed (§4.3): any failure → close silently (no oracle).
 - **After**: send `{ "t": "bye", "code": "<reason>" }` (§5), then close. Reasons: `protocol_error`,
-  `revoked`, `expired`, `denied`, `code_used`, `busy`, `shutdown`.
+  `revoked`, `expired`, `denied`, `code_used`, `busy`, `shutdown`, `internal`. A peer that doesn't
+  read the `bye` within 2 s is cut off; nothing it sends after the `bye` is executed.
 
 ## 4. Security
 
@@ -198,9 +199,9 @@ Rules:
   - The hub stops resending after **5 minutes** (well inside the 10-minute window) and asks the user.
 - **Concurrency.** `settings` and `schedule` carry a `rev` (integer, +1 on every change). A write may
   include `ifRev`; if it doesn't match → `error` `conflict` with the current value in `value`.
-- **Ordering.** For a successful state-changing request the agent sends the `result` to the
-  requesting session first, then the matching `ev.*` to **all other** sessions (not back to the
-  requester).
+- **Ordering.** For a successful state-changing request the requesting session gets the `result`
+  and **not** the matching `ev.*`; all other sessions get the `ev.*`, in the order the agent's state
+  changed. (Across different sessions there is no "before": each hub orders only its own stream.)
 
 ## 6. Session start: `ready` → `hello`
 

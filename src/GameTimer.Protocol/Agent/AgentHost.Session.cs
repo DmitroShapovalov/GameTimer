@@ -94,7 +94,14 @@ public sealed partial class AgentHost
         {
             Persist(); // lastSeen, set by Register
             // Events published from now on wait in the session until hello is out (§6: hello comes first)
-            session.SendHello(await HelloAsync(session, hubMinor).ConfigureAwait(false));
+            JsonObject hello;
+            try { hello = await HelloAsync(session, hubMinor).ConfigureAwait(false); }
+            catch (Exception)
+            {
+                session.Bye("internal"); // the backend failed to produce the state
+                return;
+            }
+            session.SendHello(hello);
             await ReceiveLoopAsync(session, transport, recv, cancel).ConfigureAwait(false);
         }
         finally
@@ -193,6 +200,7 @@ public sealed partial class AgentHost
                 return;
             }
             if (frame == null) { session.Abort(); return; }
+            if (session.IsClosing) return; // revoked or evicted meanwhile: nothing more is executed
 
             try
             {
@@ -237,7 +245,10 @@ public sealed partial class AgentHost
     /// </summary>
     internal sealed class Session
     {
-        private const int OutboxCapacity = 256;
+        private const int OutboxCapacity = 257; // hello + up to 256 held-back messages
+        private const int HeldBackLimit = OutboxCapacity - 1;
+        /// <summary>A peer that doesn't read its bye in this time is cut off (it would otherwise hold a slot).</summary>
+        private static readonly TimeSpan ByeGrace = TimeSpan.FromSeconds(2);
         private readonly IFrameTransport _transport;
         private readonly CipherState _send;
         private readonly Channel<JsonObject> _outbox =
@@ -248,10 +259,13 @@ public sealed partial class AgentHost
         private List<JsonObject>? _beforeHello = new();
         private string? _byeCode;
         private int _closing;
+        private readonly TimeProvider _time;
+        private ITimer? _byeTimer;
 
         public Session(AgentHost host, IFrameTransport transport, CipherState send, Peer peer, TimeProvider time)
         {
             _ = host;
+            _time = time;
             _transport = transport;
             _send = send;
             HubId = peer.Id;
@@ -264,7 +278,8 @@ public sealed partial class AgentHost
 
         public string HubId { get; }
         public string HubName { get; }
-        public PeerRole Role { get; set; }
+        private volatile PeerRole _role;
+        public PeerRole Role { get => _role; set => _role = value; }
         public DateTimeOffset StartedAt { get; }
         public long LastId { get; set; }
         public CancellationToken Lifetime => _lifetime.Token;
@@ -279,12 +294,11 @@ public sealed partial class AgentHost
                 if (IsClosing) return;
                 if (_beforeHello != null)
                 {
-                    if (_beforeHello.Count >= OutboxCapacity) { AbortLocked(); return; }
-                    _beforeHello.Add(message);
-                    return;
+                    if (_beforeHello.Count < HeldBackLimit) { _beforeHello.Add(message); return; }
                 }
-                if (!_outbox.Writer.TryWrite(message)) AbortLocked();
+                else if (_outbox.Writer.TryWrite(message)) return;
             }
+            Abort(); // a reader that can't keep up
         }
 
         /// <summary>Sends hello, then whatever was published while it was being built.</summary>
@@ -295,9 +309,9 @@ public sealed partial class AgentHost
                 var held = _beforeHello ?? new List<JsonObject>();
                 _beforeHello = null;
                 if (IsClosing) return;
+                // Capacity is hello + the held-back limit, so these writes can't fail
                 _outbox.Writer.TryWrite(hello);
-                foreach (var m in held)
-                    if (!_outbox.Writer.TryWrite(m)) { AbortLocked(); return; }
+                foreach (var m in held) _outbox.Writer.TryWrite(m);
             }
         }
 
@@ -311,20 +325,21 @@ public sealed partial class AgentHost
                 _byeCode = code;
                 _beforeHello = null; // hello never went out: just the bye
                 _outbox.Writer.TryComplete();
+                _byeTimer = _time.CreateTimer(_ => Abort(), null, ByeGrace, Timeout.InfiniteTimeSpan);
             }
         }
 
-        /// <summary>Closes without a goodbye (dead connection, idle timeout); unblocks a stuck send.</summary>
+        /// <summary>Closes without a goodbye (dead connection, idle timeout, bye not read); unblocks a stuck send.</summary>
         public void Abort()
         {
-            lock (_gate) AbortLocked();
-        }
-
-        private void AbortLocked()
-        {
-            Volatile.Write(ref _closing, 1);
-            _byeCode = null;
-            _outbox.Writer.TryComplete();
+            lock (_gate)
+            {
+                Volatile.Write(ref _closing, 1);
+                _byeCode = null;
+                _beforeHello = null;
+                _outbox.Writer.TryComplete();
+            }
+            // Outside the lock: cancellation callbacks and the transport's close run arbitrary code
             try { _abort.Cancel(); } catch (ObjectDisposedException) { }
             _ = CloseQuietlyAsync();
         }
@@ -374,6 +389,7 @@ public sealed partial class AgentHost
         /// <summary>After both loops have ended.</summary>
         public void DisposeTimers()
         {
+            lock (_gate) _byeTimer?.Dispose();
             _lifetime.Dispose();
             _abort.Dispose();
         }

@@ -155,18 +155,16 @@ public sealed partial class AgentHost : IDisposable
     }
 
     /// <summary>
-    /// Publishes an event (§7.3) to every live session; any thread. Pass <paramref name="causedBy"/>
-    /// (<see cref="RequestContext.Origin"/>) when the event is the direct effect of a hub request: the
-    /// requester then doesn't get it, and the others get it after the requester has its result (§5).
-    /// Events from timers, the PC or anything later pass null and reach every session.
+    /// Publishes an event (§7.3) to every live session, at once and in call order; any thread. Pass
+    /// <paramref name="causedBy"/> (<see cref="RequestContext.Origin"/>) when the event is the direct
+    /// effect of a hub request: that requester gets its <c>result</c> instead (§5). Events from timers,
+    /// the PC or anything later pass null and reach every session.
     /// </summary>
     public void Publish(string type, JsonObject body, RequestOrigin? causedBy = null)
     {
         if (!type.StartsWith("ev.", StringComparison.Ordinal)) throw new ArgumentException("events start with ev.", nameof(type));
         var message = new JsonObject { ["t"] = type };
         foreach (var (k, v) in body) message[k] = v?.DeepClone();
-
-        if (causedBy != null && causedBy.TryDefer(null, message)) return;
         foreach (var s in LiveSessions())
             if (s != causedBy?.Session) s.Enqueue((JsonObject)message.DeepClone());
     }
@@ -346,12 +344,19 @@ public sealed partial class AgentHost : IDisposable
             snapshot = JsonSerializer.Deserialize<AgentState>(JsonSerializer.SerializeToUtf8Bytes(_state, StoreJson), StoreJson)!;
             seq = ++_saveSeq;
         }
+        Exception? error = null;
         lock (_saveLock)
         {
             if (seq <= _savedSeq) return; // a newer snapshot is already on disk
             try { _store.Save(snapshot); }
-            catch (Exception ex) { StoreError?.Invoke(ex); }
+            catch (Exception ex) { error = ex; }
             _savedSeq = seq;
+        }
+        // Outside the lock: a handler that marshals to the UI thread can't deadlock with a UI-thread Persist
+        if (error != null)
+        {
+            try { StoreError?.Invoke(error); }
+            catch { /* the app's logger failed; the state is still in memory */ }
         }
     }
 
@@ -383,8 +388,7 @@ public sealed partial class AgentHost : IDisposable
         foreach (var s in LiveSessions())
         {
             if (origin?.Session == s) continue;
-            var msg = new JsonObject { ["t"] = "ev.peers", ["peers"] = PeersJson(s.HubId), ["change"] = change, ["peer"] = hubId };
-            if (origin == null || !origin.TryDefer(s, msg)) s.Enqueue(msg);
+            s.Enqueue(new JsonObject { ["t"] = "ev.peers", ["peers"] = PeersJson(s.HubId), ["change"] = change, ["peer"] = hubId });
         }
     }
 
@@ -466,51 +470,38 @@ public sealed class PairingOffer
 }
 
 /// <summary>
-/// Identifies one hub request while it runs (§5 ordering). The backend passes it to
-/// <see cref="AgentHost.Publish"/> for events its request caused; they are held until the requester
-/// has its result. Once the result is out, the origin is closed and such events go out at once.
+/// Identifies one hub request while it runs (§5). The backend passes it to <see cref="AgentHost.Publish"/>
+/// for events its request caused, so the requester (which gets the result instead) is left out.
 /// Explicit on purpose: nothing flows implicitly into timers or tasks the backend starts.
 /// </summary>
 public sealed class RequestOrigin
 {
     private readonly object _gate = new();
-    private List<(AgentHost.Session? To, JsonObject Message)>? _deferred = new();
+    private bool _closed;
     private string? _byeAfter;
 
     internal RequestOrigin(AgentHost.Session session) => Session = session;
 
     internal AgentHost.Session Session { get; }
 
-    /// <summary>Holds <paramref name="message"/> for <paramref name="to"/> (null = every other session). False once closed.</summary>
-    internal bool TryDefer(AgentHost.Session? to, JsonObject message)
-    {
-        lock (_gate)
-        {
-            if (_deferred == null) return false;
-            _deferred.Add((to, message));
-            return true;
-        }
-    }
-
     /// <summary>The requester itself must be closed after its reply (self-revoke). False once closed.</summary>
     internal bool TrySetByeAfter(string code)
     {
         lock (_gate)
         {
-            if (_deferred == null) return false;
+            if (_closed) return false;
             _byeAfter = code;
             return true;
         }
     }
 
-    /// <summary>Ends the request: returns what was held, and lets later events through directly.</summary>
-    internal (List<(AgentHost.Session? To, JsonObject Message)> Deferred, string? ByeAfter) Close()
+    /// <summary>Ends the request: returns a bye the requester must get after its reply, if any.</summary>
+    internal string? Close()
     {
         lock (_gate)
         {
-            var d = _deferred ?? new();
-            _deferred = null;
-            return (d, _byeAfter);
+            _closed = true;
+            return _byeAfter;
         }
     }
 }

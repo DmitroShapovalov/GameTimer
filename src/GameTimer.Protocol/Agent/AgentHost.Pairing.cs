@@ -137,13 +137,15 @@ public sealed partial class AgentHost
         catch (OperationCanceledException) { }
         catch (Exception) { } // a broken dialog counts as a cancel
 
-        bool accepted;
+        // Check and commit in one critical section: a second phone or a cancel can't slip in between
+        Peer? peer = null;
         lock (_lock)
         {
-            accepted = typed != null && !confirm.IsCancellationRequested && _pairing == offer && offer.UsedBy == keyText
-                       && !offer.Aborted.IsCancellationRequested && CodesEqual(typed.Trim(), expected);
+            if (typed != null && !confirm.IsCancellationRequested && _pairing == offer && offer.UsedBy == keyText
+                && !offer.Aborted.IsCancellationRequested && CodesEqual(typed.Trim(), expected))
+                peer = CommitPeerLocked(keyText, hubName);
         }
-        if (!accepted)
+        if (peer == null)
         {
             confirm.Cancel();
             await SendDirectAsync(transport, send, Bye("denied")).ConfigureAwait(false);
@@ -151,10 +153,10 @@ public sealed partial class AgentHost
             return;
         }
 
-        // Commit, then send: if the phone vanishes in between it is paired without knowing it and simply
+        // Committed, then sent: if the phone vanishes in between it is paired without knowing it and simply
         // pairs again (same key: same role, a new ak). The opposite order could tell a phone "paired"
         // for a hub the PC never stored.
-        var peer = CommitPeer(keyText, hubName);
+        Persist();
         var result = new JsonObject
         {
             ["t"] = "pair.result",
@@ -170,11 +172,9 @@ public sealed partial class AgentHost
         PeersChanged?.Invoke();
     }
 
-    /// <summary>Stores the hub (§8.2 step 7). A hub key paired before keeps its role and gets a new ak.</summary>
-    private Peer CommitPeer(string keyText, string hubName)
+    /// <summary>Stores the hub (§8.2 step 7). A hub key paired before keeps its role and gets a new ak. Under the lock.</summary>
+    private Peer CommitPeerLocked(string keyText, string hubName)
     {
-        Peer result;
-        lock (_lock)
         {
             var existing = _state.Peers.FirstOrDefault(p => p.PublicKey == keyText);
             var role = existing?.Role
@@ -192,10 +192,8 @@ public sealed partial class AgentHost
             };
             if (existing != null) _state.Peers.Remove(existing);
             _state.Peers.Add(peer);
-            result = Clone(peer);
+            return Clone(peer);
         }
-        Persist();
-        return result;
     }
 
     private bool TryReadPairHello(CipherState recv, byte[] frame, out string? name)

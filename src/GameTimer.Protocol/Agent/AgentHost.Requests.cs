@@ -73,18 +73,20 @@ public sealed partial class AgentHost
         }
 
         session.Enqueue(reply);
-        var (deferred, byeAfter) = origin.Close();
-        foreach (var (to, message) in deferred)
-        {
-            if (to != null) { to.Enqueue(message); continue; }
-            foreach (var s in LiveSessions())
-                if (s != session) s.Enqueue((JsonObject)message.DeepClone());
-        }
+        var byeAfter = origin.Close();
         if (byeAfter != null) session.Bye(byeAfter);
     }
 
     private async Task<JsonObject> ProcessAsync(Session session, string type, JsonElement root, long id, RequestOrigin origin)
     {
+        // The hub's current role, and whether it is still paired at all: a revoke or role change may have
+        // happened since this session started (the session is closing then, but a frame may be in flight)
+        lock (_lock)
+        {
+            var peer = _state.Peers.FirstOrDefault(p => p.Id == session.HubId);
+            if (peer == null || session.IsClosing) return ErrorMessage(id, "forbidden");
+            session.Role = peer.Role;
+        }
         if (!Commands.TryGetValue(type, out var command)) return ErrorMessage(id, "unknown_command");
         if (command.Capability != null && !Capabilities.Contains(command.Capability)) return ErrorMessage(id, "unsupported");
         if (!command.NeedsRid) return ToMessage(id, await ExecuteAsync(session, command, type, root, origin).ConfigureAwait(false));

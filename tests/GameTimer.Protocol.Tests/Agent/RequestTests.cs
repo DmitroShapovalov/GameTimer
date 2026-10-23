@@ -67,6 +67,49 @@ public class RequestTests
     }
 
     [Fact]
+    public async Task A_request_arriving_after_a_revoke_is_not_executed()
+    {
+        using var f = new AgentFixture();
+        var (key, _) = await f.PairAsync();
+        var (hub, _) = await TestHub.ConnectAsync(f.Host, key);
+        f.Host.RevokeByOwner(hub.Id);
+        // The phone hasn't read the bye yet and sends one more request
+        await hub.SendJsonAsync(new JsonObject { ["t"] = "timer.extend", ["id"] = 1, ["rid"] = TestHub.NewRid(), ["minutes"] = 5 });
+        await Task.Delay(200);
+        Assert.Equal(0, f.Backend.Extends);
+        Assert.Equal("revoked", (await hub.ReceiveJsonAsync()).GetProperty("code").GetString());
+        Assert.False(f.Store.State!.Rids.ContainsKey(hub.Id));
+    }
+
+    [Fact]
+    public async Task Observers_get_events_in_the_order_the_state_changed()
+    {
+        using var f = new AgentFixture();
+        var (a, _) = await f.PairAsync("A");
+        var (b, _) = await f.PairAsync("B");
+        var (hubA, _) = await TestHub.ConnectAsync(f.Host, a);
+        var (hubB, _) = await TestHub.ConnectAsync(f.Host, b);
+        // timer.extend publishes its ev.state (with the origin); a PC event follows right after
+        await hubA.RequestAsync("timer.extend", Extend(), withRid: true);
+        f.Host.Publish("ev.alert", new JsonObject { ["minutes"] = 1 });
+        Assert.Equal("ev.state", (await hubB.ReceiveJsonAsync()).GetProperty("t").GetString());
+        Assert.Equal("ev.alert", (await hubB.ReceiveJsonAsync()).GetProperty("t").GetString());
+    }
+
+    [Fact]
+    public async Task A_burst_of_events_while_hello_is_built_is_kept()
+    {
+        using var f = new AgentFixture();
+        var (key, _) = await f.PairAsync();
+        f.Backend.BeforeState = () =>
+        {
+            for (int i = 0; i < 256; i++) f.Host.Publish("ev.tick", new JsonObject { ["n"] = i });
+        };
+        var (hub, _) = await TestHub.ConnectAsync(f.Host, key);
+        for (int i = 0; i < 256; i++) Assert.Equal(i, (await hub.ReceiveJsonAsync()).GetProperty("n").GetInt32());
+    }
+
+    [Fact]
     public async Task Events_from_the_pc_reach_everyone()
     {
         using var f = new AgentFixture();
