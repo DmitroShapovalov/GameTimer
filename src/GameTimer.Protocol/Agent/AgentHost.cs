@@ -165,9 +165,14 @@ public sealed partial class AgentHost : IDisposable
         if (!type.StartsWith("ev.", StringComparison.Ordinal)) throw new ArgumentException("events start with ev.", nameof(type));
         var message = new JsonObject { ["t"] = type };
         foreach (var (k, v) in body) message[k] = v?.DeepClone();
-        foreach (var s in LiveSessions())
-            if (s != causedBy?.Session) s.Enqueue((JsonObject)message.DeepClone());
+        // One fan-out at a time, so every session sees events in the same order even when several
+        // threads publish (Enqueue never blocks)
+        lock (_publishLock)
+            foreach (var s in LiveSessions())
+                if (s != causedBy?.Session) s.Enqueue((JsonObject)message.DeepClone());
     }
+
+    private readonly object _publishLock = new();
 
     /// <summary>Says <c>bye shutdown</c> to every session (app exit or update).</summary>
     public async Task ShutdownAsync()
@@ -385,11 +390,12 @@ public sealed partial class AgentHost : IDisposable
     /// <summary>ev.peers is per session (each hub sees its own <c>current</c>), so it bypasses <see cref="Publish"/>.</summary>
     private void PublishPeers(string change, string hubId, RequestOrigin? origin)
     {
-        foreach (var s in LiveSessions())
-        {
-            if (origin?.Session == s) continue;
-            s.Enqueue(new JsonObject { ["t"] = "ev.peers", ["peers"] = PeersJson(s.HubId), ["change"] = change, ["peer"] = hubId });
-        }
+        lock (_publishLock)
+            foreach (var s in LiveSessions())
+            {
+                if (origin?.Session == s) continue;
+                s.Enqueue(new JsonObject { ["t"] = "ev.peers", ["peers"] = PeersJson(s.HubId), ["change"] = change, ["peer"] = hubId });
+            }
     }
 
     internal static string RoleName(PeerRole role) => role == PeerRole.Admin ? "admin" : "parent";
