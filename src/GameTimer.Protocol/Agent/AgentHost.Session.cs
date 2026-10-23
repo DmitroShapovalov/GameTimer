@@ -52,7 +52,9 @@ public sealed partial class AgentHost
                 try { payload = hs.ReadMessage(msg1); }
                 catch (NoiseException) { RecordFailure(ip); return; }
 
-                // §4.1: only a paired hub key may continue; §4.2: msg 1 carries { "t": "connect" } only
+                // §4.1: only a paired hub key may continue; §4.2: msg 1 carries { "t": "connect" } only.
+                // The failed-handshake counter (§3) is never applied to a known hub key, and an unknown key
+                // is always refused here, so on /v2 it only counts; it gates /v2/pair.
                 var known = FindPeerByKey(hs.RemoteStaticPublicKey!);
                 if (known == null || !IsBareMessage(payload, "connect")) { RecordFailure(ip); return; }
 
@@ -80,25 +82,19 @@ public sealed partial class AgentHost
         // Confirmed. From here on failures are answered with bye (§3).
         ticket.Dispose();
         var session = new Session(this, transport, send, peer, _time);
-        if (!Register(session))
+        var registered = Register(session);
+        if (registered != null)
         {
-            session.Bye("busy");
+            session.Bye(registered);
             await session.Completion.ConfigureAwait(false);
             return;
         }
 
         try
         {
-            lock (_lock)
-            {
-                var stored = _state.Peers.FirstOrDefault(p => p.Id == peer.Id);
-                if (stored != null)
-                {
-                    stored.LastSeen = _time.GetUtcNow();
-                    _store.Save(_state);
-                }
-            }
-            session.Enqueue(await HelloAsync(session, hubMinor).ConfigureAwait(false));
+            Persist(); // lastSeen, set by Register
+            // Events published from now on wait in the session until hello is out (§6: hello comes first)
+            session.SendHello(await HelloAsync(session, hubMinor).ConfigureAwait(false));
             await ReceiveLoopAsync(session, transport, recv, cancel).ConfigureAwait(false);
         }
         finally
@@ -127,7 +123,7 @@ public sealed partial class AgentHost
     private async Task<JsonObject> HelloAsync(Session session, int hubMinor)
     {
         string ak;
-        lock (_lock) ak = _state.Peers.First(p => p.Id == session.HubId).Ak;
+        lock (_lock) ak = _state.Peers.FirstOrDefault(p => p.Id == session.HubId)?.Ak ?? ""; // revoked meanwhile: the bye is queued already
         var caps = new JsonArray();
         foreach (var c in Capabilities) caps.Add(c);
         return new JsonObject
@@ -143,21 +139,29 @@ public sealed partial class AgentHost
         };
     }
 
-    /// <summary>§3 session limits: 2 per hub (a new one closes that hub's oldest), 16 in total.</summary>
-    private bool Register(Session session)
+    /// <summary>
+    /// §3 session limits: 2 per hub (a new one closes that hub's oldest), 16 in total. Re-checks under
+    /// the lock that the hub is still paired (it may have been revoked during the handshake).
+    /// Returns null when registered, else the bye code to close with.
+    /// </summary>
+    private string? Register(Session session)
     {
         Session? evict = null;
         lock (_lock)
         {
-            if (_disposed) return false;
+            if (_disposed) return "shutdown";
+            var peer = _state.Peers.FirstOrDefault(p => p.Id == session.HubId);
+            if (peer == null) return "revoked";
             var mine = _sessions.Where(s => s.HubId == session.HubId).OrderBy(s => s.StartedAt).ToList();
             if (mine.Count >= MaxSessionsPerHub) evict = mine[0];
-            else if (_sessions.Count >= MaxSessions) return false;
+            else if (_sessions.Count >= MaxSessions) return "busy";
             if (evict != null) _sessions.Remove(evict);
+            session.Role = peer.Role;
+            peer.LastSeen = _time.GetUtcNow();
             _sessions.Add(session);
         }
         evict?.Bye("busy");
-        return true;
+        return null;
     }
 
     private void Unregister(Session session)
@@ -228,22 +232,26 @@ public sealed partial class AgentHost
 
     /// <summary>
     /// A confirmed session. Everything it sends goes through one outbox and one send loop, so the
-    /// send CipherState (not thread-safe) is only ever used by that loop, in order.
+    /// send CipherState (not thread-safe) is only ever used by that loop, in order. Until
+    /// <see cref="SendHello"/> runs, messages are held back so that hello is always first (§6).
     /// </summary>
     internal sealed class Session
     {
         private const int OutboxCapacity = 256;
-        private readonly AgentHost _host;
         private readonly IFrameTransport _transport;
         private readonly CipherState _send;
         private readonly Channel<JsonObject> _outbox =
             Channel.CreateBounded<JsonObject>(new BoundedChannelOptions(OutboxCapacity) { SingleReader = true });
         private readonly CancellationTokenSource _lifetime;
+        private readonly CancellationTokenSource _abort = new();
+        private readonly object _gate = new();
+        private List<JsonObject>? _beforeHello = new();
+        private string? _byeCode;
         private int _closing;
 
         public Session(AgentHost host, IFrameTransport transport, CipherState send, Peer peer, TimeProvider time)
         {
-            _host = host;
+            _ = host;
             _transport = transport;
             _send = send;
             HubId = peer.Id;
@@ -266,31 +274,69 @@ public sealed partial class AgentHost
         /// <summary>Queues a message; dropped once the session is closing. A full outbox (dead reader) aborts.</summary>
         public void Enqueue(JsonObject message)
         {
-            if (IsClosing) return;
-            if (!_outbox.Writer.TryWrite(message)) Abort();
+            lock (_gate)
+            {
+                if (IsClosing) return;
+                if (_beforeHello != null)
+                {
+                    if (_beforeHello.Count >= OutboxCapacity) { AbortLocked(); return; }
+                    _beforeHello.Add(message);
+                    return;
+                }
+                if (!_outbox.Writer.TryWrite(message)) AbortLocked();
+            }
         }
 
-        /// <summary>Sends <c>bye</c> after what is already queued, then closes (§3).</summary>
+        /// <summary>Sends hello, then whatever was published while it was being built.</summary>
+        public void SendHello(JsonObject hello)
+        {
+            lock (_gate)
+            {
+                var held = _beforeHello ?? new List<JsonObject>();
+                _beforeHello = null;
+                if (IsClosing) return;
+                _outbox.Writer.TryWrite(hello);
+                foreach (var m in held)
+                    if (!_outbox.Writer.TryWrite(m)) { AbortLocked(); return; }
+            }
+        }
+
+        /// <summary>Sends <c>bye</c> after what is already queued (never dropped, even with a full outbox), then closes (§3).</summary>
         public void Bye(string code)
         {
-            if (Interlocked.Exchange(ref _closing, 1) != 0) return;
-            if (!_outbox.Writer.TryWrite(new JsonObject { ["t"] = "bye", ["code"] = code })) { }
-            _outbox.Writer.TryComplete();
+            lock (_gate)
+            {
+                if (IsClosing) return;
+                Volatile.Write(ref _closing, 1);
+                _byeCode = code;
+                _beforeHello = null; // hello never went out: just the bye
+                _outbox.Writer.TryComplete();
+            }
         }
 
-        /// <summary>Closes without a goodbye (dead connection, idle timeout).</summary>
+        /// <summary>Closes without a goodbye (dead connection, idle timeout); unblocks a stuck send.</summary>
         public void Abort()
         {
-            Interlocked.Exchange(ref _closing, 1);
+            lock (_gate) AbortLocked();
+        }
+
+        private void AbortLocked()
+        {
+            Volatile.Write(ref _closing, 1);
+            _byeCode = null;
             _outbox.Writer.TryComplete();
-            _ = _transport.CloseAsync();
+            try { _abort.Cancel(); } catch (ObjectDisposedException) { }
+            _ = CloseQuietlyAsync();
         }
 
         /// <summary>The receive side ended: let the send loop drain and stop.</summary>
         public void Complete()
         {
-            Interlocked.Exchange(ref _closing, 1);
-            _outbox.Writer.TryComplete();
+            lock (_gate)
+            {
+                Volatile.Write(ref _closing, 1);
+                _outbox.Writer.TryComplete();
+            }
         }
 
         private async Task SendLoopAsync()
@@ -298,10 +344,10 @@ public sealed partial class AgentHost
             try
             {
                 await foreach (var message in _outbox.Reader.ReadAllAsync().ConfigureAwait(false))
-                {
-                    var frame = _send.Encrypt(Serialize(message));
-                    await _transport.SendAsync(frame, CancellationToken.None).ConfigureAwait(false);
-                }
+                    await SendAsync(message).ConfigureAwait(false);
+                string? bye;
+                lock (_gate) bye = _byeCode;
+                if (bye != null) await SendAsync(new JsonObject { ["t"] = "bye", ["code"] = bye }).ConfigureAwait(false);
             }
             catch
             {
@@ -309,14 +355,27 @@ public sealed partial class AgentHost
             }
             finally
             {
-                try { await _transport.CloseAsync().ConfigureAwait(false); } catch { }
+                await CloseQuietlyAsync().ConfigureAwait(false);
             }
+        }
+
+        private async Task SendAsync(JsonObject message)
+        {
+            var frame = _send.Encrypt(Serialize(message));
+            await _transport.SendAsync(frame, _abort.Token).ConfigureAwait(false);
+        }
+
+        private async Task CloseQuietlyAsync()
+        {
+            try { await _transport.CloseAsync().ConfigureAwait(false); }
+            catch { /* already gone */ }
         }
 
         /// <summary>After both loops have ended.</summary>
         public void DisposeTimers()
         {
             _lifetime.Dispose();
+            _abort.Dispose();
         }
     }
 }

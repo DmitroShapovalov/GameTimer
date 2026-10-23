@@ -58,34 +58,36 @@ public sealed partial class AgentHost
         await RunRequestAsync(session, type, root, id).ConfigureAwait(false);
     }
 
-    /// <summary>Runs one request inside a <see cref="RequestScope"/>, then delivers the events it caused (§5 ordering).</summary>
+    /// <summary>Runs one request, sends its reply, then delivers the events it caused (§5 ordering).</summary>
     private async Task RunRequestAsync(Session session, string type, JsonElement root, long id)
     {
-        var scope = new RequestScope(session);
-        RequestScope.Current = scope;
+        var origin = new RequestOrigin(session);
         JsonObject reply;
         try
         {
-            reply = await ProcessAsync(session, type, root, id).ConfigureAwait(false);
+            reply = await ProcessAsync(session, type, root, id, origin).ConfigureAwait(false);
         }
-        finally
+        catch (Exception)
         {
-            RequestScope.Current = null;
+            reply = ErrorMessage(id, "internal"); // the host's own failure (e.g. the store); the session survives
         }
 
         session.Enqueue(reply);
-        foreach (var message in scope.Deferred)
+        var (deferred, byeAfter) = origin.Close();
+        foreach (var (to, message) in deferred)
+        {
+            if (to != null) { to.Enqueue(message); continue; }
             foreach (var s in LiveSessions())
                 if (s != session) s.Enqueue((JsonObject)message.DeepClone());
-        foreach (var (to, message) in scope.DeferredTo) to.Enqueue(message);
-        if (scope.ByeAfter != null) session.Bye(scope.ByeAfter);
+        }
+        if (byeAfter != null) session.Bye(byeAfter);
     }
 
-    private async Task<JsonObject> ProcessAsync(Session session, string type, JsonElement root, long id)
+    private async Task<JsonObject> ProcessAsync(Session session, string type, JsonElement root, long id, RequestOrigin origin)
     {
         if (!Commands.TryGetValue(type, out var command)) return ErrorMessage(id, "unknown_command");
         if (command.Capability != null && !Capabilities.Contains(command.Capability)) return ErrorMessage(id, "unsupported");
-        if (!command.NeedsRid) return ToMessage(id, await ExecuteAsync(session, command, type, root).ConfigureAwait(false));
+        if (!command.NeedsRid) return ToMessage(id, await ExecuteAsync(session, command, type, root, origin).ConfigureAwait(false));
 
         var rid = Str(root, "rid");
         if (Base64Url.TryDecode(rid) is not { Length: 16 }) return ErrorMessage(id, "bad_request");
@@ -111,12 +113,13 @@ public sealed partial class AgentHost
                 }
             }
 
-            var reply = await ExecuteAsync(session, command, type, root).ConfigureAwait(false);
+            var reply = await ExecuteAsync(session, command, type, root, origin).ConfigureAwait(false);
             var message = ToMessage(id, reply);
             if (!(reply.IsError && reply.Code is "busy" or "internal"))
             {
                 var withoutRe = (JsonObject)message.DeepClone();
                 withoutRe.Remove("re");
+                bool stored = false;
                 lock (_lock)
                 {
                     // The hub may have been revoked meanwhile (e.g. it revoked itself): keep nothing for it
@@ -125,9 +128,10 @@ public sealed partial class AgentHost
                         var entries = RidEntries(session.HubId);
                         entries.Add(new RidEntry { Rid = rid!, BodyHash = hash, Reply = withoutRe.ToJsonString(), At = _time.GetUtcNow() });
                         if (entries.Count > MaxRidsPerHub) entries.RemoveRange(0, entries.Count - MaxRidsPerHub);
-                        _store.Save(_state);
+                        stored = true;
                     }
                 }
+                if (stored) Persist();
             }
             return message;
         }
@@ -137,12 +141,12 @@ public sealed partial class AgentHost
         }
     }
 
-    private async Task<Reply> ExecuteAsync(Session session, Command command, string type, JsonElement root)
+    private async Task<Reply> ExecuteAsync(Session session, Command command, string type, JsonElement root, RequestOrigin origin)
     {
-        if (command.Host) return HostCommand(session, type, root);
         try
         {
-            return await _backend.HandleAsync(type, root, new RequestContext(session.HubId, session.HubName, session.Role)).ConfigureAwait(false);
+            if (command.Host) return HostCommand(session, type, root, origin);
+            return await _backend.HandleAsync(type, root, new RequestContext(session.HubId, session.HubName, session.Role, origin)).ConfigureAwait(false);
         }
         catch (Exception)
         {
@@ -170,7 +174,7 @@ public sealed partial class AgentHost
 
     // ---------------- peers.* (§7.2, §8.1) ----------------
 
-    private Reply HostCommand(Session session, string type, JsonElement root)
+    private Reply HostCommand(Session session, string type, JsonElement root, RequestOrigin origin)
     {
         switch (type)
         {
@@ -182,9 +186,12 @@ public sealed partial class AgentHost
                 var target = Str(root, "peer") is { } tid ? FindPeer(tid) : null;
                 if (target == null) return Reply.Error("bad_request");
                 if (session.Role != PeerRole.Admin && target.Id != session.HubId) return Reply.Error("forbidden");
-                if (IsLastAdmin(target)) return Reply.Error("last_admin");
-                Revoke(target.Id);
-                return Reply.Ok(new JsonObject { ["peers"] = PeersJson(session.HubId) });
+                return Revoke(target.Id, origin, protectLastAdmin: true) switch
+                {
+                    PeerChange.Done => Reply.Ok(new JsonObject { ["peers"] = PeersJson(session.HubId) }),
+                    PeerChange.LastAdmin => Reply.Error("last_admin"),
+                    _ => Reply.Error("bad_request"),
+                };
             }
 
             case "peers.setRole":
@@ -193,9 +200,12 @@ public sealed partial class AgentHost
                 var target = Str(root, "peer") is { } tid ? FindPeer(tid) : null;
                 PeerRole? role = Str(root, "role") switch { "admin" => PeerRole.Admin, "parent" => PeerRole.Parent, _ => null };
                 if (target == null || role == null) return Reply.Error("bad_request");
-                if (role == PeerRole.Parent && IsLastAdmin(target)) return Reply.Error("last_admin");
-                SetRole(target.Id, role.Value);
-                return Reply.Ok(new JsonObject { ["peers"] = PeersJson(session.HubId) });
+                return SetRole(target.Id, role.Value, origin, protectLastAdmin: true) switch
+                {
+                    PeerChange.Done => Reply.Ok(new JsonObject { ["peers"] = PeersJson(session.HubId) }),
+                    PeerChange.LastAdmin => Reply.Error("last_admin"),
+                    _ => Reply.Error("bad_request"),
+                };
             }
         }
         return Reply.Error("unknown_command");

@@ -80,7 +80,7 @@ src/GameTimer.Protocol/    Protocol v2 core in C# (net8.0, no WPF), no web serve
   Encodings/, Identity/    base32 / base64url, agent and hub ids, the 6-digit pairing code
   Messages/StrictJson.cs   I-JSON parsing (duplicate names, 2^53 integers) → ProtocolViolation
   Agent/AgentHost*.cs      The agent side: admission + limits, /v2 handshake and the ready rule, hello,
-                           requests (capabilities, roles, rid cache, §5 ordering via RequestScope),
+                           requests (capabilities, roles, rid cache, §5 ordering via an explicit RequestOrigin),
                            /v2/pair (secret window, two-phones rule, typed code), peers and roles.
                            The app plugs in IAgentBackend (timer etc.), IPairingUi, IAgentStore, IFrameTransport
 shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, iosArm64, iosSimulatorArm64; android in A4),

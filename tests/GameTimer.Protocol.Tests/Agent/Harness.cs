@@ -106,8 +106,15 @@ internal sealed class FakeBackend : IAgentBackend
     public int Calls;
     public int Extends => Volatile.Read(ref _extends);
 
-    public Task<JsonObject> GetStateAsync() =>
-        Task.FromResult(new JsonObject { ["timer"] = new JsonObject { ["state"] = "notStarted", ["extends"] = Extends } });
+    /// <summary>Runs inside GetStateAsync (which the Windows backend does on the UI thread, after a hop).</summary>
+    public Action? BeforeState { get; set; }
+
+    public async Task<JsonObject> GetStateAsync()
+    {
+        await Task.Yield();
+        BeforeState?.Invoke();
+        return new JsonObject { ["timer"] = new JsonObject { ["state"] = "notStarted", ["extends"] = Extends } };
+    }
 
     public Task<Reply> HandleAsync(string type, JsonElement message, RequestContext context)
     {
@@ -121,10 +128,22 @@ internal sealed class FakeBackend : IAgentBackend
                     return Task.FromResult(Reply.Error("invalid_minutes"));
                 Interlocked.Increment(ref _extends);
                 // like the Windows backend: the controller's StateChanged fires during the request
-                Host!.Publish("ev.state", new JsonObject { ["state"] = new JsonObject { ["extends"] = Extends } });
+                Host!.Publish("ev.state", new JsonObject { ["state"] = new JsonObject { ["extends"] = Extends } }, context.Origin);
                 return Task.FromResult(Reply.Ok(new JsonObject { ["state"] = new JsonObject { ["extends"] = Extends } }));
             case "timer.stop":
                 return Task.FromResult(Reply.Error("not_running"));
+            case "timer.start":
+                // Like the real countdown: work started by the request keeps publishing after it ended
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(100);
+                    Host!.Publish("ev.tick", new JsonObject { ["n"] = 1 });
+                    await Task.Delay(100);
+                    Host!.Publish("ev.tick", new JsonObject { ["n"] = 2 });
+                    // a late effect still attributed to the request: the requester already has its result
+                    Host!.Publish("ev.state", new JsonObject { ["late"] = true }, context.Origin);
+                });
+                return Task.FromResult(Reply.Ok(new JsonObject { ["state"] = new JsonObject() }));
             case "settings.get":
                 return Task.FromResult(Reply.Ok(new JsonObject { ["settings"] = new JsonObject { ["rev"] = 1 } }));
             default:

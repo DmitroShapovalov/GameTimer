@@ -6,8 +6,11 @@ namespace GameTimer.Protocol.Agent;
 /// <summary>What the agent says about itself in <c>hello.agent</c> and <c>pair.result.agent</c> (§6).</summary>
 public sealed record AgentInfo(string Name, string Platform, string Version);
 
-/// <summary>Who sent a request: the authenticated hub and its role (§8.1).</summary>
-public sealed record RequestContext(string HubId, string HubName, PeerRole Role);
+/// <summary>
+/// Who sent a request: the authenticated hub and its role (§8.1), and <see cref="Origin"/> to pass to
+/// <see cref="AgentHost.Publish"/> for events this request causes (§5 ordering).
+/// </summary>
+public sealed record RequestContext(string HubId, string HubName, PeerRole Role, RequestOrigin Origin);
 
 /// <summary>A request's outcome: a <c>result</c> with fields, or an <c>error</c> with a code (§5).</summary>
 public sealed class Reply
@@ -34,8 +37,12 @@ public sealed class Reply
 /// The platform side of an agent (Windows: TimerController / settings / schedule / history).
 /// The protocol host owns sessions, pairing, peers and idempotency; the backend only executes
 /// requests of its own capabilities and publishes events through <see cref="AgentHost.Publish"/>.
-/// Events the backend publishes while it handles a request are delivered to the other sessions
-/// after the requester has its result (§5 ordering), so the backend never needs to know who asked.
+/// An event that is the direct effect of a request is published with <see cref="RequestContext.Origin"/>
+/// (the Windows backend keeps the origin in a field while it calls the controller on the UI thread);
+/// everything else (ticks, expiry, changes made on the PC) is published without one.
+/// <see cref="Info"/> and <see cref="Capabilities"/> are read from any thread and must not change.
+/// <see cref="HandleAsync"/> must not throw after it changed state: a thrown request is answered
+/// <c>internal</c>, which is not cached, so the hub's retry would apply the change twice.
 /// </summary>
 public interface IAgentBackend
 {
@@ -80,11 +87,19 @@ public enum PairingAbortReason
 /// </summary>
 public interface IFrameTransport
 {
-    /// <summary>The next binary message, or null once the peer closed the connection.</summary>
+    /// <summary>
+    /// The next binary message, or null once the peer closed the connection. Cancelling a pending
+    /// receive must leave the connection usable for sending (a WebSocket adapter reads on one loop into
+    /// a queue, because cancelling <c>WebSocket.ReceiveAsync</c> itself aborts the socket).
+    /// </summary>
     ValueTask<byte[]?> ReceiveAsync(CancellationToken cancel);
 
+    /// <summary>Sends one binary message. Cancelling it may abort the connection.</summary>
     ValueTask SendAsync(byte[] frame, CancellationToken cancel);
 
-    /// <summary>Closes the connection; idempotent.</summary>
+    /// <summary>
+    /// Closes the connection; idempotent, callable alongside a pending send or receive, and must make
+    /// them return or throw promptly (close with a short timeout, then abort).
+    /// </summary>
     ValueTask CloseAsync();
 }

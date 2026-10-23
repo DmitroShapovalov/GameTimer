@@ -32,6 +32,41 @@ public class RequestTests
     }
 
     [Fact]
+    public async Task Work_started_by_a_request_keeps_publishing_to_everyone()
+    {
+        // Regression: an implicit (AsyncLocal) request scope leaked into the timer the request started,
+        // and every later tick was swallowed
+        using var f = new AgentFixture();
+        var (a, _) = await f.PairAsync("A");
+        var (b, _) = await f.PairAsync("B");
+        var (hubA, _) = await TestHub.ConnectAsync(f.Host, a);
+        var (hubB, _) = await TestHub.ConnectAsync(f.Host, b);
+
+        await hubA.RequestAsync("timer.start", new JsonObject { ["mode"] = "interval", ["hours"] = 1, ["minutes"] = 0 }, withRid: true);
+
+        foreach (var hub in new[] { hubA, hubB })
+        {
+            Assert.Equal(1, (await hub.ReceiveJsonAsync()).GetProperty("n").GetInt32());
+            Assert.Equal(2, (await hub.ReceiveJsonAsync()).GetProperty("n").GetInt32());
+        }
+        // the late event attributed to the request goes to the others only
+        Assert.True((await hubB.ReceiveJsonAsync()).GetProperty("late").GetBoolean());
+        await hubA.SendJsonAsync(new JsonObject { ["t"] = "ping" });
+        Assert.Equal("pong", (await hubA.ReceiveJsonAsync()).GetProperty("t").GetString());
+    }
+
+    [Fact]
+    public async Task Hello_is_always_the_first_message()
+    {
+        using var f = new AgentFixture();
+        var (key, _) = await f.PairAsync();
+        // An event published while the agent is still building hello (state comes from the UI thread)
+        f.Backend.BeforeState = () => f.Host.Publish("ev.alert", new JsonObject { ["minutes"] = 5 });
+        var (hub, _) = await TestHub.ConnectAsync(f.Host, key); // asserts hello first
+        Assert.Equal("ev.alert", (await hub.ReceiveJsonAsync()).GetProperty("t").GetString());
+    }
+
+    [Fact]
     public async Task Events_from_the_pc_reach_everyone()
     {
         using var f = new AgentFixture();

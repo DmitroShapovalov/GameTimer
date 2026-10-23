@@ -95,6 +95,27 @@ public class PeerTests
     }
 
     [Fact]
+    public async Task Two_admins_revoking_each_other_at_once_leave_one_admin()
+    {
+        for (int round = 0; round < 10; round++)
+        {
+            using var f = new AgentFixture();
+            var (k1, _) = await f.PairAsync("A");
+            var (k2, _) = await f.PairAsync("B");
+            var (h1, _) = await TestHub.ConnectAsync(f.Host, k1);
+            Assert.Equal("result", (await h1.RequestAsync("peers.setRole", Target(Ids.HubId(k2.PublicKey), "admin"), withRid: true)).GetProperty("t").GetString());
+            var (h2, _) = await TestHub.ConnectAsync(f.Host, k2);
+
+            var r1 = h1.RequestAsync("peers.revoke", Target(h2.Id), withRid: true);
+            var r2 = h2.RequestAsync("peers.revoke", Target(h1.Id), withRid: true);
+            try { await r1; } catch (InvalidOperationException) { } // bye revoked
+            try { await r2; } catch (InvalidOperationException) { }
+            Assert.Single(f.Host.Peers);
+            Assert.Equal(PeerRole.Admin, f.Host.Peers[0].Role);
+        }
+    }
+
+    [Fact]
     public async Task Peers_list_marks_the_current_hub()
     {
         using var f = new AgentFixture();

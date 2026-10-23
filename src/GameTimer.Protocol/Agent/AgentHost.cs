@@ -115,10 +115,14 @@ public sealed partial class AgentHost : IDisposable
     /// The PC owner revokes a hub (behind Windows Hello in the app). Allowed even for the last admin
     /// (§8.1: e.g. a lost phone); the next hub paired then becomes admin.
     /// </summary>
-    public bool RevokeByOwner(string hubId) => Revoke(hubId);
+    public bool RevokeByOwner(string hubId) => Revoke(hubId, origin: null, protectLastAdmin: false) == PeerChange.Done;
 
     /// <summary>The PC owner changes a hub's role (no last-admin protection on the PC, §8.1).</summary>
-    public bool SetRoleByOwner(string hubId, PeerRole role) => SetRole(hubId, role);
+    public bool SetRoleByOwner(string hubId, PeerRole role) =>
+        SetRole(hubId, role, origin: null, protectLastAdmin: false) == PeerChange.Done;
+
+    /// <summary>Persisting the state failed (disk full, DPAPI error). The change stays in memory; the app should log it.</summary>
+    public event Action<Exception>? StoreError;
 
     /// <summary>
     /// Opens a pairing window (§8.2): a fresh one-time secret, valid 2 minutes. Replaces any previous
@@ -151,23 +155,20 @@ public sealed partial class AgentHost : IDisposable
     }
 
     /// <summary>
-    /// Publishes an event (§7.3) to every live session. Called by the backend from any thread.
-    /// During a request, delivery to the other sessions waits until the requester has its result,
-    /// and the requester itself does not get it (§5 ordering).
+    /// Publishes an event (§7.3) to every live session; any thread. Pass <paramref name="causedBy"/>
+    /// (<see cref="RequestContext.Origin"/>) when the event is the direct effect of a hub request: the
+    /// requester then doesn't get it, and the others get it after the requester has its result (§5).
+    /// Events from timers, the PC or anything later pass null and reach every session.
     /// </summary>
-    public void Publish(string type, JsonObject body)
+    public void Publish(string type, JsonObject body, RequestOrigin? causedBy = null)
     {
         if (!type.StartsWith("ev.", StringComparison.Ordinal)) throw new ArgumentException("events start with ev.", nameof(type));
         var message = new JsonObject { ["t"] = type };
         foreach (var (k, v) in body) message[k] = v?.DeepClone();
 
-        var scope = RequestScope.Current;
-        if (scope != null)
-        {
-            scope.Deferred.Add(message);
-            return;
-        }
-        foreach (var s in LiveSessions()) s.Enqueue(message);
+        if (causedBy != null && causedBy.TryDefer(null, message)) return;
+        foreach (var s in LiveSessions())
+            if (s != causedBy?.Session) s.Enqueue((JsonObject)message.DeepClone());
     }
 
     /// <summary>Says <c>bye shutdown</c> to every session (app exit or update).</summary>
@@ -222,7 +223,11 @@ public sealed partial class AgentHost : IDisposable
     {
         lock (_lock)
         {
-            if (!_failures.TryGetValue(ip, out var q)) _failures[ip] = q = new Queue<DateTimeOffset>();
+            if (!_failures.TryGetValue(ip, out var q))
+            {
+                if (_failures.Count >= MaxTrackedIps) SweepFailures();
+                _failures[ip] = q = new Queue<DateTimeOffset>();
+            }
             q.Enqueue(_time.GetUtcNow());
             Trim(q);
         }
@@ -238,6 +243,21 @@ public sealed partial class AgentHost : IDisposable
             return q.Count >= MaxFailedHandshakesPerMinute;
         }
     }
+
+    /// <summary>Bounds the per-IP counters (an IPv6 LAN offers many source addresses). Under the lock.</summary>
+    private void SweepFailures()
+    {
+        foreach (var (ip, q) in _failures.ToList())
+        {
+            Trim(q);
+            if (q.Count == 0) _failures.Remove(ip);
+        }
+        // Still full of active addresses: forget the ones that failed longest ago
+        foreach (var ip in _failures.OrderBy(kv => kv.Value.Last()).Take(_failures.Count - MaxTrackedIps / 2).Select(kv => kv.Key).ToList())
+            _failures.Remove(ip);
+    }
+
+    private const int MaxTrackedIps = 1024;
 
     private void Trim(Queue<DateTimeOffset> q)
     {
@@ -258,50 +278,81 @@ public sealed partial class AgentHost : IDisposable
         lock (_lock) return _state.Peers.FirstOrDefault(p => p.Id == id);
     }
 
-    private bool Revoke(string hubId)
+    private enum PeerChange { Done, NotFound, LastAdmin }
+
+    /// <summary>
+    /// Removes a hub: closes its sessions (bye revoked), drops its ak and cached replies, tells the others.
+    /// The last-admin check and the removal happen under one lock, so two admins revoking each other
+    /// at once can't leave none.
+    /// </summary>
+    private PeerChange Revoke(string hubId, RequestOrigin? origin, bool protectLastAdmin)
     {
         List<Session> closing;
         lock (_lock)
         {
             var peer = _state.Peers.FirstOrDefault(p => p.Id == hubId);
-            if (peer == null) return false;
+            if (peer == null) return PeerChange.NotFound;
+            if (protectLastAdmin && IsLastAdminLocked(peer)) return PeerChange.LastAdmin;
             _state.Peers.Remove(peer);
             _state.Rids.Remove(hubId);
-            _store.Save(_state);
+            _ridLocks.Remove(hubId);
             closing = _sessions.Where(s => s.HubId == hubId).ToList();
         }
-        var scope = RequestScope.Current;
+        Persist();
         foreach (var s in closing)
         {
             // A hub that revokes itself gets its result first, then the bye (§8.1)
-            if (scope != null && scope.Session == s) scope.ByeAfter = "revoked";
-            else s.Bye("revoked");
+            if (origin?.Session == s && origin.TrySetByeAfter("revoked")) continue;
+            s.Bye("revoked");
         }
-        PublishPeers("revoked", hubId);
+        PublishPeers("revoked", hubId, origin);
         PeersChanged?.Invoke();
-        return true;
+        return PeerChange.Done;
     }
 
-    private bool SetRole(string hubId, PeerRole role)
+    private PeerChange SetRole(string hubId, PeerRole role, RequestOrigin? origin, bool protectLastAdmin)
     {
         lock (_lock)
         {
             var peer = _state.Peers.FirstOrDefault(p => p.Id == hubId);
-            if (peer == null) return false;
-            if (peer.Role == role) return true;
+            if (peer == null) return PeerChange.NotFound;
+            if (peer.Role == role) return PeerChange.Done;
+            if (protectLastAdmin && role != PeerRole.Admin && IsLastAdminLocked(peer)) return PeerChange.LastAdmin;
             peer.Role = role;
-            _store.Save(_state);
             foreach (var s in _sessions.Where(s => s.HubId == hubId)) s.Role = role;
         }
-        PublishPeers("role", hubId);
+        Persist();
+        PublishPeers("role", hubId, origin);
         PeersChanged?.Invoke();
-        return true;
+        return PeerChange.Done;
     }
 
-    /// <summary>True if removing or demoting <paramref name="peer"/> would leave no admin (hub requests only).</summary>
-    private bool IsLastAdmin(Peer peer)
+    private bool IsLastAdminLocked(Peer peer) =>
+        peer.Role == PeerRole.Admin && _state.Peers.Count(p => p.Role == PeerRole.Admin) == 1;
+
+    // ---------------- persistence: snapshot under the lock, write outside it, newest wins ----------------
+
+    private readonly object _saveLock = new();
+    private long _saveSeq;
+    private long _savedSeq;
+
+    /// <summary>Saves the current state. Call outside <c>_lock</c>: the store may write to disk (DPAPI).</summary>
+    private void Persist()
     {
-        lock (_lock) return peer.Role == PeerRole.Admin && _state.Peers.Count(p => p.Role == PeerRole.Admin) == 1;
+        AgentState snapshot;
+        long seq;
+        lock (_lock)
+        {
+            snapshot = JsonSerializer.Deserialize<AgentState>(JsonSerializer.SerializeToUtf8Bytes(_state, StoreJson), StoreJson)!;
+            seq = ++_saveSeq;
+        }
+        lock (_saveLock)
+        {
+            if (seq <= _savedSeq) return; // a newer snapshot is already on disk
+            try { _store.Save(snapshot); }
+            catch (Exception ex) { StoreError?.Invoke(ex); }
+            _savedSeq = seq;
+        }
     }
 
     /// <summary><c>peers[]</c> as seen by one hub (<c>current</c> marks that hub).</summary>
@@ -327,15 +378,13 @@ public sealed partial class AgentHost : IDisposable
     }
 
     /// <summary>ev.peers is per session (each hub sees its own <c>current</c>), so it bypasses <see cref="Publish"/>.</summary>
-    private void PublishPeers(string change, string hubId)
+    private void PublishPeers(string change, string hubId, RequestOrigin? origin)
     {
-        var scope = RequestScope.Current;
         foreach (var s in LiveSessions())
         {
-            if (scope != null && scope.Session == s) continue;
+            if (origin?.Session == s) continue;
             var msg = new JsonObject { ["t"] = "ev.peers", ["peers"] = PeersJson(s.HubId), ["change"] = change, ["peer"] = hubId };
-            if (scope != null) scope.DeferredTo.Add((s, msg));
-            else s.Enqueue(msg);
+            if (origin == null || !origin.TryDefer(s, msg)) s.Enqueue(msg);
         }
     }
 
@@ -416,22 +465,52 @@ public sealed class PairingOffer
     }
 }
 
-/// <summary>The request being handled on this async flow: events raised meanwhile wait for its result (§5).</summary>
-internal sealed class RequestScope
+/// <summary>
+/// Identifies one hub request while it runs (§5 ordering). The backend passes it to
+/// <see cref="AgentHost.Publish"/> for events its request caused; they are held until the requester
+/// has its result. Once the result is out, the origin is closed and such events go out at once.
+/// Explicit on purpose: nothing flows implicitly into timers or tasks the backend starts.
+/// </summary>
+public sealed class RequestOrigin
 {
-    private static readonly AsyncLocal<RequestScope?> _current = new();
+    private readonly object _gate = new();
+    private List<(AgentHost.Session? To, JsonObject Message)>? _deferred = new();
+    private string? _byeAfter;
 
-    public RequestScope(AgentHost.Session session) => Session = session;
+    internal RequestOrigin(AgentHost.Session session) => Session = session;
 
-    public AgentHost.Session Session { get; }
-    public List<JsonObject> Deferred { get; } = new();
-    public List<(AgentHost.Session To, JsonObject Message)> DeferredTo { get; } = new();
-    /// <summary>Set when the requester itself must be closed after its reply (self-revoke).</summary>
-    public string? ByeAfter { get; set; }
+    internal AgentHost.Session Session { get; }
 
-    public static RequestScope? Current
+    /// <summary>Holds <paramref name="message"/> for <paramref name="to"/> (null = every other session). False once closed.</summary>
+    internal bool TryDefer(AgentHost.Session? to, JsonObject message)
     {
-        get => _current.Value;
-        set => _current.Value = value;
+        lock (_gate)
+        {
+            if (_deferred == null) return false;
+            _deferred.Add((to, message));
+            return true;
+        }
+    }
+
+    /// <summary>The requester itself must be closed after its reply (self-revoke). False once closed.</summary>
+    internal bool TrySetByeAfter(string code)
+    {
+        lock (_gate)
+        {
+            if (_deferred == null) return false;
+            _byeAfter = code;
+            return true;
+        }
+    }
+
+    /// <summary>Ends the request: returns what was held, and lets later events through directly.</summary>
+    internal (List<(AgentHost.Session? To, JsonObject Message)> Deferred, string? ByeAfter) Close()
+    {
+        lock (_gate)
+        {
+            var d = _deferred ?? new();
+            _deferred = null;
+            return (d, _byeAfter);
+        }
     }
 }

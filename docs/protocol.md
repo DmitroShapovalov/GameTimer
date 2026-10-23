@@ -184,12 +184,15 @@ Rules:
 - **Unknown fields are ignored.** Unknown request type → `error` `unknown_command`. Request for a
   capability not announced → `error` `unsupported`. Not allowed for this hub's role → `error`
   `forbidden`.
-- **At most 16 outstanding requests** per session; more → `error` `busy`.
+- **At most 16 outstanding requests** per session; more → `error` `busy`. (An agent may also handle a
+  session's requests strictly one after another; then the limit never triggers and later requests
+  just wait.)
 - **Idempotency.** For each hub the agent keeps a cache: `rid` → (hash of the request body, reply).
   - Entries live **10 minutes**, at most **256 per hub** (oldest dropped first), and are **persisted**
     in `ProtectedStore`, so a PC restart doesn't make a resent `timer.extend` run twice.
   - A known `rid` with the **same** body is not executed again; the stored reply is returned. A known
-    `rid` with a **different** body → `error` `bad_request`.
+    `rid` with a **different** body → `error` `bad_request`. "Same body" = the request without `id`,
+    byte for byte: a hub resends the message it sent before, with only `id` changed.
   - `error` replies are cached too, except `busy` and `internal`.
   - A hub's entries are deleted when it is revoked.
   - The hub stops resending after **5 minutes** (well inside the 10-minute window) and asks the user.

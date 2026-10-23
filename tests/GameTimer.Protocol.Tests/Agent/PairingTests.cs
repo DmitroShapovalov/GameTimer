@@ -122,7 +122,7 @@ public class PairingTests
         using var f = new AgentFixture();
         var offer = f.Host.StartPairing("PC");
         var (sniffed, _) = await TestHub.HandshakeAsync(f.Host, KeyPair.Generate(), true, offer.Secret, firstType: "pair");
-        sniffed.End.CloseAsync().AsTask().Wait();
+        await sniffed.End.CloseAsync();
 
         // Replay of that msg 1: the agent answers msg 2, but nobody can continue
         var (_, gotMsg2) = await TestHub.HandshakeAsync(f.Host, KeyPair.Generate(), true, ip: "192.168.1.66", replayMsg1: sniffed.Msg1, firstType: "pair");
@@ -150,6 +150,49 @@ public class PairingTests
         Assert.Equal("ev.peers", ev.GetProperty("t").GetString());
         Assert.Equal("added", ev.GetProperty("change").GetString());
         Assert.Equal(2, ev.GetProperty("peers").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task A_late_answer_from_a_dialog_that_ignores_cancel_does_not_commit_after_two_phones()
+    {
+        using var f = new AgentFixture();
+        var offer = f.Host.StartPairing("PC");
+        var release = new TaskCompletionSource();
+        var asked = new TaskCompletionSource();
+        string? childCode = null;
+        f.Ui.Answer = async (_, _) =>
+        {
+            asked.TrySetResult();
+            await release.Task; // ignores its token, then "types" the right code
+            return childCode;
+        };
+
+        var (child, _) = await TestHub.HandshakeAsync(f.Host, KeyPair.Generate(), true, offer.Secret, firstType: "pair");
+        childCode = PairingCode.Derive(child.HandshakeHash!);
+        await child.SendJsonAsync(Hello("Child"));
+        await asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var (parent, _) = await TestHub.HandshakeAsync(f.Host, KeyPair.Generate(), true, offer.Secret, ip: "192.168.1.21", firstType: "pair");
+        await parent.SendJsonAsync(Hello("Parent"));
+        Assert.Equal("code_used", (await parent.ReceiveJsonAsync()).GetProperty("code").GetString());
+        release.SetResult();
+
+        Assert.Equal("denied", (await child.ReceiveJsonAsync()).GetProperty("code").GetString());
+        Assert.Empty(f.Host.Peers);
+    }
+
+    [Theory]
+    [InlineData("Dad\u202Eenohp")]  // right-to-left override: could make the PC show a different name
+    [InlineData("tab\there")]
+    [InlineData("   ")]
+    public async Task Hub_names_the_owner_could_misread_are_refused(string name)
+    {
+        using var f = new AgentFixture();
+        var offer = f.Host.StartPairing("PC");
+        var (hub, _) = await TestHub.HandshakeAsync(f.Host, KeyPair.Generate(), true, offer.Secret, firstType: "pair");
+        await hub.SendJsonAsync(Hello(System.Text.RegularExpressions.Regex.Unescape(name)));
+        Assert.Null(await hub.TryReceiveJsonAsync());
+        Assert.Empty(f.Ui.Asked);
     }
 
     [Fact]

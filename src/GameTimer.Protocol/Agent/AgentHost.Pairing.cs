@@ -21,7 +21,11 @@ public sealed partial class AgentHost
         var ip = ticket.RemoteIp;
         PairingOffer? offer;
         lock (_lock) offer = _pairing;
-        if (offer == null || Expired(offer)) return; // no window open: close silently
+        if (offer != null && Expired(offer)) offer = null;
+        // No window open: still read msg 1 and fail it like a wrong secret, so the timing doesn't tell
+        // the LAN whether a pairing window is open (§3: no oracle)
+        var psk = offer?.Secret ?? RandomNumberGenerator.GetBytes(32);
+        var aborted = offer?.Aborted ?? CancellationToken.None;
 
         CipherState send, recv;
         byte[] hubKey, handshakeHash;
@@ -31,18 +35,18 @@ public sealed partial class AgentHost
         try
         {
             using (var timeout = new CancellationTokenSource(HandshakeTimeout, _time))
-            using (var hsCancel = CancellationTokenSource.CreateLinkedTokenSource(cancel, timeout.Token, offer.Aborted))
+            using (var hsCancel = CancellationTokenSource.CreateLinkedTokenSource(cancel, timeout.Token, aborted))
             {
                 try
                 {
                     var msg1 = await transport.ReceiveAsync(hsCancel.Token).ConfigureAwait(false);
                     if (msg1 == null || OverFailureLimit(ip)) return;
 
-                    var hs = new HandshakeState(NoisePattern.IKpsk1, initiator: false, Prologue, _key, remoteStatic: null, psk: offer.Secret);
+                    var hs = new HandshakeState(NoisePattern.IKpsk1, initiator: false, Prologue, _key, remoteStatic: null, psk: psk);
                     byte[] payload;
                     try { payload = hs.ReadMessage(msg1); }
-                    catch (NoiseException) { RecordFailure(ip); return; } // wrong secret
-                    if (!IsBareMessage(payload, "pair")) { RecordFailure(ip); return; }
+                    catch (NoiseException) { RecordFailure(ip); return; } // wrong secret (or no window)
+                    if (offer == null || !IsBareMessage(payload, "pair")) { RecordFailure(ip); return; }
 
                     // A valid msg 1 may be a replay: it does not use up the secret, but takes an attempt slot
                     lock (_lock)
@@ -62,7 +66,7 @@ public sealed partial class AgentHost
                 }
                 catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
                 {
-                    if (!offer.Aborted.IsCancellationRequested) RecordFailure(ip);
+                    if (!aborted.IsCancellationRequested) RecordFailure(ip);
                     return;
                 }
                 catch (ProtocolViolation)
@@ -80,19 +84,24 @@ public sealed partial class AgentHost
             bool twoPhones;
             lock (_lock)
             {
-                offer.UsedBy ??= keyText;
+                offer!.UsedBy ??= keyText;
                 twoPhones = offer.UsedBy != keyText;
                 attempt = CancellationTokenSource.CreateLinkedTokenSource(offer.Aborted);
                 replaced = twoPhones ? null : offer.ActiveAttempt;
                 if (!twoPhones) offer.ActiveAttempt = attempt;
-                if (twoPhones && _pairing == offer) _pairing = null;
+                if (twoPhones)
+                {
+                    // Close the window and abort the waiting attempt before anything else can run,
+                    // so an owner confirming at this very moment can't commit the first phone
+                    if (_pairing == offer) _pairing = null;
+                    offer.Abort();
+                }
             }
 
             if (twoPhones)
             {
                 // A second, different phone with the same QR: it may have been photographed (§8.2)
                 await SendDirectAsync(transport, send, Bye("code_used")).ConfigureAwait(false);
-                offer.Abort();
                 attempt.Dispose();
                 _pairingUi.PairingAborted(PairingAbortReason.TwoPhones);
                 return;
@@ -104,7 +113,7 @@ public sealed partial class AgentHost
         }
         finally
         {
-            if (counted) lock (_lock) offer.Attempts--;
+            if (counted) lock (_lock) offer!.Attempts--;
         }
     }
 
@@ -120,13 +129,18 @@ public sealed partial class AgentHost
         var watch = WatchQuietAsync(transport, confirm);
 
         string? typed = null;
-        try { typed = await _pairingUi.AskForCodeAsync(hubName, confirm.Token).ConfigureAwait(false); }
+        try
+        {
+            // WaitAsync: the attempt ends on time even if the dialog ignores its token
+            typed = await _pairingUi.AskForCodeAsync(hubName, confirm.Token).WaitAsync(confirm.Token).ConfigureAwait(false);
+        }
         catch (OperationCanceledException) { }
+        catch (Exception) { } // a broken dialog counts as a cancel
 
         bool accepted;
         lock (_lock)
         {
-            accepted = typed != null && !confirm.IsCancellationRequested && offer.UsedBy == keyText
+            accepted = typed != null && !confirm.IsCancellationRequested && _pairing == offer && offer.UsedBy == keyText
                        && !offer.Aborted.IsCancellationRequested && CodesEqual(typed.Trim(), expected);
         }
         if (!accepted)
@@ -137,6 +151,9 @@ public sealed partial class AgentHost
             return;
         }
 
+        // Commit, then send: if the phone vanishes in between it is paired without knowing it and simply
+        // pairs again (same key: same role, a new ak). The opposite order could tell a phone "paired"
+        // for a hub the PC never stored.
         var peer = CommitPeer(keyText, hubName);
         var result = new JsonObject
         {
@@ -149,13 +166,14 @@ public sealed partial class AgentHost
         confirm.Cancel();
         await watch.ConfigureAwait(false);
         await SendDirectAsync(transport, send, result).ConfigureAwait(false);
-        PublishPeers("added", peer.Id);
+        PublishPeers("added", peer.Id, origin: null);
         PeersChanged?.Invoke();
     }
 
     /// <summary>Stores the hub (§8.2 step 7). A hub key paired before keeps its role and gets a new ak.</summary>
     private Peer CommitPeer(string keyText, string hubName)
     {
+        Peer result;
         lock (_lock)
         {
             var existing = _state.Peers.FirstOrDefault(p => p.PublicKey == keyText);
@@ -174,9 +192,10 @@ public sealed partial class AgentHost
             };
             if (existing != null) _state.Peers.Remove(existing);
             _state.Peers.Add(peer);
-            _store.Save(_state);
-            return Clone(peer);
+            result = Clone(peer);
         }
+        Persist();
+        return result;
     }
 
     private bool TryReadPairHello(CipherState recv, byte[] frame, out string? name)
@@ -190,7 +209,9 @@ public sealed partial class AgentHost
         if (Str(r, "t") != "pair.hello") return false;
         if (!r.TryGetProperty("protocol", out var p) || !p.TryGetInt32(out var major) || major != ProtocolMajor) return false;
         var n = Str(r, "name")?.Trim();
-        if (string.IsNullOrEmpty(n) || n.Length > MaxHubNameLength || n.Any(char.IsControl)) return false;
+        // No control or format characters (e.g. U+202E right-to-left override) in a name the owner reads
+        if (string.IsNullOrEmpty(n) || n.Length > MaxHubNameLength
+            || n.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format)) return false;
         name = n;
         return true;
     }
