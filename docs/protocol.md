@@ -270,7 +270,7 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 | `settings.put` | `settings` | ✓ | any | any subset of the v1 settings fields, optional `ifRev` | `settings` |
 | `schedule.get` | `schedule` | — | any | — | `schedule` (`enabled`, `week[7]`, `rev`) |
 | `schedule.put` | `schedule` | ✓ | any | full schedule, optional `ifRev` | `schedule` |
-| `history.get` | `history` | — | any | `limit` (1–100, default 50), optional `before` (cursor) | `events[]` newest first, `more`, `next` (cursor) |
+| `history.get` | `history` | — | any | `limit` (1–100, default 50), optional `before` (opaque cursor from `next`) | `events[]` newest first (recording order), `more`, `next` (cursor); a cursor whose event was trimmed meanwhile → `bad_request`, start again from the top |
 | `peers.list` | `peers` | — | any | — | `peers[]` |
 | `peers.revoke` | `peers` | ✓ | admin (or self) | `peer` (hub id) | `peers[]` |
 | `peers.setRole` | `peers` | ✓ | admin | `peer` (hub id), `role` (`admin` / `parent`) | `peers[]` |

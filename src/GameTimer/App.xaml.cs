@@ -90,7 +90,9 @@ public partial class App : System.Windows.Application
             new GameTimer.Services.V2.AgentFileStore(), pairingUi);
 
         var agentId = _remoteServer.Agent.AgentId;
-        if (settings.V2AgentId != agentId)
+        if (_remoteServer.Agent.InitialSaveError is { } saveError)
+            DiagnosticLog.Write("v2 identity not saved: " + saveError.Message); // not remembered: no false tamper report next run
+        else if (settings.V2AgentId != agentId)
         {
             if (settings.V2AgentId != null)
             {

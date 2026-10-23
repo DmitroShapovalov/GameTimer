@@ -287,25 +287,34 @@ public sealed partial class RemoteServer
             if (m.TryGetProperty("limit", out var l) && (!l.TryGetInt32(out limit) || limit is < 1 or > 100)) return Reply.Error("bad_request");
 
             var all = _s._sessionLog.Recent(int.MaxValue).Select(e => (Event: e, Json: JsonSerializer.Serialize(e, Json))).ToList();
+            // Cursor of entry i = hash of its JSON + which identical copy it is, counted from the newest
+            // (two identical entries must not send a page back to itself)
+            var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+            var cursors = all.Select(x =>
+            {
+                var h = Hash(x.Json);
+                seen[h] = seen.GetValueOrDefault(h) + 1;
+                return h + "." + seen[h].ToString(CultureInfo.InvariantCulture);
+            }).ToList();
+
             int start = 0;
             if (Str(m, "before") is { } cursor)
             {
-                // The newest occurrence of that event (identical events: the first match is the one the page ended on)
-                int at = all.FindIndex(x => Cursor(x.Json) == cursor);
-                if (at < 0) return Reply.Error("bad_request");
+                int at = cursors.IndexOf(cursor);
+                if (at < 0) return Reply.Error("bad_request"); // trimmed from the log meanwhile: start from the top
                 start = at + 1;
             }
-            var page = all.Skip(start).Take(limit + 1).ToList();
+            var page = Enumerable.Range(start, Math.Max(0, Math.Min(limit + 1, all.Count - start))).ToList();
             bool more = page.Count > limit;
             if (more) page.RemoveAt(page.Count - 1);
             var events = new JsonArray();
-            foreach (var x in page) events.Add(JsonNode.Parse(x.Json));
+            foreach (var i in page) events.Add(JsonNode.Parse(all[i].Json));
             var reply = new JsonObject { ["events"] = events, ["more"] = more };
-            if (more) reply["next"] = Cursor(page[^1].Json);
+            if (more) reply["next"] = cursors[page[^1]];
             return Reply.Ok(reply);
         }
 
-        private static string Cursor(string eventJson) =>
+        private static string Hash(string eventJson) =>
             GameTimer.Protocol.Encodings.Base64Url.Encode(
                 System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(eventJson)).AsSpan(0, 12));
 
