@@ -100,9 +100,11 @@ public sealed interface RequestOutcome {
  * it, or [stop], closes the session.
  *
  * With a [locator], a failed connect also searches the LAN for the agent's discovery tag (§9, at most
- * every [LOCATE_INTERVAL]). A found address is only a candidate: it is adopted — [current] changes and
- * [onMoved] is called so the app can store it — after the handshake with the pinned key succeeded
- * there. A fake announcement therefore costs at most a failed attempt, never the stored address.
+ * every [LOCATE_INTERVAL]). Found addresses are only candidates, tried one after another: one is
+ * adopted — [current] changes and [onMoved] is called so the app can store it — only after the
+ * handshake with the pinned key succeeded there. A fake announcement can't impersonate the PC; at
+ * most it costs a failed attempt (or, as a TCP relay to the real PC, it can carry the encrypted
+ * traffic — which anyone in the path of a LAN can do anyway).
  */
 public class AgentLink(
     agent: PairedAgent,
@@ -194,30 +196,30 @@ public class AgentLink(
         return RequestOutcome.GaveUp
     }
 
-    private suspend fun locate(): AgentAddress? {
-        val loc = locator ?: return null
+    private suspend fun locate(): List<AgentAddress> {
+        val loc = locator ?: return emptyList()
         val now = elapsedRealtimeNanos()
         val last = lastLocateNanos
-        if (last != null && (now - last).nanoseconds < LOCATE_INTERVAL) return null
+        if (last != null && (now - last).nanoseconds < LOCATE_INTERVAL) return emptyList()
         lastLocateNanos = now
-        val ak = Base64Url.tryDecode(agent.ak) ?: return null
+        val ak = Base64Url.tryDecode(agent.ak) ?: return emptyList()
         val tags = try { DiscoveryTag.candidates(ak, currentEpochMillis()) } finally { ak.fill(0) }
         val found = try {
             loc.locate(tags, LOCATE_TIMEOUT)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            null
-        } ?: return null
+            emptyList()
+        }
         // Same rule as the pairing QR: only LAN addresses (the agent accepts LAN clients only, §3)
-        if (!PairingLink.isLanAddress(found.host) || found.port !in 1..65535) return null
-        return found
+        return found.filter { PairingLink.isLanAddress(it.host) && it.port in 1..65535 }
     }
 
     public companion object {
         /** How often a failing link may search the LAN (each search browses for [LOCATE_TIMEOUT]). */
         public val LOCATE_INTERVAL: Duration = 20.seconds
         public val LOCATE_TIMEOUT: Duration = 5.seconds
+        private const val MAX_CANDIDATES = 8
     }
 
     private suspend fun waitForChange(from: LinkStatus, timeout: Duration) {
@@ -236,17 +238,17 @@ public class AgentLink(
     private suspend fun loop() {
         val myJob = kotlin.coroutines.coroutineContext[Job]
         var backoff = 1.seconds
-        var candidate: AgentAddress? = null
+        val candidates = ArrayDeque<AgentAddress>()
         while (scope.isActive) {
             _status.value = LinkStatus.Connecting
             var bye: String? = null
             var uptime = Duration.ZERO
-            val target = candidate?.let { agent.copy(host = it.host, port = it.port) } ?: agent
-            candidate = null
+            val target = candidates.removeFirstOrNull()?.let { agent.copy(host = it.host, port = it.port) } ?: agent
             try {
                 val s = HubSession.open(connector, target, hubKey, appName, parent = myJob)
                 val openedAt = elapsedRealtimeNanos()
                 if (target !== agent) {
+                    candidates.clear()
                     agent = target // the pinned key answered there: adopt the new address
                     try { onMoved(target) } catch (e: Exception) { /* storing is the app's business */ }
                 }
@@ -286,11 +288,9 @@ public class AgentLink(
             // Not there (or someone else is at that address now: another PC refuses our msg 1, §4.1):
             // maybe the PC got a new address. A short-lived session is no reason to search.
             if (uptime < 30.seconds) {
-                val found = locate()
-                if (found != null && (found.host != agent.host || found.port != agent.port)) {
-                    candidate = found
-                    continue // try it right away
-                }
+                if (candidates.isNotEmpty()) continue // the next address found by the last search
+                candidates += locate().filter { it.host != agent.host || it.port != agent.port }.distinct().take(MAX_CANDIDATES)
+                if (candidates.isNotEmpty()) continue // try them right away
             }
             // Back-off grows unless the session had been up for a while (busy / protocol_error loops don't spin)
             if (uptime >= 30.seconds) backoff = 1.seconds

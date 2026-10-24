@@ -372,13 +372,16 @@ The agent announces `_gametimer._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<
   agent announces nothing at all.
 - The app tries the last known host first; if that fails it browses mDNS and looks for its own tag
   for yesterday, today or tomorrow (around midnight, and a PC clock that is somewhat off).
-- A found address is only a **candidate**: the app adopts and stores it only after the IK handshake
-  with the pinned key succeeded there. Only LAN addresses are tried (as for the pairing QR). So a
-  forged announcement costs one failed attempt, never the stored address.
+- Found addresses are only **candidates**: the app tries every match (tags are public, anyone can copy
+  one) and adopts and stores an address only after the IK handshake with the pinned key succeeded
+  there. Only LAN addresses are tried (as for the pairing QR). A forged announcement can't
+  impersonate the PC; it costs a failed attempt. A host that relays TCP to the real PC does get
+  stored, but sees only Noise ciphertext — no more than anyone already in the LAN path; accepted.
 - Records (RFC 6762 / 6763): PTR `_gametimer._tcp.local` → instance; SRV (port, host); TXT; A (the
   PC's LAN IPv4). Announced twice at start and on every change (new tags at the UTC date change, a
   paired or revoked hub, a new address), withdrawn with TTL 0 when the server stops. Queries are
-  answered only from LAN sources; QU and legacy-unicast queries get unicast replies.
+  answered only from the subnet the agent announces on; QU and legacy-unicast queries get unicast
+  replies, rate-limited per source (1/s) and in total (20/s) since a UDP source can be forged.
 - Tags change daily and mean nothing without the hub's `ak`, so the PC can't be tracked on a foreign
   network by a stable id. An observer can count how many hubs are paired; accepted.
 - Discovery only *finds* the PC; trust always comes from the pinned key.

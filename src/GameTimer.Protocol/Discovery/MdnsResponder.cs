@@ -90,10 +90,10 @@ public static class MdnsResponder
         if (answers.Count == 0) return null;
         additional.RemoveAll(r => answers.Any(a => Same(a, r)));
         bool allUnicast = asked.All(q => q.WantsUnicast);
-        // Legacy unicast (a plain resolver, not on port 5353): echo the id and questions, short TTLs,
+        // Legacy unicast (a plain resolver, not on port 5353): echo the id and all questions, short TTLs,
         // no cache-flush bit (RFC 6762 §6.7). Otherwise id 0 and no questions (§18.1, §6).
         var packet = legacyUnicast
-            ? MdnsMessage.Build(id, asked, answers.Select(Legacy).ToList(), additional.Select(Legacy).ToList())
+            ? MdnsMessage.Build(id, questions, answers.Select(Legacy).ToList(), additional.Select(Legacy).ToList())
             : MdnsMessage.Build(0, Array.Empty<MdnsMessage.Question>(), answers, additional);
         return (packet, allUnicast);
     }

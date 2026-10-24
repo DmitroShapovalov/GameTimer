@@ -36,6 +36,11 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
     private Task? _loop;
     private UdpClient? _socket;
     private MdnsService? _current;
+    private volatile bool _stopping;
+    private string? _lastBindError;
+    private readonly Dictionary<IPAddress, DateTime> _lastUnicast = new();
+    private readonly Queue<DateTime> _unicastWindow = new();
+    private const int MaxUnicastPerSecond = 20;
 
     /// <param name="service">The service to announce now; null = announce nothing (e.g. no LAN address).</param>
     /// <param name="acceptFrom">Which query sources to answer (the home LAN).</param>
@@ -54,7 +59,9 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
         {
             if (_loop != null) return;
             _cts = new CancellationTokenSource();
-            _loop = Task.Run(() => RunAsync(_cts.Token));
+            _stopping = false;
+            var token = _cts.Token;
+            _loop = Task.Run(() => RunAsync(token));
         }
     }
 
@@ -92,7 +99,9 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
             while (!ct.IsCancellationRequested)
             {
                 var next = SafeService();
-                if (!SameService(next, _current))
+                bool hadSocket = _socket != null;
+                bool changed = !SameService(next, _current);
+                if (changed)
                 {
                     var old = _current;
                     // A new name or no service: withdraw the old records. Same name: the new records carry the
@@ -102,11 +111,15 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
                     if (next == null || old == null || !SameAddresses(old, next))
                         Rebind(next);
                     _current = next;
-                    if (next != null && _socket != null)
-                    {
-                        await SendAnnouncementAsync(next, goodbye: false).ConfigureAwait(false);
-                        _ = AnnounceAgainAsync(next, ct);
-                    }
+                }
+                else if (next != null && _socket == null)
+                {
+                    Rebind(next); // the last bind failed (interface not ready, port busy): retry every poll
+                }
+                if (next != null && _socket != null && (changed || !hadSocket))
+                {
+                    await SendAnnouncementAsync(next, goodbye: false).ConfigureAwait(false);
+                    _ = AnnounceAgainAsync(next, ct);
                 }
                 using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 var receive = _socket != null ? ReceiveLoopAsync(_socket, wait.Token) : Task.CompletedTask;
@@ -125,6 +138,7 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
         }
         finally
         {
+            _stopping = true; // a pending second announcement must not go out after the goodbye
             if (_current != null && _socket != null)
             {
                 try { await SendAnnouncementAsync(_current, goodbye: true).ConfigureAwait(false); } catch { }
@@ -142,7 +156,7 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
         {
             await Task.Delay(TimeSpan.FromSeconds(1), ct).ConfigureAwait(false);
             if (ReferenceEquals(_current, s) && _socket != null)
-                await SendAnnouncementAsync(s, goodbye: false).ConfigureAwait(false);
+                await SendAnnouncementAsync(s, goodbye: false, stillValid: () => !_stopping && ReferenceEquals(_current, s)).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _log?.Invoke($"mDNS: announce failed: {ex.Message}"); }
@@ -181,7 +195,7 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
                     socket.JoinMulticastGroup(Group, a);
                     joined++;
                 }
-                catch (SocketException ex) { _log?.Invoke($"mDNS: cannot join on {a}: {ex.SocketErrorCode}"); }
+                catch (SocketException ex) { LogBind($"mDNS: cannot join on {a}: {ex.SocketErrorCode}"); }
             }
             if (joined == 0)
             {
@@ -189,11 +203,20 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
                 return;
             }
             _socket = socket;
+            _lastBindError = null;
         }
         catch (SocketException ex)
         {
-            _log?.Invoke($"mDNS: cannot open port {Port}: {ex.SocketErrorCode}");
+            LogBind($"mDNS: cannot open port {Port}: {ex.SocketErrorCode}");
         }
+    }
+
+    // Bind is retried every poll: log a failure once, not every 30 s
+    private void LogBind(string message)
+    {
+        if (message == _lastBindError) return;
+        _lastBindError = message;
+        _log?.Invoke(message);
     }
 
     private async Task ReceiveLoopAsync(UdpClient socket, CancellationToken ct)
@@ -216,7 +239,12 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
             try
             {
                 if (legacy || answer.Value.AllUnicast)
-                    await socket.SendAsync(answer.Value.Packet, from, ct).ConfigureAwait(false);
+                {
+                    // The source of a UDP query can be forged: cap unicast replies per source and in total,
+                    // so the PC can't be used to flood another host on the LAN
+                    if (MayUnicast(source))
+                        await socket.SendAsync(answer.Value.Packet, from, ct).ConfigureAwait(false);
+                }
                 else if (MayMulticast(answer.Value.Packet))
                     await SendMulticastAsync(socket, s, answer.Value.Packet).ConfigureAwait(false);
             }
@@ -225,6 +253,23 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
             {
                 _log?.Invoke($"mDNS: reply failed: {ex.Message}");
             }
+        }
+    }
+
+    private bool MayUnicast(IPAddress source)
+    {
+        var now = DateTime.UtcNow;
+        lock (_lastUnicast)
+        {
+            while (_unicastWindow.Count > 0 && now - _unicastWindow.Peek() >= TimeSpan.FromSeconds(1)) _unicastWindow.Dequeue();
+            if (_unicastWindow.Count >= MaxUnicastPerSecond) return false;
+            if (_lastUnicast.TryGetValue(source, out var last) && now - last < MulticastRepeat) return false;
+            if (_lastUnicast.Count > 256)
+                foreach (var old in _lastUnicast.Where(kv => now - kv.Value >= MulticastRepeat).Select(kv => kv.Key).ToList())
+                    _lastUnicast.Remove(old);
+            _lastUnicast[source] = now;
+            _unicastWindow.Enqueue(now);
+            return true;
         }
     }
 
@@ -243,11 +288,11 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
         }
     }
 
-    private async Task SendAnnouncementAsync(MdnsService s, bool goodbye)
+    private async Task SendAnnouncementAsync(MdnsService s, bool goodbye, Func<bool>? stillValid = null)
     {
         var socket = _socket;
         if (socket == null) return;
-        try { await SendMulticastAsync(socket, s, MdnsResponder.Announcement(s, goodbye)).ConfigureAwait(false); }
+        try { await SendMulticastAsync(socket, s, MdnsResponder.Announcement(s, goodbye), stillValid).ConfigureAwait(false); }
         catch (Exception ex) when (ex is SocketException or ObjectDisposedException)
         {
             _log?.Invoke($"mDNS: announce failed: {ex.Message}");
@@ -255,12 +300,13 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
     }
 
     // Sends out of every LAN interface of the service (the OS would otherwise pick just one).
-    private async Task SendMulticastAsync(UdpClient socket, MdnsService s, byte[] packet)
+    private async Task SendMulticastAsync(UdpClient socket, MdnsService s, byte[] packet, Func<bool>? stillValid = null)
     {
         var target = new IPEndPoint(Group, Port);
         await _send.WaitAsync().ConfigureAwait(false);
         try
         {
+            if (stillValid != null && !stillValid()) return;
             foreach (var a in s.Addresses.Where(a => a.AddressFamily == AddressFamily.InterNetwork))
             {
                 socket.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, a.GetAddressBytes());

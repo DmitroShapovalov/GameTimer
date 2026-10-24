@@ -120,9 +120,32 @@ public class DiscoveryTests
         Assert.Null(MdnsResponder.Respond(Service, new byte[5], false));
         var q = Query(1, ("_gametimer._tcp.local", 12, false));
         Assert.Null(MdnsResponder.Respond(Service, q.AsSpan(0, q.Length - 3), false));
-        // A pointer loop: the name points at itself
+        // A name that points at itself (forward / self pointers are refused)
         var loop = new byte[] { 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0xC0, 12, 0, 12, 0, 1 };
         Assert.Null(MdnsResponder.Respond(Service, loop, false));
+    }
+
+    [Fact]
+    public void Pointer_chains_longer_than_16_are_refused()
+    {
+        // Question k (k = 1..n) is "a" + a pointer to question k-1; question 0 is "_gametimer._tcp.local".
+        // The last name then needs n jumps to resolve.
+        byte[] Chain(int n)
+        {
+            var w = new List<byte> { 0, 0, 0, 0, 0, (byte)(n + 1), 0, 0, 0, 0, 0, 0 };
+            var starts = new List<int> { w.Count };
+            w.AddRange(Name("_gametimer._tcp.local")); w.AddRange(new byte[] { 0, 12, 0, 1 });
+            for (int k = 1; k <= n; k++)
+            {
+                starts.Add(w.Count);
+                w.Add(1); w.Add((byte)'a');
+                w.Add((byte)(0xC0 | (starts[k - 1] >> 8))); w.Add((byte)starts[k - 1]);
+                w.AddRange(new byte[] { 0, 12, 0, 1 });
+            }
+            return w.ToArray();
+        }
+        Assert.NotNull(MdnsResponder.Respond(Service, Chain(16), false));
+        Assert.Null(MdnsResponder.Respond(Service, Chain(17), false));
     }
 
     [Fact]
@@ -195,11 +218,15 @@ public class DiscoveryTests
         await using var adv = new MdnsAdvertiser(() => service, _ => true, m => { lock (log) log.Add(m); });
         adv.Start();
         using var client = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
+        // To the group, not to local:5353: with a shared port, unicast reaches only one of the sockets
+        // (on Windows maybe the system's own responder); multicast reaches all of them
+        client.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, local.GetAddressBytes());
+        client.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastLoopback, true);
         var query = Query(777, ("_gametimer._tcp.local", 12, false));
         for (int attempt = 0; attempt < 20; attempt++)
         {
             lock (log) if (log.Any(l => l.Contains("cannot"))) return; // no socket here: nothing to test
-            await client.SendAsync(query, new IPEndPoint(local, MdnsAdvertiser.Port));
+            await client.SendAsync(query, new IPEndPoint(MdnsAdvertiser.Group, MdnsAdvertiser.Port));
             using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
             try
             {

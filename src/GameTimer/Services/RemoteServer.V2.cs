@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using GameTimer.Models;
@@ -39,6 +40,13 @@ public sealed partial class RemoteServer
     private readonly string _mdnsInstance = MdnsService.RandomLabel();
     private readonly string _mdnsHost = MdnsService.RandomLabel();
     private MdnsAdvertiser? _mdns;
+    private volatile Tuple<IPAddress, IPAddress>? _mdnsSubnetBox; // (address, mask), written by the service callback
+
+    private (IPAddress Address, IPAddress Mask)? _mdnsSubnet
+    {
+        get => _mdnsSubnetBox is { } t ? (t.Item1, t.Item2) : null;
+        set => _mdnsSubnetBox = value is { } v ? Tuple.Create(v.Address, v.Mask) : null;
+    }
 
     /// <summary>
     /// Announces <c>_gametimer._tcp</c> with today's tags while the server runs, so a parent app finds
@@ -50,11 +58,12 @@ public sealed partial class RemoteServer
         if (_mdns != null) return;
         var mdns = new MdnsAdvertiser(() =>
         {
-            var lan = NetworkFilter.GetLanAddress();
+            var lan = NetworkFilter.GetLanInterface();
+            _mdnsSubnet = lan;
             var tags = Agent.DiscoveryTags(Agent.UtcToday);
             if (lan == null || tags.Count == 0) return null;
-            return new MdnsService(_mdnsInstance, _mdnsHost, port, new[] { lan }, MdnsService.TxtFor(tags));
-        }, NetworkFilter.IsAllowed, DiagnosticLog.Write);
+            return new MdnsService(_mdnsInstance, _mdnsHost, port, new[] { lan.Value.Address }, MdnsService.TxtFor(tags));
+        }, ip => NetworkFilter.IsInSubnet(ip, _mdnsSubnet), DiagnosticLog.Write); // only the LAN it announces on
         _mdns = mdns;
         Agent.PeersChanged += mdns.Refresh;
         System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
