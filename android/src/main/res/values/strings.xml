@@ -41,6 +41,13 @@
     <string name="minutes">Minutes</string>
     <string name="request_refused">The PC refused: %1$s</string>
     <string name="request_gave_up">No answer from the PC</string>
-    <string name="role_admin">admin</string>
-    <string name="role_parent">parent</string>
+    <string name="identity_unavailable">This phone\'s secure storage isn\'t available right now. Restart the app; if it keeps happening, restart the phone.</string>
+    <string name="identity_reset">This phone\'s key was reset by Android (for example after the screen lock was removed). Pair your PCs again.</string>
+    <string name="minutes_range">1 to 1440 minutes</string>
+    <string name="err_not_running">no timer is running</string>
+    <string name="err_already_running">a timer is already running</string>
+    <string name="err_invalid_time">that time isn\'t possible (or the schedule doesn\'t allow it)</string>
+    <string name="err_invalid_minutes">that number of minutes isn\'t allowed</string>
+    <string name="err_forbidden">only an admin may do that</string>
+    <string name="err_busy">the PC is busy, try again</string>
 </resources>

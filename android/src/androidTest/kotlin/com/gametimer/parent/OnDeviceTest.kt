@@ -37,10 +37,13 @@ import org.junit.runner.RunWith
 class OnDeviceTest {
     private val app get() = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as GameTimerApp
 
+    /** CI passes requireAgent=true: then an unreachable agent fails the test instead of skipping it. */
+    private val requireAgent get() = InstrumentationRegistry.getArguments().getString("requireAgent") == "true"
+
     @Test
     fun hubKeyIsStableAcrossLoads() {
-        val first = app.store.hubKey.publicKey
-        val again = HubStore(app).hubKey.publicKey // a fresh store reads the Keystore-wrapped file
+        val first = app.store.loadHubKey().publicKey
+        val again = HubStore(app).loadHubKey().publicKey // a fresh store reads the Keystore-wrapped file
         assertArrayEquals(first, again)
     }
 
@@ -48,19 +51,23 @@ class OnDeviceTest {
     fun pairsWithAndControlsTheAgent(): Unit = runBlocking {
         val agentUrl = "http://10.0.2.2:5123"
         val linkText = try { withContext(Dispatchers.IO) { URL("$agentUrl/control/pair").readText() } } catch (e: Exception) { null }
+        if (requireAgent) assertTrue("TestAgent not reachable at $agentUrl", linkText != null)
         Assume.assumeTrue("TestAgent not running on the host", linkText != null)
         val link = PairingLink.parse(linkText!!)!!
         val connector = KtorConnector()
+        val hubKey = withContext(Dispatchers.IO) { app.store.loadHubKey() }
 
-        val outcome = pair(link, app.store.hubKey, "Emulator", "test", connector) { code ->
-            Thread { URL("$agentUrl/control/code?c=$code").readText() }.start()
+        val outcome = withTimeout(90.seconds) {
+            pair(link, hubKey, "Emulator", "test", connector) { code ->
+                Thread { URL("$agentUrl/control/code?c=$code").readText() }.start()
+            }
         }
         assertTrue("pairing: $outcome", outcome is PairOutcome.Paired)
         val agent = (outcome as PairOutcome.Paired).agent
 
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
-            val l = AgentLink(agent, app.store.hubKey, connector, "test", scope).also { it.start() }
+            val l = AgentLink(agent, hubKey, connector, "test", scope).also { it.start() }
             withTimeout(30.seconds) { l.status.first { it is LinkStatus.Online } }
             val start = l.send("timer.start", buildJsonObject { put("mode", "interval"); put("hours", 0); put("minutes", 10) })
             assertTrue("start: $start", start is RequestOutcome.Ok)

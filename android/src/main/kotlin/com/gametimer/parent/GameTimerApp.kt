@@ -10,7 +10,7 @@ class GameTimerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        runBlocking { Sodium.initialize() } // loads libsodium once; fast
+        runBlocking { Sodium.initialize() } // loads libsodium once (a few ms); everything below needs it
         store = HubStore(this)
     }
 }

@@ -11,11 +11,15 @@ import com.gametimer.protocol.hub.PairedAgent
 import com.gametimer.protocol.hub.PairingLink
 import com.gametimer.protocol.hub.RequestOutcome
 import com.gametimer.protocol.hub.pair
+import com.gametimer.protocol.noise.KeyPair
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -28,13 +32,23 @@ sealed interface PairState {
     data class Failed(val outcome: PairOutcome) : PairState
 }
 
+/** The hub key, loaded off the main thread at start. */
+sealed interface Identity {
+    data object Loading : Identity
+    data class Ready(val key: KeyPair, val wasReset: Boolean) : Identity
+    data object Unavailable : Identity
+}
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val store = (app as GameTimerApp).store
     private val connector = KtorConnector()
-    private val appName = "GameTimer Parent ${BuildConfigInfo.VERSION} (android)"
-    private val links = HashMap<String, AgentLink>()
+    private val appName = "GameTimer Parent ${BuildConfig.VERSION_NAME} (android)"
+    private val links = HashMap<String, AgentLink>() // main thread only
 
     val agents: StateFlow<List<PairedAgent>> = store.agents
+
+    private val _identity = MutableStateFlow<Identity>(Identity.Loading)
+    val identity: StateFlow<Identity> = _identity.asStateFlow()
 
     private val _pair = MutableStateFlow<PairState?>(null)
     val pair: StateFlow<PairState?> = _pair.asStateFlow()
@@ -46,33 +60,59 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val defaultPhoneName: String = Build.MODEL ?: "Phone"
 
-    /** The live link to a PC; created on demand, connected while the app is in the foreground. */
-    fun link(agent: PairedAgent): AgentLink =
-        links.getOrPut(agent.agentId) {
-            AgentLink(agent, store.hubKey, connector, appName, viewModelScope).also { if (foreground) it.start() }
-        }
-
+    // Foreground changes are applied one at a time, latest wins (rotation = stop + start in a burst)
+    private val wantForeground = Channel<Boolean>(Channel.CONFLATED)
     private var foreground = false
 
-    fun setForeground(value: Boolean) {
-        foreground = value
+    init {
         viewModelScope.launch {
-            if (value) agents.value.forEach { link(it).start() } else links.values.forEach { it.stop() }
+            _identity.value = try {
+                val key = withContext(Dispatchers.IO) { store.loadHubKey() }
+                Identity.Ready(key, store.identityWasReset)
+            } catch (e: Exception) {
+                Identity.Unavailable
+            }
+            for (want in wantForeground) applyForeground(want)
         }
     }
 
+    private fun hubKey(): KeyPair? = (_identity.value as? Identity.Ready)?.key
+
+    /** The live link to a paired PC; null until the hub key is loaded or for a PC that isn't in the list. */
+    fun link(agentId: String): AgentLink? {
+        links[agentId]?.let { return it }
+        val agent = agents.value.firstOrNull { it.agentId == agentId } ?: return null
+        val key = hubKey() ?: return null
+        return AgentLink(agent, key, connector, appName, viewModelScope).also {
+            links[agentId] = it
+            if (foreground) it.start()
+        }
+    }
+
+    /** Links stay connected only while the app is visible (no background service in this step). */
+    fun setForeground(value: Boolean) {
+        wantForeground.trySend(value)
+    }
+
+    private suspend fun applyForeground(value: Boolean) {
+        if (value == foreground) return
+        foreground = value
+        if (value) agents.value.forEach { link(it.agentId)?.start() } else links.values.toList().forEach { it.stop() }
+    }
+
     fun startPairing(link: PairingLink, phoneName: String) {
+        val key = hubKey() ?: return
         pairJob?.cancel()
         _pair.value = PairState.Connecting(link.pcName)
         pairJob = viewModelScope.launch {
-            val outcome = pair(link, store.hubKey, phoneName.ifBlank { defaultPhoneName }, appName, connector) { code ->
+            val outcome = pair(link, key, phoneName.ifBlank { defaultPhoneName }, appName, connector) { code ->
                 _pair.value = PairState.ShowCode(code)
             }
             _pair.value = when (outcome) {
                 is PairOutcome.Paired -> {
-                    store.save(outcome.agent)
+                    withContext(Dispatchers.IO) { store.save(outcome.agent) }
                     links.remove(outcome.agent.agentId)?.stop() // re-paired: reconnect with the new ak
-                    link(outcome.agent).start()
+                    link(outcome.agent.agentId) // started if the app is visible
                     PairState.Done(outcome.agent.name)
                 }
                 else -> PairState.Failed(outcome)
@@ -87,8 +127,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun remove(agent: PairedAgent) {
         viewModelScope.launch {
+            withContext(Dispatchers.IO) { store.remove(agent.agentId) } // first: no screen recreates its link
             links.remove(agent.agentId)?.stop()
-            store.remove(agent.agentId)
         }
     }
 
@@ -100,20 +140,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun extend(agent: PairedAgent, minutes: Int) = command(agent, "timer.extend", buildJsonObject { put("minutes", minutes) })
 
     private fun command(agent: PairedAgent, type: String, fields: JsonObject) {
+        val l = link(agent.agentId) ?: return
         viewModelScope.launch {
-            when (val r = link(agent).send(type, fields)) {
-                is RequestOutcome.Refused -> _message.value = getApplication<Application>().getString(R.string.request_refused, r.code)
-                RequestOutcome.GaveUp -> _message.value = getApplication<Application>().getString(R.string.request_gave_up)
+            val res = getApplication<Application>().resources
+            when (val r = l.send(type, fields)) {
+                is RequestOutcome.Refused -> _message.value = res.getString(R.string.request_refused, errorText(r.code))
+                RequestOutcome.GaveUp -> _message.value = res.getString(R.string.request_gave_up)
                 else -> Unit
             }
         }
     }
 
+    /** §7.2 error codes the user may see, translated; others shown as the code. */
+    private fun errorText(code: String): String {
+        val id = when (code) {
+            "not_running" -> R.string.err_not_running
+            "already_running" -> R.string.err_already_running
+            "invalid_time" -> R.string.err_invalid_time
+            "invalid_minutes" -> R.string.err_invalid_minutes
+            "forbidden" -> R.string.err_forbidden
+            "busy" -> R.string.err_busy
+            else -> return code
+        }
+        return getApplication<Application>().getString(id)
+    }
+
     fun messageShown() {
         _message.value = null
     }
-}
-
-internal object BuildConfigInfo {
-    const val VERSION = "0.1.0"
 }

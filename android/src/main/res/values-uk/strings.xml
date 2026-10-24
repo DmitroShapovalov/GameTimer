@@ -41,6 +41,13 @@
     <string name="minutes">Хвилини</string>
     <string name="request_refused">ПК відмовив: %1$s</string>
     <string name="request_gave_up">Немає відповіді від ПК</string>
-    <string name="role_admin">адмін</string>
-    <string name="role_parent">батьки</string>
+    <string name="identity_unavailable">Захищене сховище телефона зараз недоступне. Перезапустіть застосунок; якщо не допоможе — перезавантажте телефон.</string>
+    <string name="identity_reset">Android скинув ключ цього телефона (наприклад, після вимкнення блокування екрана). Підключіть комп\'ютери знову.</string>
+    <string name="minutes_range">Від 1 до 1440 хвилин</string>
+    <string name="err_not_running">таймер не запущено</string>
+    <string name="err_already_running">таймер уже запущено</string>
+    <string name="err_invalid_time">такий час неможливий (або розклад не дозволяє)</string>
+    <string name="err_invalid_minutes">така кількість хвилин недопустима</string>
+    <string name="err_forbidden">це може лише адмін</string>
+    <string name="err_busy">ПК зайнятий, спробуйте знову</string>
 </resources>

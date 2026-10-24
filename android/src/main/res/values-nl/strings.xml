@@ -41,6 +41,13 @@
     <string name="minutes">Minuten</string>
     <string name="request_refused">De pc weigerde: %1$s</string>
     <string name="request_gave_up">Geen antwoord van de pc</string>
-    <string name="role_admin">beheerder</string>
-    <string name="role_parent">ouder</string>
+    <string name="identity_unavailable">De beveiligde opslag van deze telefoon is nu niet beschikbaar. Start de app opnieuw; helpt dat niet, herstart dan de telefoon.</string>
+    <string name="identity_reset">Android heeft de sleutel van deze telefoon gewist (bijvoorbeeld na het verwijderen van de schermvergrendeling). Koppel je pc\'s opnieuw.</string>
+    <string name="minutes_range">1 tot 1440 minuten</string>
+    <string name="err_not_running">er loopt geen timer</string>
+    <string name="err_already_running">er loopt al een timer</string>
+    <string name="err_invalid_time">die tijd kan niet (of het schema staat het niet toe)</string>
+    <string name="err_invalid_minutes">dat aantal minuten is niet toegestaan</string>
+    <string name="err_forbidden">alleen een beheerder mag dat</string>
+    <string name="err_busy">de pc is bezig, probeer opnieuw</string>
 </resources>

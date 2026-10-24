@@ -99,39 +99,50 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        vm.setForeground(false)
+        if (!isChangingConfigurations) vm.setForeground(false) // a rotation isn't leaving the app
         super.onStop()
     }
 }
 
-private sealed interface Screen {
-    data object Home : Screen
-    data object Scan : Screen
-    data object Pair : Screen
-    data class Pc(val agentId: String) : Screen
-}
-
 @Composable
 private fun App(vm: MainViewModel) {
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    // "home", "scan" or "pc:<agent id>"; saveable, so a rotation keeps the screen. A pairing in progress
+    // (vm.pair) always shows the pairing screen, so its code survives a rotation too.
+    var route by rememberSaveable { mutableStateOf("home") }
     val agents by vm.agents.collectAsState()
+    val pairState by vm.pair.collectAsState()
+    val identity by vm.identity.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val message by vm.message.collectAsState()
     LaunchedEffect(message) {
         message?.let { snackbar.showSnackbar(it); vm.messageShown() }
     }
-    BackHandler(screen != Screen.Home) {
-        if (screen == Screen.Pair) vm.clearPairing()
-        screen = Screen.Home
+    BackHandler(route != "home" || pairState != null) {
+        if (pairState != null) vm.clearPairing()
+        route = "home"
     }
 
-    when (val s = screen) {
-        Screen.Home -> HomeScreen(vm, agents, snackbar, onAdd = { screen = Screen.Scan }, onOpen = { screen = Screen.Pc(it.agentId) })
-        Screen.Scan -> ScanScreen(vm, onBack = { screen = Screen.Home }, onLink = { link, name -> vm.startPairing(link, name); screen = Screen.Pair })
-        Screen.Pair -> PairScreen(vm, onDone = { vm.clearPairing(); screen = Screen.Home })
-        is Screen.Pc -> {
-            val agent = agents.firstOrNull { it.agentId == s.agentId }
-            if (agent == null) screen = Screen.Home else PcScreen(vm, agent, snackbar, onBack = { screen = Screen.Home })
+    when (val id = identity) {
+        Identity.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        Identity.Unavailable -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+            Text(stringResource(R.string.identity_unavailable), style = MaterialTheme.typography.bodyLarge)
+        }
+        is Identity.Ready -> {
+            var resetShown by rememberSaveable { mutableStateOf(false) }
+            if (id.wasReset && !resetShown) {
+                AlertDialog(onDismissRequest = { resetShown = true }, text = { Text(stringResource(R.string.identity_reset)) },
+                    confirmButton = { TextButton(onClick = { resetShown = true }) { Text(stringResource(R.string.ok)) } })
+            }
+            when {
+                pairState != null -> PairScreen(vm, onDone = { vm.clearPairing(); route = "home" })
+                route == "scan" -> ScanScreen(vm, onBack = { route = "home" }, onLink = { link, name -> vm.startPairing(link, name) })
+                route.startsWith("pc:") -> {
+                    val agent = agents.firstOrNull { it.agentId == route.removePrefix("pc:") }
+                    if (agent == null) LaunchedEffect(route) { route = "home" }
+                    else PcScreen(vm, agent, snackbar, onBack = { route = "home" })
+                }
+                else -> HomeScreen(vm, agents, snackbar, onAdd = { route = "scan" }, onOpen = { route = "pc:" + it.agentId })
+            }
         }
     }
 }
@@ -153,7 +164,10 @@ private fun HomeScreen(vm: MainViewModel, agents: List<PairedAgent>, snackbar: S
             }
         } else {
             LazyColumn(Modifier.padding(padding).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(agents, key = { it.agentId }) { agent -> PcCard(vm.link(agent), agent) { onOpen(agent) } }
+                items(agents, key = { it.agentId }) { agent ->
+                    val link = remember(agent.agentId) { vm.link(agent.agentId) }
+                    if (link != null) PcCard(link, agent) { onOpen(agent) }
+                }
             }
         }
     }
@@ -273,7 +287,7 @@ private fun PairScreen(vm: MainViewModel, onDone: () -> Unit) {
     val state by vm.pair.collectAsState()
     Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         when (val s = state) {
-            null -> onDone()
+            null -> Unit // the caller stops showing this screen
             is PairState.Connecting -> {
                 CircularProgressIndicator()
                 Spacer(Modifier.height(16.dp))
@@ -299,7 +313,7 @@ private fun PairScreen(vm: MainViewModel, onDone: () -> Unit) {
                         PairOutcome.Denied -> stringResource(R.string.pair_denied)
                         PairOutcome.CodeUsed -> stringResource(R.string.pair_code_used)
                         PairOutcome.Rejected -> stringResource(R.string.pair_rejected)
-                        is PairOutcome.Failed -> stringResource(R.string.pair_failed, o.reason)
+                        is PairOutcome.Failed -> stringResource(R.string.pair_failed, o.reason) // technical detail, kept as is
                         is PairOutcome.Paired -> ""
                     },
                     style = MaterialTheme.typography.bodyLarge,
@@ -314,7 +328,7 @@ private fun PairScreen(vm: MainViewModel, onDone: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHostState, onBack: () -> Unit) {
-    val link = vm.link(agent)
+    val link = remember(agent.agentId) { vm.link(agent.agentId) } ?: return
     val status by link.status.collectAsState()
     val state by link.state.collectAsState()
     val seconds = rememberCountdown(state)
@@ -345,9 +359,11 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
                 Button(onClick = { vm.stopTimer(agent) }, enabled = online) { Text(stringResource(R.string.stop)) }
             } else {
                 Text(stringResource(R.string.timer_idle), style = MaterialTheme.typography.titleMedium)
+                val valid = minutes.toIntOrNull()?.takeIf { it in 1..1440 }
                 OutlinedTextField(minutes, { v -> minutes = v.filter { it.isDigit() }.take(4) }, label = { Text(stringResource(R.string.minutes)) },
-                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                Button(onClick = { minutes.toIntOrNull()?.takeIf { it in 1..1440 }?.let { vm.startTimer(agent, it) } }, enabled = online) {
+                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = valid == null, supportingText = { if (valid == null) Text(stringResource(R.string.minutes_range)) })
+                Button(onClick = { valid?.let { vm.startTimer(agent, it) } }, enabled = online && valid != null) {
                     Text(stringResource(R.string.start))
                 }
             }

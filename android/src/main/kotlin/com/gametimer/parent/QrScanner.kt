@@ -19,44 +19,44 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 
-/** Camera preview that reports every QR code text it reads (ML Kit, on-device; nothing is uploaded). */
+/**
+ * Camera preview that reports QR code texts (ML Kit, on-device; nothing is uploaded). The camera runs
+ * only while this composable is on screen: leaving it unbinds the camera.
+ */
 @Composable
 fun QrScanner(onText: (String) -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
-    val executor = remember { Executors.newSingleThreadExecutor() }
-    val scanner = remember {
-        BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build())
-    }
-    DisposableEffect(Unit) {
+    val view = remember { PreviewView(context) }
+
+    DisposableEffect(lifecycle) {
+        val executor = Executors.newSingleThreadExecutor()
+        val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build())
+        val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
+        val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+        analysis.setAnalyzer(executor) { proxy ->
+            val media = proxy.image
+            if (media == null) { proxy.close(); return@setAnalyzer }
+            scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
+                .addOnSuccessListener { codes -> codes.firstNotNullOfOrNull { it.rawValue }?.let(onText) }
+                .addOnCompleteListener { proxy.close() }
+        }
+        var disposed = false
+        var provider: ProcessCameraProvider? = null
+        val future = ProcessCameraProvider.getInstance(context)
+        future.addListener({
+            if (disposed) return@addListener // left the screen before the camera was ready
+            provider = future.get().also { it.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis) }
+        }, ContextCompat.getMainExecutor(context))
+
         onDispose {
+            disposed = true
+            analysis.clearAnalyzer()
+            provider?.unbind(preview, analysis) // the camera turns off (and stays off when the app comes back)
             scanner.close()
             executor.shutdown()
         }
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            val view = PreviewView(ctx)
-            val providerFuture = ProcessCameraProvider.getInstance(ctx)
-            providerFuture.addListener({
-                val provider = providerFuture.get()
-                val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
-                val analysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                analysis.setAnalyzer(executor) { proxy ->
-                    val media = proxy.image
-                    if (media == null) { proxy.close(); return@setAnalyzer }
-                    scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
-                        .addOnSuccessListener { codes -> codes.firstNotNullOfOrNull { it.rawValue }?.let(onText) }
-                        .addOnCompleteListener { proxy.close() }
-                }
-                provider.unbindAll()
-                provider.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-            }, ContextCompat.getMainExecutor(context))
-            view
-        },
-    )
+    AndroidView(modifier = modifier, factory = { view })
 }

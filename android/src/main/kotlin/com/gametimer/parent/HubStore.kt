@@ -2,11 +2,14 @@ package com.gametimer.parent
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import com.gametimer.protocol.hub.PairedAgent
 import com.gametimer.protocol.noise.KeyPair
 import java.io.File
+import java.io.IOException
 import java.security.KeyStore
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -23,7 +26,8 @@ import kotlinx.serialization.json.Json
  *
  * The X25519 private key is stored encrypted with an AES-256-GCM key that lives in the Android Keystore
  * (non-exportable, hardware-backed where available). The Keystore can't hold X25519 keys for our
- * libsodium-based Noise directly, so it wraps the key instead.
+ * libsodium-based Noise directly, so it wraps the key instead. Not thread-safe for writers: the view
+ * model calls [save] / [remove] from one coroutine context.
  */
 class HubStore(context: Context) {
     private val dir = context.noBackupFilesDir
@@ -34,33 +38,16 @@ class HubStore(context: Context) {
 
     val agents: StateFlow<List<PairedAgent>> = _agents.asStateFlow()
 
-    /** The hub key pair; created on first use. */
-    val hubKey: KeyPair by lazy { loadOrCreateKey() }
+    /**
+     * True when the stored key could no longer be unwrapped (the Keystore key was invalidated, e.g. after
+     * a factory reset of the lock screen): a new identity was created and the PC list cleared, so the
+     * app can tell the user to pair again.
+     */
+    var identityWasReset: Boolean = false
+        private set
 
-    @Synchronized
-    fun save(agent: PairedAgent) {
-        val list = _agents.value.filter { it.agentId != agent.agentId } + agent
-        write(list)
-    }
-
-    @Synchronized
-    fun remove(agentId: String) = write(_agents.value.filter { it.agentId != agentId })
-
-    private fun write(list: List<PairedAgent>) {
-        val tmp = File(dir, "agents.json.tmp")
-        tmp.writeText(json.encodeToString(ListSerializer(PairedAgent.serializer()), list))
-        tmp.renameTo(agentsFile)
-        _agents.value = list
-    }
-
-    private fun loadAgents(): List<PairedAgent> =
-        try {
-            if (agentsFile.exists()) json.decodeFromString(ListSerializer(PairedAgent.serializer()), agentsFile.readText()) else emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-
-    private fun loadOrCreateKey(): KeyPair {
+    /** Loads (or creates) the hub key pair. Blocking Keystore and file work: call off the main thread. */
+    fun loadHubKey(): KeyPair {
         val wrap = wrappingKey()
         if (keyFile.exists()) {
             try {
@@ -69,9 +56,12 @@ class HubStore(context: Context) {
                 cipher.init(Cipher.DECRYPT_MODE, wrap, GCMParameterSpec(128, blob, 0, 12))
                 val priv = cipher.doFinal(blob, 12, blob.size - 12)
                 return KeyPair.fromPrivateKey(priv).also { priv.fill(0) }
-            } catch (e: Exception) {
-                // Unreadable (e.g. the Keystore key was reset): a new identity; the PCs need pairing again
+            } catch (e: KeyPermanentlyInvalidatedException) {
+                resetIdentity()
+            } catch (e: AEADBadTagException) {
+                resetIdentity() // wrapped with a key that no longer exists
             }
+            // Anything else (a transient Keystore error) propagates: never replace the identity for it
         }
         val key = KeyPair.generate()
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -79,11 +69,38 @@ class HubStore(context: Context) {
         val priv = key.privateKey
         val sealed = cipher.iv + cipher.doFinal(priv)
         priv.fill(0)
-        val tmp = File(dir, "hub-key.bin.tmp")
-        tmp.writeBytes(sealed)
-        tmp.renameTo(keyFile)
+        atomicWrite(keyFile, sealed)
         return key
     }
+
+    /** Blocking file write: call off the main thread. */
+    fun save(agent: PairedAgent) = write(_agents.value.filter { it.agentId != agent.agentId } + agent)
+
+    /** Blocking file write: call off the main thread. */
+    fun remove(agentId: String) = write(_agents.value.filter { it.agentId != agentId })
+
+    private fun resetIdentity() {
+        identityWasReset = true
+        write(emptyList()) // the PCs know the old key only: they must be paired again
+    }
+
+    private fun write(list: List<PairedAgent>) {
+        atomicWrite(agentsFile, json.encodeToString(ListSerializer(PairedAgent.serializer()), list).encodeToByteArray())
+        _agents.value = list
+    }
+
+    private fun atomicWrite(target: File, bytes: ByteArray) {
+        val tmp = File(dir, target.name + ".tmp")
+        tmp.writeBytes(bytes)
+        if (!tmp.renameTo(target)) throw IOException("cannot replace ${target.name}")
+    }
+
+    private fun loadAgents(): List<PairedAgent> =
+        try {
+            if (agentsFile.exists()) json.decodeFromString(ListSerializer(PairedAgent.serializer()), agentsFile.readText()) else emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
 
     private fun wrappingKey(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

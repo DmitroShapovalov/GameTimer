@@ -30,6 +30,7 @@ app.Map("/v2/pair", c => Accept(c, true));
 var port = 0;
 if (emulator)
 {
+    app.MapGet("/control/health", () => "OK");
     app.MapGet("/control/pair", () => $"http://10.0.2.2:{port}/pair?code=X#{host.StartPairing("Test PC").QrFragment}");
     app.MapGet("/control/code", (string c) => { ui.Answer(c); return "OK"; });
 }
