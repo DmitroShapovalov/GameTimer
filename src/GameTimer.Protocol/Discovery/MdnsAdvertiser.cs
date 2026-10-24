@@ -37,6 +37,8 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
     private UdpClient? _socket;
     private MdnsService? _current;
     private volatile bool _stopping;
+    private volatile bool _rebind; // the receive loop hit a socket error
+    private DateTime _lastPacketError;
     private string? _lastBindError;
     private readonly Dictionary<IPAddress, DateTime> _lastUnicast = new();
     private readonly Queue<DateTime> _unicastWindow = new();
@@ -98,44 +100,19 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
         {
             while (!ct.IsCancellationRequested)
             {
-                var next = SafeService();
-                bool hadSocket = _socket != null;
-                bool changed = !SameService(next, _current);
-                if (changed)
+                try { await IterateAsync(ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
                 {
-                    var old = _current;
-                    // A new name or no service: withdraw the old records. Same name: the new records carry the
-                    // cache-flush bit and replace the old ones (TXT with new tags, A with a new address).
-                    if (old != null && _socket != null && !SameIdentity(old, next))
-                        await SendAnnouncementAsync(old, goodbye: true).ConfigureAwait(false);
-                    if (next == null || old == null || !SameAddresses(old, next))
-                        Rebind(next);
-                    _current = next;
-                }
-                else if (next != null && _socket == null)
-                {
-                    Rebind(next); // the last bind failed (interface not ready, port busy): retry every poll
-                }
-                if (next != null && _socket != null && (changed || !hadSocket))
-                {
-                    await SendAnnouncementAsync(next, goodbye: false).ConfigureAwait(false);
-                    _ = AnnounceAgainAsync(next, ct);
-                }
-                using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                var receive = _socket != null ? ReceiveLoopAsync(_socket, wait.Token) : Task.CompletedTask;
-                try { await _refresh.WaitAsync(PollInterval, ct).ConfigureAwait(false); }
-                finally
-                {
-                    wait.Cancel();
-                    try { await receive.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                    // Never give up while the server runs: log, start over with a fresh socket
+                    _log?.Invoke($"mDNS: error, restarting: {ex.Message}");
+                    _socket?.Dispose();
+                    _socket = null;
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
                 }
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            _log?.Invoke($"mDNS: stopped: {ex.Message}");
-        }
         finally
         {
             _stopping = true; // a pending second announcement must not go out after the goodbye
@@ -147,6 +124,46 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
             _socket?.Dispose();
             _socket = null;
         }
+    }
+
+    private async Task IterateAsync(CancellationToken ct)
+    {
+        if (_rebind) await Task.Delay(TimeSpan.FromSeconds(1), ct).ConfigureAwait(false); // a broken socket can't spin us
+        var next = SafeService();
+        bool hadSocket = _socket != null;
+        bool changed = !SameService(next, _current);
+        if (changed)
+        {
+            var old = _current;
+            // A new name or no service: withdraw the old records. Same name: the new records carry the
+            // cache-flush bit and replace the old ones (TXT with new tags, A with a new address).
+            if (old != null && _socket != null && !SameIdentity(old, next))
+                await SendAnnouncementAsync(old, goodbye: true).ConfigureAwait(false);
+            if (next == null || old == null || !SameAddresses(old, next))
+                Rebind(next);
+            _current = next;
+        }
+        else if (next != null && (_socket == null || _rebind))
+        {
+            Rebind(next); // the last bind failed (interface not ready, port busy): retry every poll
+        }
+        if (next != null && _socket != null && (changed || !hadSocket))
+        {
+            await SendAnnouncementAsync(next, goodbye: false).ConfigureAwait(false);
+            _ = AnnounceAgainAsync(next, ct);
+        }
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var receive = _socket != null ? ReceiveLoopAsync(_socket, wait.Token) : Task.Delay(Timeout.Infinite, wait.Token);
+        // Wake up on a refresh, the poll interval, or the receive loop ending (socket error → rebind)
+        var refresh = _refresh.WaitAsync(PollInterval, wait.Token);
+        try { await Task.WhenAny(refresh, receive).ConfigureAwait(false); }
+        finally
+        {
+            wait.Cancel();
+            try { await receive.ConfigureAwait(false); } catch (OperationCanceledException) { }
+            try { await refresh.ConfigureAwait(false); } catch (OperationCanceledException) { }
+        }
+        ct.ThrowIfCancellationRequested();
     }
 
     // The second announcement, one second later (RFC 6762 §8.3), unless the service changed meanwhile.
@@ -174,6 +191,7 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
 
     private void Rebind(MdnsService? s)
     {
+        _rebind = false;
         _socket?.Dispose();
         _socket = null;
         if (s == null) return;
@@ -227,32 +245,54 @@ public sealed class MdnsAdvertiser : IAsyncDisposable
             try { packet = await socket.ReceiveAsync(ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
             catch (ObjectDisposedException) { return; }
-            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset) { continue; } // ICMP noise on Windows
-            var s = _current;
-            if (s == null || packet.Buffer.Length > 9000) continue;
-            var from = packet.RemoteEndPoint;
-            var source = from.Address.IsIPv4MappedToIPv6 ? from.Address.MapToIPv4() : from.Address;
-            if (!_acceptFrom(source)) continue;
-            bool legacy = from.Port != Port;
-            var answer = MdnsResponder.Answer(s, packet.Buffer, legacy);
-            if (answer == null) continue;
-            try
+            catch (SocketException ex) when (ex.SocketErrorCode is SocketError.ConnectionReset or SocketError.NetworkReset)
             {
-                if (legacy || answer.Value.AllUnicast)
-                {
-                    // The source of a UDP query can be forged: cap unicast replies per source and in total,
-                    // so the PC can't be used to flood another host on the LAN
-                    if (MayUnicast(source))
-                        await socket.SendAsync(answer.Value.Packet, from, ct).ConfigureAwait(false);
-                }
-                else if (MayMulticast(answer.Value.Packet))
-                    await SendMulticastAsync(socket, s, answer.Value.Packet).ConfigureAwait(false);
+                continue; // ICMP noise on Windows after a unicast reply
             }
+            catch (SocketException ex)
+            {
+                LogBind($"mDNS: receive failed: {ex.SocketErrorCode}");
+                _rebind = true; // the poll loop opens a new socket
+                return;
+            }
+            try { await HandleAsync(socket, packet, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
-            catch (Exception ex) when (ex is SocketException or ObjectDisposedException)
+            catch (Exception ex)
             {
-                _log?.Invoke($"mDNS: reply failed: {ex.Message}");
+                // One bad packet never stops the loop; logged at most once a minute (it may be a flood)
+                var now = DateTime.UtcNow;
+                if (now - _lastPacketError >= TimeSpan.FromMinutes(1))
+                {
+                    _lastPacketError = now;
+                    _log?.Invoke($"mDNS: packet ignored: {ex.GetType().Name}");
+                }
             }
+        }
+    }
+
+    private async Task HandleAsync(UdpClient socket, UdpReceiveResult packet, CancellationToken ct)
+    {
+        var s = _current;
+        if (s == null || packet.Buffer.Length > 9000) return;
+        var from = packet.RemoteEndPoint;
+        var source = from.Address.IsIPv4MappedToIPv6 ? from.Address.MapToIPv4() : from.Address;
+        if (!_acceptFrom(source)) return;
+        bool legacy = from.Port != Port;
+        var answer = MdnsResponder.Answer(s, packet.Buffer, legacy);
+        if (answer == null) return;
+        try
+        {
+            // The source of a UDP query can be forged: cap unicast replies per source and in total, so
+            // the PC can't be used to flood another host on the LAN. A QU question over the cap still
+            // gets its answer by multicast (RFC 6762 §5.4 allows that), which has its own limit.
+            if ((legacy || answer.Value.AllUnicast) && MayUnicast(source))
+                await socket.SendAsync(answer.Value.Packet, from, ct).ConfigureAwait(false);
+            else if (!legacy && MayMulticast(answer.Value.Packet)) // not legacy: the packet is the multicast form
+                await SendMulticastAsync(socket, s, answer.Value.Packet).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is SocketException or ObjectDisposedException)
+        {
+            _log?.Invoke($"mDNS: reply failed: {ex.Message}");
         }
     }
 

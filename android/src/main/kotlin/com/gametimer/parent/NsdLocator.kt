@@ -8,15 +8,17 @@ import com.gametimer.protocol.hub.AgentAddress
 import com.gametimer.protocol.hub.DiscoveryTxt
 import com.gametimer.protocol.hub.Locator
 import java.net.Inet4Address
-import kotlin.coroutines.resume
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -29,6 +31,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 class NsdLocator(context: Context) : Locator {
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
     private val resolving = Mutex()
+    private val releaser = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override suspend fun locate(tags: Set<String>, timeout: Duration): List<AgentAddress> {
         val found = Channel<NsdServiceInfo>(capacity = 32, onBufferOverflow = BufferOverflow.DROP_LATEST)
@@ -55,7 +58,8 @@ class NsdLocator(context: Context) : Locator {
                 if (left <= Duration.ZERO) break
                 val info = withTimeoutOrNull(left) { found.receiveCatching().getOrNull() } ?: break
                 if (info.serviceName in resolved) continue
-                val full = withTimeoutOrNull(deadline - start.elapsedNow()) { resolve(info) } ?: continue
+                // Waiting for the app-wide slot counts too: an old resolve may still hold it (API < 34)
+                val full = withTimeoutOrNull(RESOLVE_TIMEOUT * 2) { resolve(info) } ?: continue
                 resolved += info.serviceName
                 if (DiscoveryTxt.tags(full.attributes).none { it in tags }) continue
                 val host = hostOf(full) ?: continue
@@ -68,23 +72,35 @@ class NsdLocator(context: Context) : Locator {
         return result.toList()
     }
 
-    /** One resolve at a time for the whole app; a cancelled one is stopped where Android allows it (API 34+). */
+    /**
+     * One resolve at a time for the whole app. The caller waits at most [RESOLVE_TIMEOUT] (a fake or stale
+     * instance must not eat the whole search), but the app-wide slot is held until Android reports the
+     * resolve finished or was stopped (API 34+ can stop it; older versions can't), capped at [RESOLVE_CAP].
+     */
     @Suppress("DEPRECATION") // resolveService: the replacement (registerServiceInfoCallback) needs API 34
-    private suspend fun resolve(info: NsdServiceInfo): NsdServiceInfo? = resolving.withLock {
-        suspendCancellableCoroutine { cont ->
-            val listener = object : NsdManager.ResolveListener {
-                override fun onServiceResolved(resolved: NsdServiceInfo) { if (cont.isActive) cont.resume(resolved) }
-                override fun onResolveFailed(failed: NsdServiceInfo, errorCode: Int) { if (cont.isActive) cont.resume(null) }
-            }
-            cont.invokeOnCancellation {
-                if (Build.VERSION.SDK_INT >= 34) {
-                    try { nsd.stopServiceResolution(listener) } catch (e: RuntimeException) { /* already done */ }
-                }
-            }
-            try {
-                nsd.resolveService(info, listener)
-            } catch (e: RuntimeException) {
-                if (cont.isActive) cont.resume(null)
+    private suspend fun resolve(info: NsdServiceInfo): NsdServiceInfo? {
+        resolving.lock()
+        val done = CompletableDeferred<NsdServiceInfo?>()
+        val listener = object : NsdManager.ResolveListener {
+            override fun onServiceResolved(resolved: NsdServiceInfo) { done.complete(resolved) }
+            override fun onResolveFailed(failed: NsdServiceInfo, errorCode: Int) { done.complete(null) }
+            override fun onResolutionStopped(serviceInfo: NsdServiceInfo) { done.complete(null) }
+        }
+        try {
+            nsd.resolveService(info, listener)
+        } catch (e: RuntimeException) {
+            done.complete(null)
+        }
+        releaser.launch {
+            withTimeoutOrNull(RESOLVE_CAP) { done.await() }
+            done.complete(null)
+            resolving.unlock()
+        }
+        try {
+            return withTimeoutOrNull(RESOLVE_TIMEOUT) { done.await() }
+        } finally {
+            if (!done.isCompleted && Build.VERSION.SDK_INT >= 34) {
+                try { nsd.stopServiceResolution(listener) } catch (e: RuntimeException) { /* finished meanwhile */ }
             }
         }
     }
@@ -97,5 +113,7 @@ class NsdLocator(context: Context) : Locator {
 
     private companion object {
         val GRACE = 1.seconds
+        val RESOLVE_TIMEOUT = 2.seconds
+        val RESOLVE_CAP = 10.seconds
     }
 }

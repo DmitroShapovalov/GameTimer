@@ -11,6 +11,8 @@ internal static class MdnsMessage
     public const ushort CacheFlush = 0x8000;   // on records: "this replaces what you have" (unique records)
     public const ushort UnicastResponse = 0x8000; // on questions: QU bit
 
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     public readonly record struct Question(string Name, ushort Type, bool WantsUnicast);
 
     public readonly record struct Record(string Name, ushort Type, bool Unique, uint Ttl, byte[] Data);
@@ -41,9 +43,9 @@ internal static class MdnsMessage
             }
             return (id, questions);
         }
-        catch (FormatException)
+        catch (Exception e) when (e is FormatException or ArgumentException or IndexOutOfRangeException)
         {
-            return null;
+            return null; // whatever a packet contains, a bad one is just ignored
         }
     }
 
@@ -70,7 +72,8 @@ internal static class MdnsMessage
             }
             if ((len & 0xC0) != 0 || pos + 1 + len > msg.Length) throw new FormatException("bad label");
             if (sb.Length > 0) sb.Append('.');
-            sb.Append(Encoding.UTF8.GetString(msg.Slice(pos + 1, len)));
+            try { sb.Append(StrictUtf8.GetString(msg.Slice(pos + 1, len))); }
+            catch (DecoderFallbackException) { throw new FormatException("label is not UTF-8"); }
             if (sb.Length > 255) throw new FormatException("name too long");
             pos += 1 + len;
         }

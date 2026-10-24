@@ -117,6 +117,7 @@ public class AgentLink(
 ) {
     @Volatile private var agent: PairedAgent = agent
     private var lastLocateNanos: Long? = null
+    private var locateInterval: Duration = LOCATE_INTERVAL
 
     /** The agent with its current address (changes when discovery found it elsewhere). */
     public val current: PairedAgent get() = agent
@@ -200,7 +201,8 @@ public class AgentLink(
         val loc = locator ?: return emptyList()
         val now = elapsedRealtimeNanos()
         val last = lastLocateNanos
-        if (last != null && (now - last).nanoseconds < LOCATE_INTERVAL) return emptyList()
+        if (last != null && (now - last).nanoseconds < locateInterval) return emptyList()
+        if (last != null) locateInterval = (locateInterval * 2).coerceAtMost(MAX_LOCATE_INTERVAL) // PC off: search less
         lastLocateNanos = now
         val ak = Base64Url.tryDecode(agent.ak) ?: return emptyList()
         val tags = try { DiscoveryTag.candidates(ak, currentEpochMillis()) } finally { ak.fill(0) }
@@ -211,13 +213,28 @@ public class AgentLink(
         } catch (e: Exception) {
             emptyList()
         }
-        // Same rule as the pairing QR: only LAN addresses (the agent accepts LAN clients only, §3)
-        return found.filter { PairingLink.isLanAddress(it.host) && it.port in 1..65535 }
+        // Same rule as the pairing QR: only LAN addresses (the agent accepts LAN clients only, §3) — and
+        // never this phone itself: a fake announcement must not make us probe our own local ports
+        return found.filter {
+            PairingLink.isLanAddress(it.host) && it.port in 1..65535 && (allowLoopbackCandidates || !isLoopback(it.host))
+        }
+    }
+
+    /** Tests only: the interop tests run the agent on 127.0.0.1. */
+    internal var allowLoopbackCandidates: Boolean = false
+
+    private fun isLoopback(host: String): Boolean {
+        val h = host.removePrefix("[").removeSuffix("]")
+        return h.startsWith("127.") || h == "::1"
     }
 
     public companion object {
-        /** How often a failing link may search the LAN (each search browses for [LOCATE_TIMEOUT]). */
+        /**
+         * How often a failing link may search the LAN at first (each search browses for [LOCATE_TIMEOUT]);
+         * doubles after every search up to [MAX_LOCATE_INTERVAL], back to this once a session opens.
+         */
         public val LOCATE_INTERVAL: Duration = 20.seconds
+        public val MAX_LOCATE_INTERVAL: Duration = 5.minutes
         public val LOCATE_TIMEOUT: Duration = 5.seconds
         private const val MAX_CANDIDATES = 8
     }
@@ -239,13 +256,18 @@ public class AgentLink(
         val myJob = kotlin.coroutines.coroutineContext[Job]
         var backoff = 1.seconds
         val candidates = ArrayDeque<AgentAddress>()
+        var reason = OfflineReason.Unreachable // of the stored address: a failed candidate doesn't change it
         while (scope.isActive) {
-            _status.value = LinkStatus.Connecting
+            val trying = candidates.removeFirstOrNull()
+            if (trying == null) _status.value = LinkStatus.Connecting
             var bye: String? = null
             var uptime = Duration.ZERO
-            val target = candidates.removeFirstOrNull()?.let { agent.copy(host = it.host, port = it.port) } ?: agent
+            var opened = false
+            val target = trying?.let { agent.copy(host = it.host, port = it.port) } ?: agent
             try {
                 val s = HubSession.open(connector, target, hubKey, appName, parent = myJob)
+                opened = true
+                locateInterval = LOCATE_INTERVAL
                 val openedAt = elapsedRealtimeNanos()
                 if (target !== agent) {
                     candidates.clear()
@@ -278,16 +300,17 @@ public class AgentLink(
             }
 
             if (bye == "revoked") { _status.value = LinkStatus.Revoked; return }
-            _status.value = LinkStatus.Offline(
-                when (bye) {
+            if (trying == null || opened) {
+                reason = when (bye) {
                     "not_accepted" -> OfflineReason.Refused
                     "wrong_device" -> OfflineReason.WrongDevice
                     else -> OfflineReason.Unreachable
-                },
-            )
-            // Not there (or someone else is at that address now: another PC refuses our msg 1, §4.1):
-            // maybe the PC got a new address. A short-lived session is no reason to search.
-            if (uptime < 30.seconds) {
+                }
+            }
+            _status.value = LinkStatus.Offline(reason)
+            if (!opened) {
+                // Nobody (or someone else: another PC refuses our msg 1, §4.1) is at the address: maybe the PC
+                // got a new one. A session that opened and then ended means the PC is there: no search.
                 if (candidates.isNotEmpty()) continue // the next address found by the last search
                 candidates += locate().filter { it.host != agent.host || it.port != agent.port }.distinct().take(MAX_CANDIDATES)
                 if (candidates.isNotEmpty()) continue // try them right away

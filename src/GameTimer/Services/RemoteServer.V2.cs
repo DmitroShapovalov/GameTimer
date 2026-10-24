@@ -36,9 +36,15 @@ public sealed partial class RemoteServer
 
     // ---------------- discovery (§9) ----------------
 
-    // New random names on every app start: nothing on the network stays stable across runs.
-    private readonly string _mdnsInstance = MdnsService.RandomLabel();
-    private readonly string _mdnsHost = MdnsService.RandomLabel();
+    // Random names, new every UTC day (with the tags) and every app start: nothing on the network stays
+    // stable longer than the tags do. A new name sends a goodbye for the old one.
+    private (DateOnly Day, string Instance, string Host) _mdnsNames = (default, "", "");
+
+    private (string Instance, string Host) MdnsNamesFor(DateOnly day)
+    {
+        if (_mdnsNames.Day != day) _mdnsNames = (day, MdnsService.RandomLabel(), MdnsService.RandomLabel());
+        return (_mdnsNames.Instance, _mdnsNames.Host);
+    }
     private MdnsAdvertiser? _mdns;
     private volatile Tuple<IPAddress, IPAddress>? _mdnsSubnetBox; // (address, mask), written by the service callback
 
@@ -60,9 +66,11 @@ public sealed partial class RemoteServer
         {
             var lan = NetworkFilter.GetLanInterface();
             _mdnsSubnet = lan;
-            var tags = Agent.DiscoveryTags(Agent.UtcToday);
+            var today = Agent.UtcToday;
+            var tags = Agent.DiscoveryTags(today);
             if (lan == null || tags.Count == 0) return null;
-            return new MdnsService(_mdnsInstance, _mdnsHost, port, new[] { lan.Value.Address }, MdnsService.TxtFor(tags));
+            var (instance, host) = MdnsNamesFor(today);
+            return new MdnsService(instance, host, port, new[] { lan.Value.Address }, MdnsService.TxtFor(tags));
         }, ip => NetworkFilter.IsInSubnet(ip, _mdnsSubnet), DiagnosticLog.Write); // only the LAN it announces on
         _mdns = mdns;
         Agent.PeersChanged += mdns.Refresh;

@@ -366,15 +366,16 @@ The agent announces `_gametimer._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<
 `tag = base32( BLAKE2b(outlen = 32, key = ak, input = "GameTimer discovery v2" ‖ UTC date "YYYY-MM-DD")[0..8) )`
 
 - The service instance name and the advertised host name are **random** (`gt-<8 random base32>`),
-  never the Windows computer name.
+  never the Windows computer name, and new every UTC day (with the tags) and every agent start.
 - **TXT layout.** `v=2`, then the tags in groups of at most 17 per TXT string (a string holds 255
   bytes): `tags=…`, `tags2=…`, `tags3=…` (a DNS-SD key may appear only once). With no paired hub the
   agent announces nothing at all.
-- The app tries the last known host first; if that fails it browses mDNS and looks for its own tag
-  for yesterday, today or tomorrow (around midnight, and a PC clock that is somewhat off).
+- The app tries the last known host first; only if no session could be opened there it browses mDNS
+  for its own tag for yesterday, today or tomorrow (around midnight, and a PC clock that is somewhat
+  off) — at first every 20 s, doubling up to every 5 minutes while the PC stays away.
 - Found addresses are only **candidates**: the app tries every match (tags are public, anyone can copy
   one) and adopts and stores an address only after the IK handshake with the pinned key succeeded
-  there. Only LAN addresses are tried (as for the pairing QR). A forged announcement can't
+  there. Only LAN addresses are tried (as for the pairing QR), never the phone's own loopback. A forged announcement can't
   impersonate the PC; it costs a failed attempt. A host that relays TCP to the real PC does get
   stored, but sees only Noise ciphertext — no more than anyone already in the LAN path; accepted.
 - Records (RFC 6762 / 6763): PTR `_gametimer._tcp.local` → instance; SRV (port, host); TXT; A (the

@@ -126,6 +126,18 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void Invalid_utf8_labels_never_throw_even_in_legacy_replies()
+    {
+        // PTR for our type + a question whose 63-byte label is not UTF-8 (U+FFFD would make it 189 bytes)
+        var w = new List<byte> { 0, 9, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0 };
+        w.AddRange(Name("_gametimer._tcp.local")); w.AddRange(new byte[] { 0, 12, 0, 1 });
+        w.Add(63); w.AddRange(Enumerable.Repeat((byte)0xFF, 63)); w.Add(0); w.AddRange(new byte[] { 0, 12, 0, 1 });
+        var packet = w.ToArray();
+        Assert.Null(MdnsResponder.Respond(Service, packet, legacyUnicast: true)); // the whole query is malformed
+        Assert.Null(MdnsResponder.Respond(Service, packet, legacyUnicast: false));
+    }
+
+    [Fact]
     public void Pointer_chains_longer_than_16_are_refused()
     {
         // Question k (k = 1..n) is "a" + a pointer to question k-1; question 0 is "_gametimer._tcp.local".
