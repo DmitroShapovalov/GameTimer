@@ -7,6 +7,8 @@ import com.gametimer.protocol.noise.KeyPair
 import com.gametimer.protocol.noise.NoiseException
 import com.gametimer.protocol.noise.NoisePattern
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -57,19 +59,28 @@ public suspend fun pair(
         })
         onCode(PairingCode.derive(hs.handshakeHash()))
 
-        // The owner has 60 s on the PC; allow for the network on top
-        val reply = withTimeoutOrNull(75.seconds) { socket.receiveJson(recv) } ?: return PairOutcome.Denied
+        // The owner has 60 s on the PC (then the PC says bye denied); allow for the network on top
+        val reply = withTimeoutOrNull(75.seconds) { socket.receiveJson(recv) }
+            ?: return PairOutcome.Failed("the connection to the PC was lost")
         return when (reply.type()) {
             "pair.result" -> paired(reply, link)
-            "bye" -> if (reply.string("code") == "code_used") PairOutcome.CodeUsed else PairOutcome.Denied
+            "bye" -> when (val code = reply.string("code")) {
+                "code_used" -> PairOutcome.CodeUsed
+                "denied" -> PairOutcome.Denied
+                else -> PairOutcome.Failed("the PC ended the pairing ($code)")
+            }
             else -> PairOutcome.Failed("unexpected ${reply.type()}")
         }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
     } catch (e: HubProtocolException) {
         return PairOutcome.Failed(e.message ?: "protocol error")
     } catch (e: NoiseException) {
         return PairOutcome.Failed("decryption failed")
+    } catch (e: Exception) {
+        return PairOutcome.Failed("network error: ${e.message}") // Wi-Fi dropped, connection reset
     } finally {
-        socket.close()
+        withContext(NonCancellable) { socket.close() }
     }
 }
 

@@ -6,31 +6,44 @@ import com.gametimer.protocol.noise.HandshakeState
 import com.gametimer.protocol.noise.KeyPair
 import com.gametimer.protocol.noise.NoiseException
 import com.gametimer.protocol.noise.NoisePattern
+import kotlin.concurrent.Volatile
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-/** Why a session ended: the agent's `bye` code (§3), or null for a dropped connection. */
+/** Why a session ended: the agent's `bye` code (§3), `not_accepted` (closed before msg 2), or null (dropped). */
 public class SessionClosedException(public val byeCode: String?) : Exception("session closed" + (byeCode?.let { ": $it" } ?: ""))
+
+/** No reply within the time the caller allowed; the session has been closed (a resend may follow). */
+public class RequestTimeoutException : Exception("no reply in time")
 
 /**
  * One `/v2` session (§4–§7): IK handshake against the pinned key, `ready`, `hello`, then requests and
- * events. Encrypted `ping` every 30 s keeps it alive (§3). Use [open]; when it ends, [closed] completes.
+ * events. Encrypted `ping` every 30 s; 90 s without anything from the agent ends it (§3).
+ * Ends with its parent scope too. Use [open]; when it ends, [closed] completes.
  */
 public class HubSession private constructor(
     private val socket: FrameSocket,
@@ -38,56 +51,69 @@ public class HubSession private constructor(
     private val recv: CipherState,
     /** The agent's `hello` (§6): agent info, your id and role, capabilities, ak, state. */
     public val hello: JsonObject,
+    parent: Job?,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob(parent) + Dispatchers.Default)
     private val sendLock = Mutex()
+    private val pending = HashMap<Long, CompletableDeferred<JsonObject>>() // guarded by sendLock / pendingLock
     private val pendingLock = Mutex()
-    private val pending = HashMap<Long, CompletableDeferred<JsonObject>>()
+    private val outstanding = Semaphore(MAX_OUTSTANDING)
     private var nextId = 0L
-    private val _events = MutableSharedFlow<JsonObject>(extraBufferCapacity = 256)
+    private val _events = Channel<JsonObject>(Channel.UNLIMITED)
+    private val _state = MutableStateFlow<AgentState?>((hello["state"] as? JsonObject)?.let { AgentState(it, elapsedRealtimeNanos()) })
+    @Volatile private var lastReceived = elapsedRealtimeNanos()
+    @Volatile private var byeCode: String? = null
 
-    /** Agent events (`ev.*`), in order. */
-    public val events: SharedFlow<JsonObject> = _events.asSharedFlow()
+    /** Agent events (`ev.*`) in arrival order, for one consumer. */
+    public val events: ReceiveChannel<JsonObject> get() = _events
 
-    /** Completes when the session ends, with the bye code (null = connection dropped). */
+    /**
+     * The latest §7.1 state, updated in the order messages arrive (hello, results carrying a state,
+     * ev.state, ev.tick), so an older state can never overwrite a newer one.
+     */
+    public val state: StateFlow<AgentState?> = _state.asStateFlow()
+
+    /** Completes when the session ends, with the bye code (null = connection dropped / timed out). */
     public val closed: CompletableDeferred<String?> = CompletableDeferred()
-    private var byeCode: String? = null
 
     private fun start() {
+        // The parent ended (e.g. the app closed the link): close the socket too, outside the dead scope
+        scope.coroutineContext[Job]!!.invokeOnCompletion { if (!closed.isCompleted) CoroutineScope(Dispatchers.Default).launch { end(null) } }
         scope.launch { readLoop() }
         scope.launch {
             while (isActive) {
-                delay(30.seconds)
+                delay(PING_INTERVAL)
+                if (elapsedRealtimeNanos() - lastReceived > IDLE_LIMIT.inWholeNanoseconds) { end(null); return@launch } // half-open TCP
                 try { sendLock.withLock { socket.sendJson(send, buildJsonObject { put("t", "ping") }) } } catch (e: Exception) { end(null) }
             }
         }
     }
 
     /**
-     * Sends a request (§5) and waits for its `result` / `error`. [fields] are added to the envelope;
-     * pass [rid] for state-changing requests (the same rid when resending after a reconnect).
-     * Returns the reply object. Throws [SessionClosedException] if the session ends first.
+     * Sends a request (§5) and waits for its `result` / `error`, at most [timeout]. Pass [rid] for
+     * state-changing requests (the same rid when resending). Throws [SessionClosedException] if the
+     * session ends first, [RequestTimeoutException] (after closing the session) on timeout.
      */
-    public suspend fun request(type: String, fields: JsonObject? = null, rid: String? = null): JsonObject {
-        val reply = CompletableDeferred<JsonObject>()
-        val id = pendingLock.withLock {
-            if (closed.isCompleted) throw SessionClosedException(byeCode)
-            val id = ++nextId
-            pending[id] = reply
-            id
+    public suspend fun request(type: String, fields: JsonObject? = null, rid: String? = null, timeout: Duration = 30.seconds): JsonObject =
+        outstanding.withPermit {
+            val reply = CompletableDeferred<JsonObject>()
+            // id, registration and send in one critical section: ids reach the agent strictly increasing (§5)
+            sendLock.withLock {
+                if (closed.isCompleted) throw SessionClosedException(byeCode)
+                val id = ++nextId
+                pendingLock.withLock { pending[id] = reply }
+                val message = buildJsonObject {
+                    put("t", type); put("id", id)
+                    if (rid != null) put("rid", rid)
+                    fields?.forEach { (k, v) -> if (k != "t" && k != "id" && k != "rid") put(k, v) }
+                }
+                try { socket.sendJson(send, message) } catch (e: Exception) { end(null) } // end() never takes sendLock
+            }
+            withTimeoutOrNull(timeout) { reply.await() } ?: run {
+                end(null)
+                throw RequestTimeoutException()
+            }
         }
-        val message = buildJsonObject {
-            put("t", type); put("id", id)
-            if (rid != null) put("rid", rid)
-            fields?.forEach { (k, v) -> if (k != "t" && k != "id" && k != "rid") put(k, v) }
-        }
-        try {
-            sendLock.withLock { socket.sendJson(send, message) }
-        } catch (e: Exception) {
-            end(null)
-        }
-        return reply.await()
-    }
 
     public suspend fun close() {
         end(null)
@@ -97,15 +123,20 @@ public class HubSession private constructor(
         try {
             while (true) {
                 val frame = socket.receive() ?: break
+                lastReceived = elapsedRealtimeNanos()
                 val message = decodeJson(recv.decrypt(frame))
                 when (val t = message.type()) {
                     "result", "error" -> {
+                        (message["state"] as? JsonObject)?.let { _state.value = AgentState(it, lastReceived) }
                         val re = message.long("re") ?: continue
                         pendingLock.withLock { pending.remove(re) }?.complete(message)
                     }
                     "bye" -> { end(message.string("code")); return }
                     "pong" -> Unit
-                    else -> if (t != null && t.startsWith("ev.")) _events.emit(message)
+                    else -> if (t != null && t.startsWith("ev.")) {
+                        if (t == "ev.state" || t == "ev.tick") (message["state"] as? JsonObject)?.let { _state.value = AgentState(it, lastReceived) }
+                        _events.trySend(message)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -114,27 +145,33 @@ public class HubSession private constructor(
         end(null)
     }
 
-    private suspend fun end(code: String?) {
+    private suspend fun end(code: String?) = withContext(NonCancellable) {
         pendingLock.withLock { if (!closed.isCompleted) byeCode = code }
-        if (!closed.complete(code)) return
+        if (!closed.complete(code)) return@withContext
         val waiting = pendingLock.withLock { pending.values.toList().also { pending.clear() } }
         waiting.forEach { it.completeExceptionally(SessionClosedException(code)) }
+        _events.close()
         socket.close()
         scope.cancel()
     }
 
     public companion object {
+        internal val PING_INTERVAL = 30.seconds
+        internal val IDLE_LIMIT = 90.seconds
+        internal const val MAX_OUTSTANDING = 16
+
         /**
-         * Connects to [agent] at [host]:[port] (default: the last known address), runs the handshake and
-         * `ready`, and returns the session once `hello` arrived. Throws [SessionClosedException] if the
-         * agent refused (not paired / revoked: it closes without msg 2) and [HubProtocolException] if it
-         * answered with the wrong key or id.
+         * Connects to [agent] (default: its last known address), runs the handshake and `ready`, and returns
+         * the session once `hello` arrived. The session ends when [parent] does. Throws
+         * [SessionClosedException] if the agent refused (not paired / revoked: closed without msg 2 →
+         * `not_accepted`), [HubProtocolException] for a wrong key or id, or the connector's I/O exception.
          */
         public suspend fun open(
             connector: Connector,
             agent: PairedAgent,
             hubKey: KeyPair,
             appName: String,
+            parent: Job? = null,
             host: String = agent.host,
             port: Int = agent.port,
         ): HubSession {
@@ -159,9 +196,9 @@ public class HubSession private constructor(
                 // §4.4: the hub checks the agent id against the pinned key
                 val id = (hello["agent"] as? JsonObject)?.string("id")
                 if (id != Ids.agentId(agentKey)) throw HubProtocolException("hello.agent.id doesn't match the pinned key")
-                return HubSession(socket, send, recv, hello).also { it.start() }
-            } catch (e: Exception) {
-                socket.close()
+                return HubSession(socket, send, recv, hello, parent).also { it.start() }
+            } catch (e: Throwable) {
+                withContext(NonCancellable) { socket.close() }
                 throw e
             }
         }

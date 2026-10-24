@@ -1,13 +1,16 @@
 package com.gametimer.protocol.hub
 
 import com.gametimer.protocol.noise.KeyPair
+import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,10 +18,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -40,10 +43,10 @@ public sealed interface LinkStatus {
 }
 
 /**
- * The agent's §7.1 state with the moment it arrived. The countdown runs on this device's monotonic
- * clock from [receivedAt] (§7.1: the PC's clock may be wrong), never on `targetTime`.
+ * The agent's §7.1 state with the moment it arrived on this device's boot clock. The countdown runs
+ * from [receivedAtNanos] (§7.1: the PC's clock may be wrong), never from `targetTime`.
  */
-public class AgentState(public val json: JsonObject, public val receivedAt: TimeMark) {
+public class AgentState(public val json: JsonObject, public val receivedAtNanos: Long) {
     public val timer: JsonObject? get() = json["timer"] as? JsonObject
     public val isRunning: Boolean get() = timer?.string("state") == "running"
 
@@ -51,7 +54,8 @@ public class AgentState(public val json: JsonObject, public val receivedAt: Time
     public fun remainingSecondsNow(): Int {
         if (!isRunning) return 0
         val atReceive = (timer?.get("remainingSeconds") as? JsonPrimitive)?.intOrNull ?: return 0
-        return (atReceive - receivedAt.elapsedNow().inWholeSeconds.toInt()).coerceAtLeast(0)
+        val elapsed = (elapsedRealtimeNanos() - receivedAtNanos).nanoseconds.inWholeSeconds.toInt()
+        return (atReceive - elapsed).coerceAtLeast(0)
     }
 }
 
@@ -64,11 +68,18 @@ public sealed interface RequestOutcome {
 
     /** No answer within the resend window (§5: the hub stops after 5 minutes and asks the user). */
     public data object GaveUp : RequestOutcome
+
+    /** This phone was revoked: nothing will be delivered. */
+    public data object Revoked : RequestOutcome
+
+    /** The link was stopped while the request waited. */
+    public data object Stopped : RequestOutcome
 }
 
 /**
- * Keeps one agent connected: reconnects with back-off, tracks the latest state, and resends unanswered
- * state-changing requests with the same `rid` after a reconnect (§5, §12).
+ * Keeps one agent connected: reconnects with back-off, mirrors the latest state, and resends unanswered
+ * state-changing requests with the same `rid` after a reconnect (§5, §12). Runs in [scope]; cancelling
+ * it, or [stop], closes the session.
  */
 public class AgentLink(
     private val agent: PairedAgent,
@@ -80,15 +91,18 @@ public class AgentLink(
     private val _status = MutableStateFlow<LinkStatus>(LinkStatus.Stopped)
     private val _state = MutableStateFlow<AgentState?>(null)
     private val _events = MutableSharedFlow<JsonObject>(extraBufferCapacity = 256)
-    private var job: Job? = null
-    private var session: HubSession? = null
+    @Volatile private var job: Job? = null
+    @Volatile private var session: HubSession? = null
 
     public val status: StateFlow<LinkStatus> = _status.asStateFlow()
     public val state: StateFlow<AgentState?> = _state.asStateFlow()
+
+    /** Agent events (ev.*) for notices; state changes are already reflected in [state]. */
     public val events: SharedFlow<JsonObject> = _events.asSharedFlow()
 
     public fun start() {
         if (job?.isActive == true) return
+        _status.value = LinkStatus.Connecting
         job = scope.launch { runLoop() }
     }
 
@@ -101,74 +115,95 @@ public class AgentLink(
     }
 
     /**
-     * Sends a request. State-changing requests ([changesState]) get one rid and are resent with it
-     * after reconnects until a reply arrives or [resendWindow] (5 min, §5) is over.
+     * Sends a request. State-changing requests ([changesState]) get one rid and are resent with it after
+     * reconnects until a reply arrives or [resendWindow] (5 min, §5) is over; `internal` errors are
+     * retried the same way (§7.2). Read requests are sent once.
      */
     public suspend fun send(type: String, fields: JsonObject? = null, changesState: Boolean = true,
                             resendWindow: Duration = 5.minutes): RequestOutcome {
         val rid = if (changesState) newRid() else null
-        val started = TimeSource.Monotonic.markNow()
-        while (started.elapsedNow() < resendWindow) {
-            val online = withTimeoutOrNull(resendWindow - started.elapsedNow()) {
-                status.filterIsInstance<LinkStatus.Online>().first()
+        val started = elapsedRealtimeNanos()
+        fun left() = resendWindow - (elapsedRealtimeNanos() - started).nanoseconds
+        while (left() > Duration.ZERO) {
+            val ready = withTimeoutOrNull(left()) {
+                status.first { it is LinkStatus.Online || it is LinkStatus.Revoked || it is LinkStatus.Stopped }
             } ?: break
-            val current = session ?: continue
-            val reply = try { current.request(type, fields, rid) } catch (e: SessionClosedException) {
+            when (ready) {
+                LinkStatus.Revoked -> return RequestOutcome.Revoked
+                LinkStatus.Stopped -> return RequestOutcome.Stopped
+                else -> Unit
+            }
+            val current = session
+            if (current == null || current.closed.isCompleted) {
+                waitForChange(ready, left()) // the session just ended; the status will move on
+                continue
+            }
+            val reply = try {
+                current.request(type, fields, rid, timeout = minOf(left(), 30.seconds))
+            } catch (e: SessionClosedException) {
                 if (!changesState) return RequestOutcome.GaveUp
-                continue // reconnect, then resend with the same rid
+                waitForChange(ready, left()); continue // reconnect, then resend with the same rid
+            } catch (e: RequestTimeoutException) {
+                if (!changesState) return RequestOutcome.GaveUp
+                waitForChange(ready, left()); continue
             }
-            check(online.hello.isNotEmpty())
-            return if (reply.type() == "error") {
-                RequestOutcome.Refused(reply.string("code") ?: "unknown")
-            } else {
-                (reply["state"] as? JsonObject)?.let { _state.value = AgentState(it, TimeSource.Monotonic.markNow()) }
-                RequestOutcome.Ok(reply)
+            if (reply.type() == "error") {
+                val code = reply.string("code") ?: "unknown"
+                if (code == "internal" && changesState) { delay(1.seconds); continue }
+                return RequestOutcome.Refused(code)
             }
+            // The session updated its state before completing the reply; let [state] catch up, so a caller
+            // reading it right after send() sees the effect of its own request
+            val latest = current.state.value
+            if (latest != null) withTimeoutOrNull(1.seconds) { state.first { it === latest || it?.receivedAtNanos ?: 0 > latest.receivedAtNanos } }
+            return RequestOutcome.Ok(reply)
         }
         return RequestOutcome.GaveUp
+    }
+
+    private suspend fun waitForChange(from: LinkStatus, timeout: Duration) {
+        if (timeout > Duration.ZERO) withTimeoutOrNull(timeout) { status.first { it !== from } }
     }
 
     private suspend fun runLoop() {
         var backoff = 1.seconds
         while (scope.isActive) {
             _status.value = LinkStatus.Connecting
-            val s = try {
-                HubSession.open(connector, agent, hubKey, appName)
-            } catch (e: SessionClosedException) {
-                if (e.byeCode == "revoked") { _status.value = LinkStatus.Revoked; return }
-                _status.value = LinkStatus.Offline(refused = e.byeCode == "not_accepted")
-                null
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            var bye: String? = null
+            var uptime = Duration.ZERO
+            try {
+                val s = HubSession.open(connector, agent, hubKey, appName, parent = job)
+                val openedAt = elapsedRealtimeNanos()
+                session = s
+                try {
+                    coroutineScope {
+                        // State and events follow the session's own ordered stream
+                        launch { s.state.collect { st -> if (st != null) _state.value = st } }
+                        launch { for (ev in s.events) _events.emit(ev) }
+                        _status.value = LinkStatus.Online(s.hello)
+                        bye = s.closed.await()
+                        coroutineContext[Job]!!.cancelChildren()
+                    }
+                } finally {
+                    uptime = (elapsedRealtimeNanos() - openedAt).nanoseconds
+                    session = null
+                    withContext(NonCancellable) { s.close() }
+                }
+            } catch (e: CancellationException) {
                 throw e
+            } catch (e: SessionClosedException) {
+                bye = e.byeCode ?: "dropped"
             } catch (e: Exception) {
-                _status.value = LinkStatus.Offline(refused = false)
-                null
+                bye = "unreachable"
             }
 
-            if (s != null) {
-                backoff = 1.seconds
-                session = s
-                (s.hello["state"] as? JsonObject)?.let { _state.value = AgentState(it, TimeSource.Monotonic.markNow()) }
-                _status.value = LinkStatus.Online(s.hello)
-                val collector = scope.launch {
-                    s.events.collect { ev ->
-                        if (ev.type() == "ev.state" || ev.type() == "ev.tick") {
-                            (ev["state"] as? JsonObject)?.let { _state.value = AgentState(it, TimeSource.Monotonic.markNow()) }
-                        }
-                        _events.emit(ev)
-                    }
-                }
-                val bye = s.closed.await()
-                collector.cancel()
-                session = null
-                when (bye) {
-                    "revoked" -> { _status.value = LinkStatus.Revoked; return }
-                    "expired", "busy", "shutdown" -> { _status.value = LinkStatus.Offline(refused = false); delay(1.seconds); continue }
-                    else -> _status.value = LinkStatus.Offline(refused = false)
-                }
-            }
+            if (bye == "revoked") { _status.value = LinkStatus.Revoked; return }
+            _status.value = LinkStatus.Offline(refused = bye == "not_accepted")
+            // Back-off grows unless the session had been up for a while (busy / protocol_error loops don't spin)
+            backoff = if (uptime >= 30.seconds) 1.seconds else (backoff * 2).coerceAtMost(30.seconds)
             delay(backoff)
-            backoff = (backoff * 2).coerceAtMost(30.seconds)
         }
     }
 }
+
+private fun Job.cancelChildren() = children.forEach { it.cancel() }

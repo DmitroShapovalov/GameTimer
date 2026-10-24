@@ -22,4 +22,7 @@ public data class PairedAgent(
     val role: String,
 ) {
     public fun agentKeyBytes(): ByteArray = Base64Url.tryDecode(agentKey) ?: error("bad agent key")
+
+    /** Never prints [ak] (it would end up in logs). */
+    override fun toString(): String = "PairedAgent(agentId=$agentId, name=$name, host=$host:$port, role=$role)"
 }

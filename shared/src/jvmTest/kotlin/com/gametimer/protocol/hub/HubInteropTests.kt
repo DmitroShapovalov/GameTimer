@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.concurrent.Volatile
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -178,5 +179,72 @@ class HubInteropTests {
 
         agent.send("revoke " + Ids.hubId(k2.publicKey))
         assertEquals(LinkStatus.Revoked, withTimeout(20.seconds) { b.status.first { it is LinkStatus.Revoked } })
+    }
+
+    /** Lets the first socket deliver [dropAfterSends] frames, then cuts it: the reply to the last one is lost. */
+    private class DroppingConnector(private val inner: Connector, private val dropAfterSends: Int) : Connector {
+        @Volatile var dropped = false
+        override suspend fun connect(host: String, port: Int, path: String): FrameSocket {
+            val socket = inner.connect(host, port, path)
+            if (dropped || path != "/v2") return socket
+            return object : FrameSocket {
+                var sends = 0
+                override suspend fun send(frame: ByteArray) {
+                    socket.send(frame)
+                    if (++sends == dropAfterSends && !dropped) { dropped = true; kotlinx.coroutines.delay(300); socket.close() }
+                }
+                override suspend fun receive(): ByteArray? = socket.receive()
+                override suspend fun close() = socket.close()
+            }
+        }
+    }
+
+    @Test
+    fun aLostReplyIsResentWithTheSameRidAndRunsOnce(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val paired = assertIs<PairOutcome.Paired>(outcome).agent
+        // msg 1, ready, then timer.start: the agent starts the timer, but the reply never arrives
+        val l = AgentLink(paired, key, DroppingConnector(connector, dropAfterSends = 3), "test", scope).also { it.start() }
+        l.awaitOnline()
+        // Executed twice it would answer already_running; with the same rid the stored reply comes back
+        assertIs<RequestOutcome.Ok>(withTimeout(60.seconds) { l.send("timer.start", minutes(20)) })
+        assertEquals(RequestOutcome.Refused("already_running"), l.send("timer.start", minutes(20)))
+    }
+
+    @Test
+    fun concurrentRequestsKeepIdsInOrder(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val l = link(key, assertIs<PairOutcome.Paired>(outcome).agent)
+        l.awaitOnline()
+        val replies = (1..40).map { async(Dispatchers.Default) { l.send("state.get", changesState = false) } }.map { it.await() }
+        assertTrue(replies.all { it is RequestOutcome.Ok }, replies.filterNot { it is RequestOutcome.Ok }.toString())
+        assertIs<LinkStatus.Online>(l.status.value)
+    }
+
+    @Test
+    fun aDifferentAgentKeyIsNeverAccepted(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val real = assertIs<PairOutcome.Paired>(outcome).agent
+        val forged = real.copy(agentKey = com.gametimer.protocol.encodings.Base64Url.encode(KeyPair.generate().publicKey))
+        val l = link(key, forged)
+        val status = withTimeout(20.seconds) { l.status.first { it is LinkStatus.Offline } }
+        assertEquals(LinkStatus.Offline(refused = true), status) // the real agent can't answer for another key
+    }
+
+    @Test
+    fun theCountdownRunsLocallyAndSendAfterRevokeReturnsAtOnce(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val l = link(key, assertIs<PairOutcome.Paired>(outcome).agent)
+        l.awaitOnline()
+        assertIs<RequestOutcome.Ok>(l.send("timer.start", minutes(5)))
+        val first = l.state.value!!.remainingSecondsNow()
+        kotlinx.coroutines.delay(2100)
+        assertTrue(l.state.value!!.remainingSecondsNow() <= first - 2)
+
+        agent.send("revoke " + Ids.hubId(key.publicKey))
+        withTimeout(20.seconds) { l.status.first { it is LinkStatus.Revoked } }
+        val t0 = System.nanoTime()
+        assertEquals(RequestOutcome.Revoked, l.send("timer.stop"))
+        assertTrue(System.nanoTime() - t0 < 1_000_000_000)
     }
 }
