@@ -111,7 +111,10 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            Models + AgentApi (typed §7.2 calls; writes send ifRev, conflicts return the current value)
 android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, applicationId com.gametimer.parent):
   HubStore.kt              hub key (AES-GCM wrapped by an Android Keystore key) + paired PCs, in noBackupFilesDir
-  MainViewModel.kt         AgentLink per PC (connected while the app is visible), pairing flow, commands
+  MainViewModel.kt         AgentLink per PC (connected while the app is visible), pairing flow, commands,
+                           app lock state, the "new parent app added" notice (peer list compared per PC)
+  ReAuth.kt                §12 re-auth with the phone's lock (androidx.biometric: strong biometric or PIN, weak on 9-10):
+                           app lock after 14 days, check before admin actions (roles, revoking another parent; 60 s grace)
   NsdLocator.kt            Locator on NsdManager: browse _sysmon._tcp, resolve one at a time, match TXT tags
   MainActivity.kt          Compose screens: PCs list, QR scan (or paste link), pairing code, PC screen with tabs
   PcTabs.kt                PC tabs (protocol §7.2 via shared AgentApi): Timer (for / until, presets, zone colours,
@@ -188,7 +191,7 @@ dotnet build tests/interop/TestAgent/TestAgent.csproj -c Release -o /tmp/agent
 ./gradlew :shared:jvmTest -PcsharpPeer=/tmp/peer/NoisePeer.dll -PcsharpAgent=/tmp/agent/TestAgent.dll   # without them the interop tests are skipped (CI fails instead)
 ```
 
-Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTimerSetup.exe` and attaches it to the GitHub Release. Released so far: v1.0.0, v1.0.1, v1.1.0, v1.2.0, v1.3.0, v1.4.0, v1.5.0, v1.6.0, v1.6.1. Bump `<Version>` in the csproj for local builds; CI takes the version from the tag.
+Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTimerSetup.exe` and the signed parent app `GameTimerParent-X.Y.Z.apk` (tags `vX.Y.Z` or `vX.Y.Z-rcN` only; versionName X.Y.Z, versionCode X·10⁶+Y·10⁴+Z·100+(N or 99)) and attaches both to the GitHub Release. The APK release key exists only in the GitHub environment `release` (deployment rule: tags `v*`) as secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` and the owner's backup (`D:\Projects\_claude\gametimer-release.*`, never in the repo); a tag without them fails. Changing the key means every phone reinstalls and pairs again. Released so far: v1.0.0, v1.0.1, v1.1.0, v1.2.0, v1.3.0, v1.4.0, v1.5.0, v1.6.0, v1.6.1. Bump `<Version>` in the csproj for local builds; CI takes the version from the tag.
 
 ## Agent environment notes (Cowork)
 

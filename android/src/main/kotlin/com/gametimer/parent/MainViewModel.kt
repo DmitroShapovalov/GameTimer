@@ -4,7 +4,10 @@ import android.app.Application
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.gametimer.protocol.hub.AgentApi
 import com.gametimer.protocol.hub.AgentLink
+import com.gametimer.protocol.hub.ApiResult
+import com.gametimer.protocol.hub.LinkStatus
 import com.gametimer.protocol.hub.KtorConnector
 import com.gametimer.protocol.hub.PairOutcome
 import com.gametimer.protocol.hub.PairedAgent
@@ -14,12 +17,16 @@ import com.gametimer.protocol.hub.pair
 import com.gametimer.protocol.noise.KeyPair
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Where the pairing flow is (§8.2). */
 sealed interface PairState {
@@ -98,6 +105,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         return AgentLink(agent, key, connector, appName, viewModelScope, locator, onMoved).also {
             links[agentId] = it
+            watchPeers(agent, it)
             if (foreground) it.start()
         }
     }
@@ -130,7 +138,81 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Links stay connected only while the app is visible (no background service in this step). */
     fun setForeground(value: Boolean) {
+        if (value) {
+            stopSkipped?.cancel()
+            stopSkipped = null
+            if (reauth.needsUnlock()) _locked.value = true // §12: not unlocked for 14 days
+        } else if (Build.VERSION.SDK_INT < 30 && reauth.inProgress) {
+            // Android 9-10 show the PIN as a screen of their own: the app "stops" meanwhile, but the
+            // links must not. If the app doesn't come back (Home pressed there), stop them after all.
+            stopSkipped?.cancel()
+            stopSkipped = viewModelScope.launch {
+                while (reauth.inProgress) delay(500)
+                delay(1000) // the app's own onStart follows the PIN screen
+                wantForeground.trySend(false)
+            }
+            return
+        }
         wantForeground.trySend(value)
+    }
+
+    private var stopSkipped: Job? = null // main thread only
+
+    /** Re-authentication (§12): the app lock after 14 days, and the check before admin actions. */
+    val reauth = ReAuth(app)
+
+    private val _locked = MutableStateFlow(false)
+    /** The app was not unlocked for too long: the UI shows only the unlock screen. */
+    val locked: StateFlow<Boolean> = _locked.asStateFlow()
+
+    fun unlocked() {
+        _locked.value = false
+    }
+
+    /** Another parent app was added on a PC (§12: a clear notice, it may be a child's phone). */
+    data class PeerAdded(val pcName: String, val phoneName: String, val iAmAdmin: Boolean)
+
+    // A queue: notices about several PCs are shown one after another, none is lost
+    private val _peerAdded = MutableStateFlow<List<PeerAdded>>(emptyList())
+    val peerAdded: StateFlow<List<PeerAdded>> = _peerAdded.asStateFlow()
+
+    fun peerAddedShown() {
+        _peerAdded.value = _peerAdded.value.drop(1)
+    }
+
+    private val peerJobs = HashMap<String, Job>() // main thread only
+    private val seenPeers = app.getSharedPreferences("peers_seen", android.content.Context.MODE_PRIVATE)
+
+    /**
+     * The parent apps of a PC are compared with the last list this phone saw, on every connect and every
+     * ev.peers: so a phone added while this app was closed is reported too. The first list of a PC is
+     * only remembered; this phone itself is never reported.
+     */
+    private fun watchPeers(agent: PairedAgent, link: AgentLink) {
+        peerJobs.remove(agent.agentId)?.cancel()
+        peerJobs[agent.agentId] = viewModelScope.launch {
+            val api = AgentApi(link)
+            val check = kotlinx.coroutines.sync.Mutex()
+            suspend fun compare() = check.withLock {
+                val list = (api.peers() as? ApiResult.Ok)?.value ?: return@withLock
+                val known = seenPeers.getStringSet(agent.agentId, null)
+                if (known != null) {
+                    val added = list.filter { !it.current && it.id !in known }.map { it.name }
+                    if (added.isNotEmpty()) {
+                        val iAmAdmin = list.firstOrNull { it.current }?.role == "admin"
+                        _peerAdded.value += PeerAdded(agent.name, added.joinToString(", "), iAmAdmin)
+                    }
+                }
+                seenPeers.edit().putStringSet(agent.agentId, list.map { it.id }.toSet()).apply()
+            }
+            launch { link.status.collect { if (it is LinkStatus.Online) compare() } }
+            link.events.collect { if (it.string("t") == "ev.peers") compare() }
+        }
+    }
+
+    private suspend fun forgetLink(agentId: String) {
+        peerJobs.remove(agentId)?.cancel()
+        links.remove(agentId)?.stop()
     }
 
     private suspend fun applyForeground(value: Boolean) {
@@ -150,7 +232,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _pair.value = when (outcome) {
                 is PairOutcome.Paired -> {
                     withContext(Dispatchers.IO) { store.save(outcome.agent) }
-                    links.remove(outcome.agent.agentId)?.stop() // re-paired: reconnect with the new ak
+                    forgetLink(outcome.agent.agentId) // re-paired: reconnect with the new ak
                     link(outcome.agent.agentId) // started if the app is visible
                     PairState.Done(outcome.agent.name)
                 }
@@ -168,7 +250,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { store.remove(agent.agentId) } // first: no screen recreates its link
             editors.remove(agent.agentId)
-            links.remove(agent.agentId)?.stop()
+            forgetLink(agent.agentId)
+            seenPeers.edit().remove(agent.agentId).apply()
         }
     }
 
@@ -194,3 +277,5 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _message.value = null
     }
 }
+
+private fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.content

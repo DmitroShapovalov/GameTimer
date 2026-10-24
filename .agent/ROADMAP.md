@@ -43,7 +43,7 @@ interop tests in lock-step.
 | A4 | **Android app skeleton** (Compose): QR-scan pairing, paired-device list, LAN connect + reconnect, live status screen; EN / RU / NL / UK | On the owner's phone: scan QR → see the live countdown | ✓ (PRs #23, #24; owner check on the phone pending) |
 | A5 | **Feature parity with the PWA**: start / stop / ±15, settings, schedule editor, history, revoke | Everything the PWA can do works from the app | ✓ (owner check on the phone pending) |
 | A6 | **Discovery**: mDNS / DNS-SD announce + browse, so a PC IP change needs no re-pairing | Change the PC's IP → the app reconnects by itself | in review ✎ (C# advertiser, Kotlin locator, Android NsdManager) |
-| A7 | **Acceptance + release**: Windows v1.7.0; parent app as an Android APK (and iOS via TestFlight when the Apple account exists) | Checklist passes on real devices; open items: §12 re-auth (biometrics) before admin actions in the app, release signing, Android 17 local-network permission when targetSdk moves to 37 | ☐ |
+| A7 | **Acceptance + release**: Windows v1.7.0; parent app as an Android APK (and iOS via TestFlight when the Apple account exists) | Checklist passes on real devices; open items: Android 17 local-network permission when targetSdk moves to 37 | in progress ✎ (§12 re-auth, "parent added" notice, signed release APK in release.yml) |
 
 Notes:
 - The Windows agent keeps the v1 API so the PWA and existing pairings keep working; v1 can be retired later.

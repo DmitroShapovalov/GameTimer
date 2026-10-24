@@ -3,7 +3,6 @@ package com.gametimer.parent
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -59,12 +58,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -80,7 +82,8 @@ import com.gametimer.protocol.hub.PairedAgent
 import com.gametimer.protocol.hub.PairingLink
 import kotlinx.coroutines.delay
 
-class MainActivity : ComponentActivity() {
+// A FragmentActivity: the system's fingerprint / PIN prompt (androidx.biometric) needs one
+class MainActivity : FragmentActivity() {
     private val vm: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,6 +117,8 @@ private fun App(vm: MainViewModel) {
     val agents by vm.agents.collectAsState()
     val pairState by vm.pair.collectAsState()
     val identity by vm.identity.collectAsState()
+    val locked by vm.locked.collectAsState()
+    val peerAdded by vm.peerAdded.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val message by vm.message.collectAsState()
     LaunchedEffect(message) {
@@ -132,7 +137,15 @@ private fun App(vm: MainViewModel) {
             Spacer(Modifier.height(16.dp))
             Button(onClick = { vm.retryIdentity() }) { Text(stringResource(R.string.retry)) }
         }
-        is Identity.Ready -> {
+        is Identity.Ready -> if (locked) {
+            LockedScreen(vm)
+        } else {
+            peerAdded.firstOrNull()?.let { n ->
+                AlertDialog(onDismissRequest = { vm.peerAddedShown() },
+                    title = { Text(stringResource(R.string.peer_added_title)) },
+                    text = { Text(stringResource(if (n.iAmAdmin) R.string.peer_added_text else R.string.peer_added_text_parent, n.phoneName, n.pcName)) },
+                    confirmButton = { TextButton(onClick = { vm.peerAddedShown() }) { Text(stringResource(R.string.ok)) } })
+            }
             var resetShown by rememberSaveable { mutableStateOf(false) }
             if (id.wasReset && !resetShown) {
                 AlertDialog(onDismissRequest = { resetShown = true }, text = { Text(stringResource(R.string.identity_reset)) },
@@ -379,4 +392,43 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
             dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
+}
+
+/** §12: the app wasn't unlocked for 14 days. Asks at once; the button asks again after a cancel. */
+@Composable
+private fun LockedScreen(vm: MainViewModel) {
+    val activity = LocalContext.current.findActivity()
+    val scope = rememberCoroutineScope()
+    val title = stringResource(R.string.unlock_title)
+    val subtitle = stringResource(R.string.unlock_subtitle)
+    val ask: () -> Unit = {
+        scope.launch { if (activity != null && vm.reauth.authenticate(activity, title, subtitle)) vm.unlocked() }
+    }
+    LaunchedEffect(Unit) { ask() }
+    Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(stringResource(R.string.locked_text), style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = ask) { Text(stringResource(R.string.unlock_button)) }
+    }
+}
+
+/**
+ * §12: before an admin action (roles, removing another parent) the phone's own lock is asked, unless it
+ * was just asked. Returns a function that runs the check; false = cancelled.
+ */
+@Composable
+fun rememberAdminCheck(vm: MainViewModel): suspend () -> Boolean {
+    val activity = LocalContext.current.findActivity()
+    val title = stringResource(R.string.admin_auth_title)
+    val subtitle = stringResource(R.string.admin_auth_subtitle)
+    return remember(activity, title, subtitle) {
+        { vm.reauth.recentlyAuthenticated() || (activity != null && vm.reauth.authenticate(activity, title, subtitle)) }
+    }
+}
+
+private tailrec fun android.content.Context.findActivity(): FragmentActivity? = when (this) {
+    is FragmentActivity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
