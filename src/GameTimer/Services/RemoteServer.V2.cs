@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using GameTimer.Models;
 using GameTimer.Protocol.Agent;
+using GameTimer.Protocol.Discovery;
 using GameTimer.Services.V2;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -31,6 +32,46 @@ public sealed partial class RemoteServer
         Agent = new AgentHost(store, _v2Backend, pairingUi);
         Agent.StoreError += ex => DiagnosticLog.Write("v2 store save failed: " + ex.Message);
     }
+
+    // ---------------- discovery (§9) ----------------
+
+    // New random names on every app start: nothing on the network stays stable across runs.
+    private readonly string _mdnsInstance = MdnsService.RandomLabel();
+    private readonly string _mdnsHost = MdnsService.RandomLabel();
+    private MdnsAdvertiser? _mdns;
+
+    /// <summary>
+    /// Announces <c>_gametimer._tcp</c> with today's tags while the server runs, so a parent app finds
+    /// the PC again after its address changed. Nothing is announced while no parent app is paired or
+    /// the PC has no LAN address.
+    /// </summary>
+    private void StartDiscovery(int port)
+    {
+        if (_mdns != null) return;
+        var mdns = new MdnsAdvertiser(() =>
+        {
+            var lan = NetworkFilter.GetLanAddress();
+            var tags = Agent.DiscoveryTags(Agent.UtcToday);
+            if (lan == null || tags.Count == 0) return null;
+            return new MdnsService(_mdnsInstance, _mdnsHost, port, new[] { lan }, MdnsService.TxtFor(tags));
+        }, NetworkFilter.IsAllowed, DiagnosticLog.Write);
+        _mdns = mdns;
+        Agent.PeersChanged += mdns.Refresh;
+        System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+        mdns.Start();
+    }
+
+    private async Task StopDiscoveryAsync()
+    {
+        var mdns = _mdns;
+        if (mdns == null) return;
+        _mdns = null;
+        Agent.PeersChanged -= mdns.Refresh;
+        System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+        await mdns.StopAsync(); // sends the goodbye
+    }
+
+    private void OnNetworkAddressChanged(object? sender, EventArgs e) => _mdns?.Refresh();
 
     private void MapV2(WebApplication app)
     {

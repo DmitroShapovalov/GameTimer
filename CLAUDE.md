@@ -53,7 +53,8 @@ src/GameTimer/
     RemoteServer.Api.cs    Timer and settings endpoints, DTOs, validation (partial class)
     RemoteServer.Events.cs /ws endpoint: first-message auth, event subscriptions → broadcasts (partial class)
     RemoteServer.V2.cs     Protocol v2: /v2 + /v2/pair (Origin → 403, slots → 503) into AgentHost; V2Backend maps
-                           requests to TimerController / settings (rev, ifRev); v2 events from the Events.cs handlers
+                           requests to TimerController / settings (rev, ifRev); v2 events from the Events.cs handlers;
+                           runs the mDNS advertiser (discovery, §9) while the server runs
     V2/AgentFileStore.cs   v2 state (PC key pair, paired parent apps, rid cache) in DPAPI file remote-v2.json
     V2/WindowsPairingUi.cs IPairingUi: asks the owner for the phone's 6-digit code (PairingCodeDialog + Windows Hello)
     WebSocketHub.cs        Open sockets: per-connection outbox + send loop, broadcast, disconnect, graceful close
@@ -99,15 +100,19 @@ src/GameTimer.Protocol/    Protocol v2 core in C# (net8.0, no WPF), no web serve
                            requests (capabilities, roles, rid cache, §5 ordering via an explicit RequestOrigin),
                            /v2/pair (secret window, two-phones rule, typed code), peers and roles.
                            The app plugs in IAgentBackend (timer etc.), IPairingUi, IAgentStore, IFrameTransport
+  Discovery/               §9: MdnsMessage (DNS wire format), MdnsResponder (pure answers + announcements),
+                           MdnsAdvertiser (UDP 5353 shared socket, multicast/QU/legacy replies, re-reads the service)
 shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, android, iosArm64, iosSimulatorArm64):
                            noise/ (mirrors the C# classes 1:1, libsodium via ionspin), encodings/, identity/,
                            hub/ = the parent-app side: PairingLink (QR), pair(), HubSession (IK + ready + hello,
-                           requests, events, ping), AgentLink (reconnect, latest state, resend with the same rid),
+                           requests, events, ping), AgentLink (reconnect, latest state, resend with the same rid,
+                           Locator search by discovery tag after a failed connect), DiscoveryTxt,
                            KtorConnector (WebSocket: OkHttp on Android/JVM, Darwin on iOS),
                            Models + AgentApi (typed §7.2 calls; writes send ifRev, conflicts return the current value)
 android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, applicationId com.gametimer.parent):
   HubStore.kt              hub key (AES-GCM wrapped by an Android Keystore key) + paired PCs, in noBackupFilesDir
   MainViewModel.kt         AgentLink per PC (connected while the app is visible), pairing flow, commands
+  NsdLocator.kt            Locator on NsdManager: browse _gametimer._tcp, resolve one at a time, match TXT tags
   MainActivity.kt          Compose screens: PCs list, QR scan (or paste link), pairing code, PC screen with tabs
   PcTabs.kt                PC tabs (protocol §7.2 via shared AgentApi): Timer (for / until, presets, zone colours,
                            interruption, schedule chip), Schedule, Settings (rev / conflict), History (paged), Parents (roles, revoke)
@@ -136,7 +141,8 @@ The Gradle root is the repo root (`settings.gradle.kts`, `gradlew`, `gradle/libs
 - **Overlay position:** stored as 0..1 fractions mapped to `[0, screen - overlaySize]`.
 - **Keyboard:** Enter = start / add alert, ↑↓ (+Shift) adjust, `:` jumps to minutes, Ctrl+1..6 tabs, Esc = tray.
 - **Phone control:** toggle in the Settings tab (auth required) starts/stops `RemoteServer` on `RemotePort` (5123); `RemoteEnabled` is restored at launch without a prompt. `App.OnExit` stops the host. The status line shows the phone URL (`http://<lan-ip>:<port>`).
-- **Firewall:** enabling phone control adds the rule first (one UAC prompt) by running this exe with `--configure-firewall <port>`; `App.OnStartup` handles that switch before the single-instance mutex, calls `FirewallHelper.Apply` and exits with its code. netsh output is localized: only the exit code, port and path are parsed.
+- **Discovery (protocol §9):** while the server runs and at least one v2 parent app is paired, `MdnsAdvertiser` announces `_gametimer._tcp` with random instance / host labels (new every app start, never the computer name), the LAN IPv4 from `NetworkFilter.GetLanAddress` and TXT `v=2`, `tags=…` (today's UTC tag per paired hub, `AgentHost.DiscoveryTags`). It re-reads that every 30 s, on `PeersChanged` and on a network address change, re-announces on any change, and sends a goodbye on stop. The app's `AgentLink` asks its `Locator` after a failed connect (at most every 20 s, tags for yesterday / today / tomorrow) and adopts a found LAN address only after the handshake with the pinned key succeeded there; `HubStore.updateAddress` then stores it.
+- **Firewall:** two rules: TCP on the remote port (`SystemMonitor-Remote`) and UDP 5353 for discovery (`SystemMonitor-Discovery`), both for this exe and the local subnet only; `IsConfiguredAsync` needs both, so an older install asks for UAC once more. Enabling phone control adds the rules first (one UAC prompt) by running this exe with `--configure-firewall <port>`; `App.OnStartup` handles that switch before the single-instance mutex, calls `FirewallHelper.Apply` and exits with its code. netsh output is localized: only the exit code, port and path are parsed.
 - **Phone pairing & auth:** "Connect phone" (auth) shows a QR for `http://<lan-ip>:<port>/pair?code=…`. `POST /pair {code, name}` → `{deviceId, name, token}`; the token is 256-bit base64url, stored on the PC only as a SHA-256 hash. Everything under `/api` and `/ws` needs `Authorization: Bearer <token>` (401; 429 after 10 failures/min per IP). `/pair` is limited to 5 POSTs/min per IP. Any paired phone can list / revoke devices; the PC can revoke from the Settings tab (auth).
 - **Phone API:** see `docs/remote-api.http`. JSON camelCase, enums as camelCase strings (numbers rejected). Handlers run on the UI thread via `UiThread.InvokeAsync` and only use `TimerController` / `SettingsService`. `PUT /api/settings` is partial and validated, then `SettingsService.NotifyChanged(server)`; `MainWindow` refreshes its controls for any change whose source isn't itself. Color zone logic lives in `AppSettings.GetZone` (overlay and API).
 - **Phone UI:** served at `/` (and `/pair?code=…` from the QR) with CSP `script-src 'self'` (no inline scripts/styles), `no-cache`, `nosniff`. Token in `localStorage` (`gametimer.token`). The countdown runs locally between 5 s ticks; language follows the PC setting; on close 1008 `revoked`/`unauthorized` or HTTP 401 it forgets the token and shows the pairing screen. No service worker (not needed for installing; no offline cache).

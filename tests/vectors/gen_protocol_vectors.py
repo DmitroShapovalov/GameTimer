@@ -20,6 +20,11 @@ def ident(tag, pub):
     return b32(hashlib.blake2b(tag + pub, digest_size=32).digest()[:10])
 
 
+def tag(ak, date):
+    d = hashlib.blake2b(b"GameTimer discovery v2" + date.encode(), digest_size=32, key=ak).digest()
+    return b32(d[:8])
+
+
 def code(h):
     n = int.from_bytes(hashlib.blake2b(b"GameTimer pair code v2" + h, digest_size=32).digest()[:4], "big")
     return "%06d" % (n % 1000000)
@@ -38,6 +43,8 @@ out = {
     "ids": [{"publicKey": k.hex(), "agentId": ident(b"GameTimer agent id v2", k),
              "hubId": ident(b"GameTimer hub id v2", k)} for k in keys],
     "pairingCodes": [{"handshakeHash": h.hex(), "code": code(h)} for h in hashes],
+    "discoveryTags": [{"ak": ak.hex(), "date": date, "tag": tag(ak, date)}
+                      for ak in [bytes(32), bytes(range(32))] for date in ["2026-10-24", "2027-01-01"]],
     "base32": [{"hex": d.hex(), "text": b32(d)} for d in data],
     "base64url": [{"hex": d.hex(), "text": b64u(d)} for d in data],
 }

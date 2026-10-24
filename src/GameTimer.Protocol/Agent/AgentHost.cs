@@ -122,6 +122,29 @@ public sealed partial class AgentHost : IDisposable
     }
 
     /// <summary>
+    /// The discovery tags (§9) for <paramref name="utcDate"/>: one per paired hub, in pairing order.
+    /// They change when <see cref="PeersChanged"/> fires and at the UTC date change.
+    /// </summary>
+    public IReadOnlyList<string> DiscoveryTags(DateOnly utcDate)
+    {
+        lock (_lock)
+        {
+            var tags = new List<string>(_state.Peers.Count);
+            foreach (var p in _state.Peers)
+            {
+                var ak = Base64Url.TryDecode(p.Ak);
+                if (ak is not { Length: 32 }) continue;
+                tags.Add(DiscoveryTag.Derive(ak, utcDate));
+                CryptographicOperations.ZeroMemory(ak);
+            }
+            return tags;
+        }
+    }
+
+    /// <summary>Today's UTC date by this host's clock (for <see cref="DiscoveryTags"/>).</summary>
+    public DateOnly UtcToday => DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
+
+    /// <summary>
     /// The PC owner revokes a hub (behind Windows Hello in the app). Allowed even for the last admin
     /// (§8.1: e.g. a lost phone); the next hub paired then becomes admin.
     /// </summary>

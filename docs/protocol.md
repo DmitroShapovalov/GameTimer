@@ -367,8 +367,18 @@ The agent announces `_gametimer._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<
 
 - The service instance name and the advertised host name are **random** (`gt-<8 random base32>`),
   never the Windows computer name.
+- **TXT layout.** `v=2`, then the tags in groups of at most 17 per TXT string (a string holds 255
+  bytes): `tags=…`, `tags2=…`, `tags3=…` (a DNS-SD key may appear only once). With no paired hub the
+  agent announces nothing at all.
 - The app tries the last known host first; if that fails it browses mDNS and looks for its own tag
-  for today or yesterday (around midnight).
+  for yesterday, today or tomorrow (around midnight, and a PC clock that is somewhat off).
+- A found address is only a **candidate**: the app adopts and stores it only after the IK handshake
+  with the pinned key succeeded there. Only LAN addresses are tried (as for the pairing QR). So a
+  forged announcement costs one failed attempt, never the stored address.
+- Records (RFC 6762 / 6763): PTR `_gametimer._tcp.local` → instance; SRV (port, host); TXT; A (the
+  PC's LAN IPv4). Announced twice at start and on every change (new tags at the UTC date change, a
+  paired or revoked hub, a new address), withdrawn with TTL 0 when the server stops. Queries are
+  answered only from LAN sources; QU and legacy-unicast queries get unicast replies.
 - Tags change daily and mean nothing without the hub's `ak`, so the PC can't be tracked on a foreign
   network by a stable id. An observer can count how many hubs are paired; accepted.
 - Discovery only *finds* the PC; trust always comes from the pinned key.

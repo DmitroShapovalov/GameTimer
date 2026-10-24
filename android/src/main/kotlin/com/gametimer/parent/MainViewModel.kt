@@ -39,6 +39,7 @@ sealed interface Identity {
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val store = (app as GameTimerApp).store
     private val connector = KtorConnector()
+    private val locator = NsdLocator(app)
     private val appName = "GameTimer Parent ${BuildConfig.VERSION_NAME} (android)"
     private val links = HashMap<String, AgentLink>() // main thread only
 
@@ -91,7 +92,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         links[agentId]?.let { return it }
         val agent = agents.value.firstOrNull { it.agentId == agentId } ?: return null
         val key = hubKey() ?: return null
-        return AgentLink(agent, key, connector, appName, viewModelScope).also {
+        val onMoved: (PairedAgent) -> Unit = { moved ->
+            // The PC answered with its pinned key at a new address (§9): remember it, unless it was removed meanwhile
+            viewModelScope.launch(Dispatchers.IO) { store.updateAddress(moved.agentId, moved.host, moved.port) }
+        }
+        return AgentLink(agent, key, connector, appName, viewModelScope, locator, onMoved).also {
             links[agentId] = it
             if (foreground) it.start()
         }
