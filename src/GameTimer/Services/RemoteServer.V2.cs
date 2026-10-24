@@ -71,7 +71,11 @@ public sealed partial class RemoteServer
             if (lan == null || tags.Count == 0) return null;
             // Only where a parent app already connected: silent on a café's or school's Wi-Fi
             var network = NetworkFilter.GetNetworkId();
-            if (network == null || !Agent.IsKnownNetwork(network)) return null;
+            if (network == null) return null;
+            // Upgrade from a build without known networks: the PC already has parent apps, so the network it
+            // is on is taken as known (otherwise it would stay silent until their next session)
+            if (Agent.KnownNetworkCount == 0) Agent.RememberNetwork(network);
+            if (!Agent.IsKnownNetwork(network)) return null;
             var (instance, host) = MdnsNamesFor(today);
             return new MdnsService(instance, host, port, new[] { lan.Value.Address }, MdnsService.TxtFor(tags));
         }, ip => NetworkFilter.IsInSubnet(ip, _mdnsSubnet), DiagnosticLog.Write); // only the LAN it announces on
@@ -79,9 +83,6 @@ public sealed partial class RemoteServer
         Agent.PeersChanged += mdns.Refresh;
         Agent.SessionStarted += OnV2SessionStarted;
         Agent.Paired += OnV2Paired;
-        // Upgrade from a build without known networks: the PC already has parent apps, so the network it
-        // is on now is taken as known (otherwise it would stay silent until their next session)
-        if (Agent.Peers.Count > 0 && Agent.KnownNetworkCount == 0) RememberCurrentNetwork();
         System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
         mdns.Start();
     }
@@ -122,7 +123,11 @@ public sealed partial class RemoteServer
         });
     }
 
-    private void OnNetworkAddressChanged(object? sender, EventArgs e) => _mdns?.Refresh();
+    private void OnNetworkAddressChanged(object? sender, EventArgs e)
+    {
+        NetworkFilter.ForgetNetworkId();
+        _mdns?.Refresh();
+    }
 
     private void MapV2(WebApplication app)
     {

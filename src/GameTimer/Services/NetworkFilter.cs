@@ -76,8 +76,8 @@ public static class NetworkFilter
     /// already connected" (protocol §9): a hash of the default gateway's MAC address and the subnet, so
     /// another network with the same 192.168.1.x numbers is still a different network. Null when not
     /// connected or the gateway's MAC can't be read (no gateway, ARP failed): then the network counts
-    /// as unknown — never a weaker id that other networks could share. Not cached: Windows answers
-    /// from its ARP cache, so a network change is seen at once.
+    /// as unknown — never a weaker id that other networks could share. One failed ARP lookup on the
+    /// same subnet and gateway keeps the last id (until <see cref="ForgetNetworkId"/> on a network change).
     /// </summary>
     public static string? GetNetworkId()
     {
@@ -91,11 +91,21 @@ public static class NetworkFilter
         var subnet = $"{new IPAddress(net)}/{mask}";
 
         var mac = gateway == null ? null : GatewayMac(gateway);
-        if (mac == null) return null;
+        var last = _lastNetwork;
+        if (mac == null)
+            return last != null && last.Item1 == subnet && Equals(last.Item2, gateway) ? last.Item3 : null;
         var input = $"GameTimer network v1|{subnet}|{mac}";
         var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(hash, 0, 16);
+        var id = Convert.ToHexString(hash, 0, 16);
+        _lastNetwork = Tuple.Create(subnet, gateway, id);
+        return id;
     }
+
+    private static volatile Tuple<string, IPAddress?, string>? _lastNetwork; // (subnet, gateway, id)
+
+    /// <summary>The network changed: don't fall back to the last id any more.</summary>
+    public static void ForgetNetworkId() => _lastNetwork = null;
+
 
     private static string? GatewayMac(IPAddress gateway)
     {
