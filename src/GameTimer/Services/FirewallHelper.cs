@@ -11,13 +11,18 @@ namespace GameTimer.Services;
 /// Windows Firewall rule that lets phones on the home network reach the embedded server.
 /// Reading works without admin rights; changing the rule runs this exe elevated with
 /// <see cref="ConfigureArg"/> (one UAC prompt), which calls <see cref="Apply"/> and exits.
-/// The rule allows TCP on the remote port for this exe only, from the local subnet only, on the
-/// private and public profiles (Windows 11 often marks home Wi-Fi as public).
+/// The rules allow TCP on the remote port and UDP 5353 (mDNS discovery) for this exe only, from the
+/// local subnet only, on the private and public profiles (Windows 11 often marks home Wi-Fi as public).
 /// </summary>
 public static class FirewallHelper
 {
     /// <summary>Neutral name, like the exe, so the child doesn't spot it in the firewall list.</summary>
     public const string RuleName = "SystemMonitor-Remote";
+
+    /// <summary>Second rule: UDP 5353 (mDNS) for discovery, protocol §9.</summary>
+    public const string DiscoveryRuleName = "SystemMonitor-Discovery";
+
+    private const int MdnsPort = 5353;
 
     /// <summary>Command-line switch handled in App.OnStartup before the single-instance check.</summary>
     public const string ConfigureArg = "--configure-firewall";
@@ -31,17 +36,21 @@ public static class FirewallHelper
         if (exe == null) return false;
         try
         {
-            var (code, output) = await Task.Run(() =>
-                Netsh("advfirewall", "firewall", "show", "rule", $"name={RuleName}", "verbose"));
-            // netsh labels are localized; the exit code, the port and the path are not
-            return code == 0
-                && Regex.IsMatch(output, $@"(?<!\d){port}(?!\d)")
-                && output.Contains(exe, StringComparison.OrdinalIgnoreCase);
+            return await Task.Run(() => HasRule(RuleName, port, exe) && HasRule(DiscoveryRuleName, MdnsPort, exe));
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
             return false;
         }
+    }
+
+    // netsh labels are localized; the exit code, the port and the path are not
+    private static bool HasRule(string name, int port, string exe)
+    {
+        var (code, output) = Netsh("advfirewall", "firewall", "show", "rule", $"name={name}", "verbose");
+        return code == 0
+            && Regex.IsMatch(output, $@"(?<!\d){port}(?!\d)")
+            && output.Contains(exe, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Runs this exe elevated to (re)create the rule. False if the user declined UAC or it failed.</summary>
@@ -80,12 +89,18 @@ public static class FirewallHelper
         if (exe == null) return 1;
 
         Netsh("advfirewall", "firewall", "delete", "rule", $"name={RuleName}");
+        Netsh("advfirewall", "firewall", "delete", "rule", $"name={DiscoveryRuleName}");
         Netsh("advfirewall", "firewall", "delete", "rule", "name=all", "dir=in", $"program={exe}");
         var (code, _) = Netsh("advfirewall", "firewall", "add", "rule",
             $"name={RuleName}", "dir=in", "action=allow", "protocol=TCP",
             $"localport={port.ToString(CultureInfo.InvariantCulture)}",
             "remoteip=localsubnet", "profile=private,public", $"program={exe}", "enable=yes");
-        return code;
+        if (code != 0) return code;
+        var (mdns, _) = Netsh("advfirewall", "firewall", "add", "rule",
+            $"name={DiscoveryRuleName}", "dir=in", "action=allow", "protocol=UDP",
+            $"localport={MdnsPort.ToString(CultureInfo.InvariantCulture)}",
+            "remoteip=localsubnet", "profile=private,public", $"program={exe}", "enable=yes");
+        return mdns;
     }
 
     private static (int ExitCode, string Output) Netsh(params string[] args)

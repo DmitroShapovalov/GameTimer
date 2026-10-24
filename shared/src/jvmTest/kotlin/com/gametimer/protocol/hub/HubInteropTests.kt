@@ -339,4 +339,101 @@ class HubInteropTests {
         assertIs<ApiResult.Ok<List<PeerInfo>>>(parent.revoke(me.id))
         withTimeout(20.seconds) { parentLink.status.first { it is LinkStatus.Revoked } }
     }
+
+    /** A port on this machine where nothing listens (connect fails at once). */
+    private fun deadPort(): Int = java.net.ServerSocket(0).use { it.localPort }
+
+    @Test
+    fun aMovedAgentIsFoundByItsTagAndTheNewAddressIsAdopted(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val real = assertIs<PairOutcome.Paired>(outcome).agent
+        val stale = real.copy(host = "127.0.0.1", port = deadPort())
+        val asked = java.util.concurrent.CopyOnWriteArrayList<Set<String>>()
+        val moved = java.util.concurrent.CopyOnWriteArrayList<PairedAgent>()
+        val today = com.gametimer.protocol.identity.DiscoveryTag.derive(
+            com.gametimer.protocol.encodings.Base64Url.tryDecode(real.ak)!!,
+            com.gametimer.protocol.identity.DiscoveryTag.utcDate(System.currentTimeMillis()))
+        val locator = Locator { tags, _ ->
+            asked += tags
+            if (today in tags) listOf(AgentAddress("127.0.0.1", agent.port)) else emptyList()
+        }
+        val l = AgentLink(stale, key, connector, "test", scope, locator) { moved += it }.also { it.allowLoopbackCandidates = true; it.start() }
+        l.awaitOnline()
+        assertEquals(3, asked.single().size) // yesterday, today, tomorrow
+        assertEquals(agent.port, moved.single().port)
+        assertEquals(agent.port, l.current.port)
+        assertEquals(real.agentKey, l.current.agentKey)
+    }
+
+    @Test
+    fun aFoundAddressThatFailsTheHandshakeIsNotAdopted(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val real = assertIs<PairOutcome.Paired>(outcome).agent
+        // Pinned to another key: the real agent at the "found" address can't prove it is that PC
+        val forged = real.copy(host = "127.0.0.1", port = deadPort(),
+            agentKey = com.gametimer.protocol.encodings.Base64Url.encode(KeyPair.generate().publicKey))
+        val tried = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val recording = Connector { host, port, path ->
+            try { connector.connect(host, port, path) } finally { if (port == agent.port) tried.complete(Unit) }
+        }
+        val moved = java.util.concurrent.CopyOnWriteArrayList<PairedAgent>()
+        val locator = Locator { _, _ -> listOf(AgentAddress("127.0.0.1", agent.port)) }
+        val l = AgentLink(forged, key, recording, "test", scope, locator) { moved += it }.also { it.allowLoopbackCandidates = true; it.start() }
+        withTimeout(20.seconds) { tried.await() }
+        withTimeout(20.seconds) { l.status.first { it is LinkStatus.Offline } }
+        kotlinx.coroutines.delay(500)
+        assertTrue(moved.isEmpty())
+        assertEquals(forged.port, l.current.port)
+        // The failed candidate doesn't replace the stored address's reason (no fake "wrong device" in the UI)
+        assertEquals(LinkStatus.Offline(OfflineReason.Unreachable), l.status.value)
+    }
+
+    @Test
+    fun loopbackCandidatesAreNeverDialled(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val real = assertIs<PairOutcome.Paired>(outcome).agent
+        val stale = real.copy(host = "127.0.0.1", port = deadPort())
+        val located = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val hosts = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val recording = Connector { host, port, path -> hosts += "$host:$port"; connector.connect(host, port, path) }
+        val l = AgentLink(stale, key, recording, "test", scope, { _, _ ->
+            located.complete(Unit); listOf(AgentAddress("127.0.0.1", agent.port))
+        }).also { it.start() }
+        withTimeout(20.seconds) { located.await() }
+        kotlinx.coroutines.delay(1500)
+        assertTrue(hosts.none { it.endsWith(":${agent.port}") }, hosts.toString()) // the found 127.0.0.1 was never tried
+        assertEquals(stale.port, l.current.port)
+    }
+
+    @Test
+    fun aNonLanAddressFromTheLocatorIsIgnored(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val real = assertIs<PairOutcome.Paired>(outcome).agent
+        val stale = real.copy(host = "127.0.0.1", port = deadPort())
+        val located = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val hosts = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val recording = Connector { host, port, path -> hosts += host; connector.connect(host, port, path) }
+        val l = AgentLink(stale, key, recording, "test", scope, { _, _ ->
+            located.complete(Unit)
+            listOf(AgentAddress("8.8.8.8", 5123), AgentAddress("example.com", 5123))
+        }).also { it.allowLoopbackCandidates = true; it.start() }
+        withTimeout(20.seconds) { located.await() }
+        kotlinx.coroutines.delay(1500) // the next attempt (after the back-off) still goes to the stored address
+        assertTrue(hosts.size >= 2)
+        assertTrue(hosts.all { it == "127.0.0.1" }, hosts.toString())
+        assertEquals("127.0.0.1", l.current.host)
+    }
+
+    @Test
+    fun aFakeAnnouncementFirstDoesNotHideTheRealAgent(): Unit = runBlocking {
+        val (key, outcome) = pairHub("Phone")
+        val real = assertIs<PairOutcome.Paired>(outcome).agent
+        val stale = real.copy(host = "127.0.0.1", port = deadPort())
+        val fake = deadPort() // a copied tag announced by someone else; nothing answers there
+        val moved = java.util.concurrent.CopyOnWriteArrayList<PairedAgent>()
+        val locator = Locator { _, _ -> listOf(AgentAddress("127.0.0.1", fake), AgentAddress("127.0.0.1", agent.port)) }
+        val l = AgentLink(stale, key, connector, "test", scope, locator) { moved += it }.also { it.allowLoopbackCandidates = true; it.start() }
+        l.awaitOnline() // well before the next search (20 s): both candidates were tried in one go
+        assertEquals(agent.port, moved.single().port)
+    }
 }

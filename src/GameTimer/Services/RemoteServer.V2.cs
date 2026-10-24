@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using GameTimer.Models;
 using GameTimer.Protocol.Agent;
+using GameTimer.Protocol.Discovery;
 using GameTimer.Services.V2;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -31,6 +33,62 @@ public sealed partial class RemoteServer
         Agent = new AgentHost(store, _v2Backend, pairingUi);
         Agent.StoreError += ex => DiagnosticLog.Write("v2 store save failed: " + ex.Message);
     }
+
+    // ---------------- discovery (§9) ----------------
+
+    // Random names, new every UTC day (with the tags) and every app start: nothing on the network stays
+    // stable longer than the tags do. A new name sends a goodbye for the old one.
+    private (DateOnly Day, string Instance, string Host) _mdnsNames = (default, "", "");
+
+    private (string Instance, string Host) MdnsNamesFor(DateOnly day)
+    {
+        if (_mdnsNames.Day != day) _mdnsNames = (day, MdnsService.RandomLabel(), MdnsService.RandomLabel());
+        return (_mdnsNames.Instance, _mdnsNames.Host);
+    }
+    private MdnsAdvertiser? _mdns;
+    private volatile Tuple<IPAddress, IPAddress>? _mdnsSubnetBox; // (address, mask), written by the service callback
+
+    private (IPAddress Address, IPAddress Mask)? _mdnsSubnet
+    {
+        get => _mdnsSubnetBox is { } t ? (t.Item1, t.Item2) : null;
+        set => _mdnsSubnetBox = value is { } v ? Tuple.Create(v.Address, v.Mask) : null;
+    }
+
+    /// <summary>
+    /// Announces <c>_gametimer._tcp</c> with today's tags while the server runs, so a parent app finds
+    /// the PC again after its address changed. Nothing is announced while no parent app is paired or
+    /// the PC has no LAN address.
+    /// </summary>
+    private void StartDiscovery(int port)
+    {
+        if (_mdns != null) return;
+        var mdns = new MdnsAdvertiser(() =>
+        {
+            var lan = NetworkFilter.GetLanInterface();
+            _mdnsSubnet = lan;
+            var today = Agent.UtcToday;
+            var tags = Agent.DiscoveryTags(today);
+            if (lan == null || tags.Count == 0) return null;
+            var (instance, host) = MdnsNamesFor(today);
+            return new MdnsService(instance, host, port, new[] { lan.Value.Address }, MdnsService.TxtFor(tags));
+        }, ip => NetworkFilter.IsInSubnet(ip, _mdnsSubnet), DiagnosticLog.Write); // only the LAN it announces on
+        _mdns = mdns;
+        Agent.PeersChanged += mdns.Refresh;
+        System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+        mdns.Start();
+    }
+
+    private async Task StopDiscoveryAsync()
+    {
+        var mdns = _mdns;
+        if (mdns == null) return;
+        _mdns = null;
+        Agent.PeersChanged -= mdns.Refresh;
+        System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+        await mdns.StopAsync(); // sends the goodbye
+    }
+
+    private void OnNetworkAddressChanged(object? sender, EventArgs e) => _mdns?.Refresh();
 
     private void MapV2(WebApplication app)
     {

@@ -36,32 +36,51 @@ public static class NetworkFilter
     /// The PC's IPv4 address on the home LAN, for the pairing QR code. Prefers an interface with a
     /// default gateway, which skips virtual adapters (Hyper-V, WSL, VPN). Null if not connected.
     /// </summary>
-    public static IPAddress? GetLanAddress()
+    public static IPAddress? GetLanAddress() => GetLanInterface()?.Address;
+
+    /// <summary>Like <see cref="GetLanAddress"/>, with that interface's subnet mask (for <see cref="IsInSubnet"/>).</summary>
+    public static (IPAddress Address, IPAddress Mask)? GetLanInterface()
     {
         try
         {
-            return NetworkInterface.GetAllNetworkInterfaces()
+            var best = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(n => n.OperationalStatus == OperationalStatus.Up
                             && n.NetworkInterfaceType != NetworkInterfaceType.Loopback
                             && n.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
                 .Select(n => n.GetIPProperties())
                 .SelectMany(p => p.UnicastAddresses
-                    .Select(a => a.Address)
-                    .Where(a => a.AddressFamily == AddressFamily.InterNetwork
-                                && !IPAddress.IsLoopback(a)
-                                && !IsLinkLocalV4(a)
-                                && IsAllowed(a))
-                    .Select(a => (Address: a, HasGateway: p.GatewayAddresses.Any(g =>
+                    .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork
+                                && !IPAddress.IsLoopback(a.Address)
+                                && !IsLinkLocalV4(a.Address)
+                                && IsAllowed(a.Address))
+                    .Select(a => (Info: a, HasGateway: p.GatewayAddresses.Any(g =>
                         g.Address.AddressFamily == AddressFamily.InterNetwork
                         && !g.Address.Equals(IPAddress.Any)))))
                 .OrderByDescending(x => x.HasGateway)
-                .Select(x => x.Address)
+                .Select(x => x.Info)
                 .FirstOrDefault();
+            if (best == null) return null;
+            var mask = best.IPv4Mask is { } m && !m.Equals(IPAddress.Any) ? m : IPAddress.Parse("255.255.255.0");
+            return (best.Address, mask);
         }
         catch (NetworkInformationException)
         {
             return null;
         }
+    }
+
+    /// <summary>True if <paramref name="ip"/> (IPv4) is in the subnet of <paramref name="lan"/>.</summary>
+    public static bool IsInSubnet(IPAddress? ip, (IPAddress Address, IPAddress Mask)? lan)
+    {
+        if (ip == null || lan == null) return false;
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        if (ip.AddressFamily != AddressFamily.InterNetwork) return false;
+        var a = ip.GetAddressBytes();
+        var b = lan.Value.Address.GetAddressBytes();
+        var m = lan.Value.Mask.GetAddressBytes();
+        for (int i = 0; i < 4; i++)
+            if ((a[i] & m[i]) != (b[i] & m[i])) return false;
+        return true;
     }
 
     private static bool IsLinkLocalV4(IPAddress ip)

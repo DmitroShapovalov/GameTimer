@@ -80,6 +80,18 @@ class HubStore(context: Context) {
     @Synchronized
     fun save(agent: PairedAgent) = write(_agents.value.filter { it.agentId != agent.agentId } + agent)
 
+    /**
+     * The PC was found at a new address (discovery, §9). Only an address change of a PC still in the
+     * list: a PC removed meanwhile is not brought back. Blocking file write: call off the main thread.
+     */
+    @Synchronized
+    fun updateAddress(agentId: String, host: String, port: Int) {
+        val list = _agents.value
+        val old = list.firstOrNull { it.agentId == agentId } ?: return
+        if (old.host == host && old.port == port) return
+        write(list.map { if (it.agentId == agentId) it.copy(host = host, port = port) else it })
+    }
+
     /** Blocking file write: call off the main thread. */
     @Synchronized
     fun remove(agentId: String) = write(_agents.value.filter { it.agentId != agentId })

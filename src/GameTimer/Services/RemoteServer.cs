@@ -188,6 +188,7 @@ public sealed partial class RemoteServer
             _authFailures = authFailures;
             SubscribeEvents();
             Port = port;
+            StartDiscovery(port);
             LastError = null;
             return true;
         }
@@ -205,6 +206,7 @@ public sealed partial class RemoteServer
         var app = _app;
         if (app == null) return;
 
+        try { await StopDiscoveryAsync(); } catch { /* best effort: the goodbye */ }
         try { await Agent.ShutdownAsync(); } catch { /* best effort: bye shutdown to the parent apps */ }
         Agent.CancelPairing();
         _app = null;

@@ -112,7 +112,9 @@ public class PairingTests
 
         Assert.Equal("code_used", (await parent.ReceiveJsonAsync()).GetProperty("code").GetString());
         Assert.Equal("denied", (await child.ReceiveJsonAsync()).GetProperty("code").GetString());
-        Assert.Equal(new[] { PairingAbortReason.TwoPhones }, f.Ui.Aborts);
+        // The PC is told right after the bye goes out: wait for it instead of racing it
+        for (int i = 0; i < 100; i++) { lock (f.Ui.Aborts) if (f.Ui.Aborts.Count > 0) break; await Task.Delay(50); }
+        lock (f.Ui.Aborts) Assert.Equal(new[] { PairingAbortReason.TwoPhones }, f.Ui.Aborts);
         Assert.Empty(f.Host.Peers);
     }
 
