@@ -50,4 +50,5 @@
     <string name="err_invalid_minutes">dat aantal minuten is niet toegestaan</string>
     <string name="err_forbidden">alleen een beheerder mag dat</string>
     <string name="err_busy">de pc is bezig, probeer opnieuw</string>
+    <string name="retry">Opnieuw</string>
 </resources>

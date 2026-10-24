@@ -124,8 +124,11 @@ private fun App(vm: MainViewModel) {
 
     when (val id = identity) {
         Identity.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        Identity.Unavailable -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+        Identity.Unavailable -> Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally) {
             Text(stringResource(R.string.identity_unavailable), style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = { vm.retryIdentity() }) { Text(stringResource(R.string.retry)) }
         }
         is Identity.Ready -> {
             var resetShown by rememberSaveable { mutableStateOf(false) }
@@ -271,7 +274,7 @@ private fun ScanScreen(vm: MainViewModel, onBack: () -> Unit, onLink: (PairingLi
                 Button(onClick = { tryText(pasted) }, enabled = pasted.isNotBlank()) { Text(stringResource(R.string.connect)) }
             } else if (hasCamera) {
                 Text(stringResource(R.string.scan_hint), style = MaterialTheme.typography.bodyMedium)
-                QrScanner(onText = { tryText(it) }, modifier = Modifier.fillMaxWidth().weight(1f))
+                QrScanner(onText = { tryText(it) }, onNoCamera = { paste = true }, modifier = Modifier.fillMaxWidth().weight(1f))
             } else {
                 Text(stringResource(R.string.camera_denied))
                 Button(onClick = { ask.launch(Manifest.permission.CAMERA) }) { Text(stringResource(R.string.grant)) }

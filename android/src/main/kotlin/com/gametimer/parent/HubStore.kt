@@ -26,8 +26,7 @@ import kotlinx.serialization.json.Json
  *
  * The X25519 private key is stored encrypted with an AES-256-GCM key that lives in the Android Keystore
  * (non-exportable, hardware-backed where available). The Keystore can't hold X25519 keys for our
- * libsodium-based Noise directly, so it wraps the key instead. Not thread-safe for writers: the view
- * model calls [save] / [remove] from one coroutine context.
+ * libsodium-based Noise directly, so it wraps the key instead. Writers are serialised.
  */
 class HubStore(context: Context) {
     private val dir = context.noBackupFilesDir
@@ -60,6 +59,10 @@ class HubStore(context: Context) {
                 resetIdentity()
             } catch (e: AEADBadTagException) {
                 resetIdentity() // wrapped with a key that no longer exists
+            } catch (e: IllegalArgumentException) {
+                resetIdentity() // truncated / empty file (e.g. power loss during the first write)
+            } catch (e: java.security.GeneralSecurityException) {
+                if (keyFile.length() < 12 + 16 + 32) resetIdentity() else throw e
             }
             // Anything else (a transient Keystore error) propagates: never replace the identity for it
         }
@@ -74,11 +77,14 @@ class HubStore(context: Context) {
     }
 
     /** Blocking file write: call off the main thread. */
+    @Synchronized
     fun save(agent: PairedAgent) = write(_agents.value.filter { it.agentId != agent.agentId } + agent)
 
     /** Blocking file write: call off the main thread. */
+    @Synchronized
     fun remove(agentId: String) = write(_agents.value.filter { it.agentId != agentId })
 
+    @Synchronized
     private fun resetIdentity() {
         identityWasReset = true
         write(emptyList()) // the PCs know the old key only: they must be paired again
@@ -91,7 +97,10 @@ class HubStore(context: Context) {
 
     private fun atomicWrite(target: File, bytes: ByteArray) {
         val tmp = File(dir, target.name + ".tmp")
-        tmp.writeBytes(bytes)
+        java.io.FileOutputStream(tmp).use { out ->
+            out.write(bytes)
+            out.fd.sync() // on disk before the rename: no truncated file after a power loss
+        }
         if (!tmp.renameTo(target)) throw IOException("cannot replace ${target.name}")
     }
 

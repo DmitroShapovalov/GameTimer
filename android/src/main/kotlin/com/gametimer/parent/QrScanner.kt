@@ -7,7 +7,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -24,10 +26,12 @@ import java.util.concurrent.Executors
  * only while this composable is on screen: leaving it unbinds the camera.
  */
 @Composable
-fun QrScanner(onText: (String) -> Unit, modifier: Modifier = Modifier) {
+fun QrScanner(onText: (String) -> Unit, onNoCamera: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
     val view = remember { PreviewView(context) }
+    val currentOnText by rememberUpdatedState(onText)
+    val currentOnNoCamera by rememberUpdatedState(onNoCamera)
 
     DisposableEffect(lifecycle) {
         val executor = Executors.newSingleThreadExecutor()
@@ -38,7 +42,7 @@ fun QrScanner(onText: (String) -> Unit, modifier: Modifier = Modifier) {
             val media = proxy.image
             if (media == null) { proxy.close(); return@setAnalyzer }
             scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
-                .addOnSuccessListener { codes -> codes.firstNotNullOfOrNull { it.rawValue }?.let(onText) }
+                .addOnSuccessListener { codes -> codes.firstNotNullOfOrNull { it.rawValue }?.let { currentOnText(it) } }
                 .addOnCompleteListener { proxy.close() }
         }
         var disposed = false
@@ -46,7 +50,17 @@ fun QrScanner(onText: (String) -> Unit, modifier: Modifier = Modifier) {
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             if (disposed) return@addListener // left the screen before the camera was ready
-            provider = future.get().also { it.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis) }
+            val p = future.get()
+            provider = p
+            // The app installs on phones without a back camera (camera.any is optional): front, then none
+            val selector = listOf(CameraSelector.DEFAULT_BACK_CAMERA, CameraSelector.DEFAULT_FRONT_CAMERA)
+                .firstOrNull { runCatching { p.hasCamera(it) }.getOrDefault(false) }
+            if (selector == null) { currentOnNoCamera(); return@addListener }
+            try {
+                p.bindToLifecycle(lifecycle, selector, preview, analysis)
+            } catch (e: Exception) {
+                currentOnNoCamera()
+            }
         }, ContextCompat.getMainExecutor(context))
 
         onDispose {

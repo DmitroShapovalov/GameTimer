@@ -50,4 +50,5 @@
     <string name="err_invalid_minutes">такое число минут недопустимо</string>
     <string name="err_forbidden">это может только админ</string>
     <string name="err_busy">ПК занят, попробуйте снова</string>
+    <string name="retry">Повторить</string>
 </resources>

@@ -122,6 +122,7 @@ public class AgentLink(
         val running = job
         job = null // first: a start() racing with this stop() then keeps its own new loop
         running?.cancelAndJoin() // so the old loop can't write a status after Stopped
+        if (job != null) return // start() ran meanwhile: its new loop owns the session and the status
         session?.close()
         session = null
         _status.value = LinkStatus.Stopped

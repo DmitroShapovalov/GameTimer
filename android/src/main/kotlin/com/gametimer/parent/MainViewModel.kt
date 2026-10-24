@@ -63,17 +63,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // Foreground changes are applied one at a time, latest wins (rotation = stop + start in a burst)
     private val wantForeground = Channel<Boolean>(Channel.CONFLATED)
     private var foreground = false
+    private val retry = Channel<Unit>(Channel.CONFLATED) // declared before init: the init coroutine uses it
 
     init {
         viewModelScope.launch {
-            _identity.value = try {
-                val key = withContext(Dispatchers.IO) { store.loadHubKey() }
-                Identity.Ready(key, store.identityWasReset)
-            } catch (e: Exception) {
-                Identity.Unavailable
-            }
+            while (!loadIdentity()) retry.receive() // "Try again" on the Unavailable screen
             for (want in wantForeground) applyForeground(want)
         }
+    }
+
+    fun retryIdentity() {
+        retry.trySend(Unit)
+    }
+
+    private suspend fun loadIdentity(): Boolean {
+        _identity.value = Identity.Loading
+        _identity.value = try {
+            val key = withContext(Dispatchers.IO) { store.loadHubKey() }
+            Identity.Ready(key, store.identityWasReset)
+        } catch (e: Exception) {
+            Identity.Unavailable
+        }
+        return _identity.value is Identity.Ready
     }
 
     private fun hubKey(): KeyPair? = (_identity.value as? Identity.Ready)?.key
