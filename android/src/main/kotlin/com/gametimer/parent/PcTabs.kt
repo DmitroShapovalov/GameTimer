@@ -338,12 +338,11 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             if (!settingsValid(toSave)) { vm.say(invalidText); return@Button }
             ed.settingsSaving = true
             vm.launchSave {
-                when (val r = api.saveSettings(toSave)) {
+                try { when (val r = api.saveSettings(toSave)) {
                     is ApiResult.Ok -> { ed.fillSettings(r.value); vm.say(savedText) }
                     is ApiResult.Conflict -> { ed.fillSettings(r.current); vm.say(conflictText) }
                     is ApiResult.Failed -> vm.say(vm.outcomeText(r.outcome))
-                }
-                ed.settingsSaving = false
+                } } finally { ed.settingsSaving = false }
             }
         }, enabled = online && ed.settingsDirty && !ed.settingsSaving) { Text(stringResource(R.string.save)) }
     }
@@ -429,12 +428,11 @@ fun ScheduleTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             val toSave = loaded.copy(enabled = ed.scheduleEnabled, week = week.map { it!! })
             ed.scheduleSaving = true
             vm.launchSave {
-                when (val r = api.saveSchedule(toSave)) {
+                try { when (val r = api.saveSchedule(toSave)) {
                     is ApiResult.Ok -> { ed.fillSchedule(r.value); vm.say(savedText) }
                     is ApiResult.Conflict -> { ed.fillSchedule(r.current); vm.say(conflictText) }
                     is ApiResult.Failed -> vm.say(vm.outcomeText(r.outcome))
-                }
-                ed.scheduleSaving = false
+                } } finally { ed.scheduleSaving = false }
             }
         }, enabled = online && ed.scheduleDirty && !ed.scheduleSaving) { Text(stringResource(R.string.save)) }
     }

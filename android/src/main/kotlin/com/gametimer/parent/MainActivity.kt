@@ -366,7 +366,8 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
                 1 -> ScheduleTab(vm, agent, link)
                 2 -> SettingsTab(vm, agent, link)
                 3 -> HistoryTab(vm, agent, link)
-                else -> ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent); onBack() })
+                // Removing the PC from the list is enough: the screen for a PC that isn't listed goes home by itself
+                else -> ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })
             }
         }
     }
