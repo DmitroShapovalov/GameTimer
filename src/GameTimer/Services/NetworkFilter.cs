@@ -39,7 +39,10 @@ public static class NetworkFilter
     public static IPAddress? GetLanAddress() => GetLanInterface()?.Address;
 
     /// <summary>Like <see cref="GetLanAddress"/>, with that interface's subnet mask (for <see cref="IsInSubnet"/>).</summary>
-    public static (IPAddress Address, IPAddress Mask)? GetLanInterface()
+    public static (IPAddress Address, IPAddress Mask)? GetLanInterface() =>
+        BestLan() is { } b ? (b.Address, b.Mask) : null;
+
+    private static (IPAddress Address, IPAddress Mask, IPAddress? Gateway)? BestLan()
     {
         try
         {
@@ -53,21 +56,75 @@ public static class NetworkFilter
                                 && !IPAddress.IsLoopback(a.Address)
                                 && !IsLinkLocalV4(a.Address)
                                 && IsAllowed(a.Address))
-                    .Select(a => (Info: a, HasGateway: p.GatewayAddresses.Any(g =>
-                        g.Address.AddressFamily == AddressFamily.InterNetwork
-                        && !g.Address.Equals(IPAddress.Any)))))
-                .OrderByDescending(x => x.HasGateway)
-                .Select(x => x.Info)
+                    .Select(a => (Info: a, Gateway: p.GatewayAddresses
+                        .Select(g => g.Address)
+                        .FirstOrDefault(g => g.AddressFamily == AddressFamily.InterNetwork && !g.Equals(IPAddress.Any)))))
+                .OrderByDescending(x => x.Gateway != null)
                 .FirstOrDefault();
-            if (best == null) return null;
-            var mask = best.IPv4Mask is { } m && !m.Equals(IPAddress.Any) ? m : IPAddress.Parse("255.255.255.0");
-            return (best.Address, mask);
+            if (best.Info == null) return null;
+            var mask = best.Info.IPv4Mask is { } m && !m.Equals(IPAddress.Any) ? m : IPAddress.Parse("255.255.255.0");
+            return (best.Info.Address, mask, best.Gateway);
         }
         catch (NetworkInformationException)
         {
             return null;
         }
     }
+
+    private static volatile Tuple<string, IPAddress?, string, long>? _networkIdBox;
+
+    private static (string Subnet, IPAddress? Gateway, string Id, long At)? _networkIdCache
+    {
+        get => _networkIdBox is { } t ? (t.Item1, t.Item2, t.Item3, t.Item4) : null;
+        set => _networkIdBox = value is { } v ? Tuple.Create(v.Subnet, v.Gateway, v.Id, v.At) : null;
+    }
+
+    /// <summary>
+    /// An opaque id of the network the PC is on now, for "announce discovery only where a parent app
+    /// already connected" (protocol §9): a hash of the default gateway's MAC address and the subnet, so
+    /// another network with the same 192.168.1.x numbers is still a different network. Without a
+    /// readable gateway MAC, just the subnet. Null when not connected. Cached for a minute (ARP can block).
+    /// </summary>
+    public static string? GetNetworkId()
+    {
+        var lan = BestLan();
+        if (lan == null) return null;
+        var (address, mask, gateway) = lan.Value;
+        var net = new byte[4];
+        var a = address.GetAddressBytes();
+        var m = mask.GetAddressBytes();
+        for (int i = 0; i < 4; i++) net[i] = (byte)(a[i] & m[i]);
+        var subnet = $"{new IPAddress(net)}/{mask}";
+
+        var now = Environment.TickCount64;
+        if (_networkIdCache is { } c && c.Subnet == subnet && Equals(c.Gateway, gateway) && now - c.At < 60_000)
+            return c.Id;
+        string? mac = gateway == null ? null : GatewayMac(gateway);
+        var input = $"GameTimer network v1|{subnet}|{mac ?? "-"}";
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
+        var id = Convert.ToHexString(hash, 0, 16);
+        _networkIdCache = (subnet, gateway, id, now);
+        return id;
+    }
+
+    private static string? GatewayMac(IPAddress gateway)
+    {
+        try
+        {
+            var mac = new byte[6];
+            uint len = (uint)mac.Length;
+            uint dest = BitConverter.ToUInt32(gateway.GetAddressBytes(), 0);
+            if (SendARP(dest, 0, mac, ref len) != 0 || len != 6 || mac.All(b => b == 0)) return null;
+            return Convert.ToHexString(mac);
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("iphlpapi.dll", ExactSpelling = true)]
+    private static extern int SendARP(uint destIp, uint srcIp, byte[] macAddr, ref uint physicalAddrLength);
 
     /// <summary>True if <paramref name="ip"/> (IPv4) is in the subnet of <paramref name="lan"/>.</summary>
     public static bool IsInSubnet(IPAddress? ip, (IPAddress Address, IPAddress Mask)? lan)

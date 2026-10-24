@@ -360,16 +360,22 @@ have been photographed.
 
 ## 9. Discovery (step A6)
 
-The agent announces `_gametimer._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<tag>,…` — one
+The agent announces `_sysmon._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<tag>,…` — one
 13-character tag per paired hub:
 
 `tag = base32( BLAKE2b(outlen = 32, key = ak, input = "GameTimer discovery v2" ‖ UTC date "YYYY-MM-DD")[0..8) )`
 
-- The service instance name and the advertised host name are **random** (`gt-<8 random base32>`),
+- The service instance name and the advertised host name are **random** (`pc-<8 random base32>`),
   never the Windows computer name, and new every UTC day (with the tags) and every agent start.
 - **TXT layout.** `v=2`, then the tags in groups of at most 17 per TXT string (a string holds 255
   bytes): `tags=…`, `tags2=…`, `tags3=…` (a DNS-SD key may appear only once). With no paired hub the
   agent announces nothing at all.
+- **Known networks only.** The agent announces only on a network where a hub already had a session
+  (Windows: identified by a hash of the subnet and the default gateway's MAC address; the last 16 are
+  kept with the agent's state). On a café's or school's Wi-Fi it stays silent. After a move to a new
+  network the hub reconnects by the stored address once, or the parent pairs again.
+- The service type is deliberately neutral (`_sysmon._tcp`, like the Windows exe and firewall rule
+  names), so a Bonjour browser on the LAN doesn't name the product.
 - The app tries the last known host first; only if no session could be opened there it browses mDNS
   for its own tag for yesterday, today or tomorrow (around midnight, and a PC clock that is somewhat
   off) — at first every 20 s, doubling up to every 5 minutes while the PC stays away.
@@ -378,7 +384,7 @@ The agent announces `_gametimer._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<
   there. Only LAN addresses are tried (as for the pairing QR), never the phone's own loopback. A forged announcement can't
   impersonate the PC; it costs a failed attempt. A host that relays TCP to the real PC does get
   stored, but sees only Noise ciphertext — no more than anyone already in the LAN path; accepted.
-- Records (RFC 6762 / 6763): PTR `_gametimer._tcp.local` → instance; SRV (port, host); TXT; A (the
+- Records (RFC 6762 / 6763): PTR `_sysmon._tcp.local` → instance; SRV (port, host); TXT; A (the
   PC's LAN IPv4). Announced twice at start and on every change (new tags at the UTC date change, a
   paired or revoked hub, a new address), withdrawn with TTL 0 when the server stops. Queries are
   answered only from the subnet the agent announces on; QU and legacy-unicast queries get unicast

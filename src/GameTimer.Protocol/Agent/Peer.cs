@@ -38,6 +38,11 @@ public sealed class AgentState
     public List<Peer> Peers { get; init; } = new();
     /// <summary>Idempotency cache per hub id.</summary>
     public Dictionary<string, List<RidEntry>> Rids { get; init; } = new();
+    /// <summary>
+    /// Networks a hub had a session on, as opaque ids the app chooses (Windows: a hash of the gateway).
+    /// Discovery (§9) is announced only there. Oldest first, at most <see cref="AgentHost.MaxKnownNetworks"/>.
+    /// </summary>
+    public List<string> KnownNetworks { get; init; } = new();
 }
 
 /// <summary>Persistence for <see cref="AgentState"/> (Windows: DPAPI-protected file). Called under the host lock.</summary>

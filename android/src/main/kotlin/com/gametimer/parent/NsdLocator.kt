@@ -23,7 +23,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Finds a PC by its daily discovery tag (protocol §9) with Android's own mDNS (NsdManager): browses
- * `_gametimer._tcp`, resolves the services one at a time (older Android allows a single resolve per
+ * `_sysmon._tcp`, resolves the services one at a time (older Android allows a single resolve per
  * app, so one locator serves all PCs) and returns those whose TXT carries one of the tags. Instance
  * names are random, so only the TXT counts. After the first match it keeps listening for [GRACE], so a
  * fake announcement that answers first doesn't hide the real PC.
