@@ -55,9 +55,9 @@ public sealed partial class RemoteServer
     }
 
     /// <summary>
-    /// Announces <c>_gametimer._tcp</c> with today's tags while the server runs, so a parent app finds
-    /// the PC again after its address changed. Nothing is announced while no parent app is paired or
-    /// the PC has no LAN address.
+    /// Announces <c>_sysmon._tcp</c> with today's tags while the server runs, so a parent app finds
+    /// the PC again after its address changed. Nothing is announced while no parent app is paired, the
+    /// PC has no LAN address, or it is on a network where no parent app has connected yet.
     /// </summary>
     private void StartDiscovery(int port)
     {
@@ -69,11 +69,20 @@ public sealed partial class RemoteServer
             var today = Agent.UtcToday;
             var tags = Agent.DiscoveryTags(today);
             if (lan == null || tags.Count == 0) return null;
+            // Only where a parent app already connected: silent on a café's or school's Wi-Fi
+            var network = NetworkFilter.GetNetworkId();
+            if (network == null) return null;
+            // Upgrade from a build without known networks: the PC already has parent apps, so the network it
+            // is on is taken as known (otherwise it would stay silent until their next session)
+            if (Agent.KnownNetworkCount == 0) Agent.RememberNetwork(network);
+            if (!Agent.IsKnownNetwork(network)) return null;
             var (instance, host) = MdnsNamesFor(today);
             return new MdnsService(instance, host, port, new[] { lan.Value.Address }, MdnsService.TxtFor(tags));
         }, ip => NetworkFilter.IsInSubnet(ip, _mdnsSubnet), DiagnosticLog.Write); // only the LAN it announces on
         _mdns = mdns;
         Agent.PeersChanged += mdns.Refresh;
+        Agent.SessionStarted += OnV2SessionStarted;
+        Agent.Paired += OnV2Paired;
         System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
         mdns.Start();
     }
@@ -84,11 +93,41 @@ public sealed partial class RemoteServer
         if (mdns == null) return;
         _mdns = null;
         Agent.PeersChanged -= mdns.Refresh;
+        Agent.SessionStarted -= OnV2SessionStarted;
+        Agent.Paired -= OnV2Paired;
         System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
         await mdns.StopAsync(); // sends the goodbye
     }
 
-    private void OnNetworkAddressChanged(object? sender, EventArgs e) => _mdns?.Refresh();
+    // A parent app connected from the LAN: this network is a known one from now on (§9)
+    private void OnV2SessionStarted(string remoteIp)
+    {
+        if (!IPAddress.TryParse(remoteIp, out var ip) || NetworkFilter.IsLoopback(ip)) return; // gt-testhub on this PC
+        RememberCurrentNetwork(ip);
+    }
+
+    // Pairing happens with the phone next to the PC, on this network
+    private void OnV2Paired(Peer peer) => RememberCurrentNetwork();
+
+    private void RememberCurrentNetwork(IPAddress? from = null)
+    {
+        _ = Task.Run(() => // off the session: the gateway lookup (ARP) can take a moment
+        {
+            try
+            {
+                if (from != null && !NetworkFilter.IsInSubnet(from, NetworkFilter.GetLanInterface())) return; // not via the LAN interface
+                var network = NetworkFilter.GetNetworkId();
+                if (network != null && Agent.RememberNetwork(network)) _mdns?.Refresh();
+            }
+            catch (Exception ex) { DiagnosticLog.Write("mDNS: remembering the network failed: " + ex.Message); }
+        });
+    }
+
+    private void OnNetworkAddressChanged(object? sender, EventArgs e)
+    {
+        NetworkFilter.ForgetNetworkId();
+        _mdns?.Refresh();
+    }
 
     private void MapV2(WebApplication app)
     {

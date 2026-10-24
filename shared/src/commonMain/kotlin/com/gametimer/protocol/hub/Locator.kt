@@ -12,16 +12,16 @@ public data class AgentAddress(val host: String, val port: Int)
  */
 public fun interface Locator {
     /**
-     * Browses `_gametimer._tcp` for up to [timeout] and returns the addresses of the services whose TXT
+     * Browses `_sysmon._tcp` for up to [timeout] and returns the addresses of the services whose TXT
      * (see [DiscoveryTxt.tags]) contains one of [tags] — all of them, since anyone on the LAN can copy a
      * tag into a fake announcement; [AgentLink] tries them one by one. Empty if none was found.
      */
     public suspend fun locate(tags: Set<String>, timeout: Duration): List<AgentAddress>
 }
 
-/** Reads the TXT of a `_gametimer._tcp` service (§9). */
+/** Reads the TXT of a `_sysmon._tcp` service (§9). */
 public object DiscoveryTxt {
-    public const val SERVICE_TYPE: String = "_gametimer._tcp"
+    public const val SERVICE_TYPE: String = "_sysmon._tcp"
     private const val MAX_KEYS = 64
 
     /**
