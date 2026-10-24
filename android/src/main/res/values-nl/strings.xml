@@ -138,4 +138,5 @@
     <string name="peer_added_title">Nieuwe ouder-app</string>
     <string name="peer_added_text">“%1$s” is toegevoegd op %2$s. Ken je dit apparaat niet, verwijder het dan op het tabblad Ouders.</string>
     <string name="no_screen_lock">Deze telefoon heeft geen schermvergrendeling, dus iedereen die hem vasthoudt kan de ouders van deze pc wijzigen. Stel een pincode of vingerafdruk in bij de instellingen van de telefoon.</string>
+    <string name="peer_added_text_parent">“%1$s” is toegevoegd op %2$s. Ken je dit apparaat niet, vraag dan een beheerder het te verwijderen, of verwijder het op de pc.</string>
 </resources>

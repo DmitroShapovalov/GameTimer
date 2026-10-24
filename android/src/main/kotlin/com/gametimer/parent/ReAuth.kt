@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Re-authentication with the phone's own lock (fingerprint / face / PIN, protocol §12): before admin
@@ -50,7 +51,8 @@ class ReAuth(context: Context) {
         if (!hasScreenLock(activity)) return true
         if (inProgress) return false // a double tap: the prompt is already up
         inProgress = true
-        val ok = try { prompt(activity, title, subtitle) } finally { inProgress = false }
+        // A prompt that never answers (e.g. shown while the activity was being saved) can't block later ones
+        val ok = try { withTimeoutOrNull(PROMPT_TIMEOUT_MS) { prompt(activity, title, subtitle) } ?: false } finally { inProgress = false }
         if (ok) markUnlocked()
         return ok
     }
@@ -94,6 +96,7 @@ class ReAuth(context: Context) {
             (if (Build.VERSION.SDK_INT >= 30) BIOMETRIC_STRONG else BIOMETRIC_WEAK) or DEVICE_CREDENTIAL
         const val UNLOCK_MAX_AGE_MS: Long = 14L * 24 * 60 * 60 * 1000
         const val ADMIN_GRACE_MS: Long = 60_000
+        private const val PROMPT_TIMEOUT_MS: Long = 120_000
         private const val KEY_UNLOCKED_AT = "unlockedAt"
     }
 }

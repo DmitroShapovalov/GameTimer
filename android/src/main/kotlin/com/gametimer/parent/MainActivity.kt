@@ -140,10 +140,10 @@ private fun App(vm: MainViewModel) {
         is Identity.Ready -> if (locked) {
             LockedScreen(vm)
         } else {
-            peerAdded?.let { n ->
+            peerAdded.firstOrNull()?.let { n ->
                 AlertDialog(onDismissRequest = { vm.peerAddedShown() },
                     title = { Text(stringResource(R.string.peer_added_title)) },
-                    text = { Text(stringResource(R.string.peer_added_text, n.phoneName, n.pcName)) },
+                    text = { Text(stringResource(if (n.iAmAdmin) R.string.peer_added_text else R.string.peer_added_text_parent, n.phoneName, n.pcName)) },
                     confirmButton = { TextButton(onClick = { vm.peerAddedShown() }) { Text(stringResource(R.string.ok)) } })
             }
             var resetShown by rememberSaveable { mutableStateOf(false) }

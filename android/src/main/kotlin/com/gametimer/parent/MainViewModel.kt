@@ -17,6 +17,7 @@ import com.gametimer.protocol.hub.pair
 import com.gametimer.protocol.noise.KeyPair
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -137,11 +138,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Links stay connected only while the app is visible (no background service in this step). */
     fun setForeground(value: Boolean) {
-        if (value && reauth.needsUnlock()) _locked.value = true // §12: not unlocked for 14 days
-        // Older Android shows the PIN as its own screen: the app "stops" meanwhile, the links must not
-        if (!value && reauth.inProgress) return
+        if (value) {
+            stopSkipped?.cancel()
+            stopSkipped = null
+            if (reauth.needsUnlock()) _locked.value = true // §12: not unlocked for 14 days
+        } else if (Build.VERSION.SDK_INT < 30 && reauth.inProgress) {
+            // Android 9-10 show the PIN as a screen of their own: the app "stops" meanwhile, but the
+            // links must not. If the app doesn't come back (Home pressed there), stop them after all.
+            stopSkipped?.cancel()
+            stopSkipped = viewModelScope.launch {
+                while (reauth.inProgress) delay(500)
+                delay(1000) // the app's own onStart follows the PIN screen
+                wantForeground.trySend(false)
+            }
+            return
+        }
         wantForeground.trySend(value)
     }
+
+    private var stopSkipped: Job? = null // main thread only
 
     /** Re-authentication (§12): the app lock after 14 days, and the check before admin actions. */
     val reauth = ReAuth(app)
@@ -155,13 +170,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Another parent app was added on a PC (§12: a clear notice, it may be a child's phone). */
-    data class PeerAdded(val pcName: String, val phoneName: String)
+    data class PeerAdded(val pcName: String, val phoneName: String, val iAmAdmin: Boolean)
 
-    private val _peerAdded = MutableStateFlow<PeerAdded?>(null)
-    val peerAdded: StateFlow<PeerAdded?> = _peerAdded.asStateFlow()
+    // A queue: notices about several PCs are shown one after another, none is lost
+    private val _peerAdded = MutableStateFlow<List<PeerAdded>>(emptyList())
+    val peerAdded: StateFlow<List<PeerAdded>> = _peerAdded.asStateFlow()
 
     fun peerAddedShown() {
-        _peerAdded.value = null
+        _peerAdded.value = _peerAdded.value.drop(1)
     }
 
     private val peerJobs = HashMap<String, Job>() // main thread only
@@ -183,8 +199,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (known != null) {
                     val added = list.filter { !it.current && it.id !in known }.map { it.name }
                     if (added.isNotEmpty()) {
-                        val shown = _peerAdded.value?.takeIf { it.pcName == agent.name }?.phoneName
-                        _peerAdded.value = PeerAdded(agent.name, listOfNotNull(shown, added.joinToString(", ")).joinToString(", "))
+                        val iAmAdmin = list.firstOrNull { it.current }?.role == "admin"
+                        _peerAdded.value += PeerAdded(agent.name, added.joinToString(", "), iAmAdmin)
                     }
                 }
                 seenPeers.edit().putStringSet(agent.agentId, list.map { it.id }.toSet()).apply()

@@ -138,4 +138,5 @@
     <string name="peer_added_title">New parent app</string>
     <string name="peer_added_text">“%1$s” was added on %2$s. If you don\'t know this device, remove it on the Parents tab.</string>
     <string name="no_screen_lock">This phone has no screen lock, so anyone holding it can change the parents of this PC. Set a PIN or fingerprint in the phone\'s settings.</string>
+    <string name="peer_added_text_parent">“%1$s” was added on %2$s. If you don\'t know this device, ask an admin to remove it, or remove it on the PC.</string>
 </resources>
