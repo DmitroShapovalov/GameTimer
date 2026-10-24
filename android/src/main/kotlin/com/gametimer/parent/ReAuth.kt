@@ -3,6 +3,8 @@ package com.gametimer.parent
 import android.content.Context
 import android.os.SystemClock
 import androidx.biometric.BiometricManager
+import android.os.Build
+import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
@@ -24,7 +26,7 @@ class ReAuth(context: Context) {
     /** True when the app must be unlocked before showing anything (first start counts as unlocked). */
     fun needsUnlock(nowMillis: Long = System.currentTimeMillis()): Boolean {
         val last = prefs.getLong(KEY_UNLOCKED_AT, -1)
-        if (last < 0) { markUnlocked(nowMillis); return false }
+        if (last < 0) { prefs.edit().putLong(KEY_UNLOCKED_AT, nowMillis).apply(); return false } // not an authentication
         // A clock set back can't extend the window: "in the future" counts as expired too
         return nowMillis - last !in 0..UNLOCK_MAX_AGE_MS
     }
@@ -46,7 +48,19 @@ class ReAuth(context: Context) {
      */
     suspend fun authenticate(activity: FragmentActivity, title: String, subtitle: String): Boolean {
         if (!hasScreenLock(activity)) return true
-        val ok = suspendCancellableCoroutine { cont ->
+        if (inProgress) return false // a double tap: the prompt is already up
+        inProgress = true
+        val ok = try { prompt(activity, title, subtitle) } finally { inProgress = false }
+        if (ok) markUnlocked()
+        return ok
+    }
+
+    /** A prompt is showing (main thread). */
+    @Volatile var inProgress: Boolean = false
+        private set
+
+    private suspend fun prompt(activity: FragmentActivity, title: String, subtitle: String): Boolean =
+        suspendCancellableCoroutine { cont ->
             val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity),
                 object : BiometricPrompt.AuthenticationCallback() {
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -61,23 +75,23 @@ class ReAuth(context: Context) {
                 BiometricPrompt.PromptInfo.Builder()
                     .setTitle(title)
                     .setSubtitle(subtitle)
-                    .setAllowedAuthenticators(BIOMETRIC_WEAK or DEVICE_CREDENTIAL)
+                    .setAllowedAuthenticators(AUTHENTICATORS)
                     .build(),
             )
             cont.invokeOnCancellation { prompt.cancelAuthentication() }
         }
-        if (ok) markUnlocked()
-        return ok
-    }
 
     /** A PIN / pattern / password is set (then the prompt can always fall back to it), or a biometric is enrolled. */
     fun hasScreenLock(context: Context): Boolean {
         val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
         if (keyguard?.isDeviceSecure == true) return true
-        return BiometricManager.from(context).canAuthenticate(BIOMETRIC_WEAK or DEVICE_CREDENTIAL) == BiometricManager.BIOMETRIC_SUCCESS
+        return BiometricManager.from(context).canAuthenticate(AUTHENTICATORS) == BiometricManager.BIOMETRIC_SUCCESS
     }
 
     companion object {
+        // Class 3 ("strong") biometrics or the PIN; Android 9–10 can't combine strong with the PIN
+        private val AUTHENTICATORS =
+            (if (Build.VERSION.SDK_INT >= 30) BIOMETRIC_STRONG else BIOMETRIC_WEAK) or DEVICE_CREDENTIAL
         const val UNLOCK_MAX_AGE_MS: Long = 14L * 24 * 60 * 60 * 1000
         const val ADMIN_GRACE_MS: Long = 60_000
         private const val KEY_UNLOCKED_AT = "unlockedAt"

@@ -560,7 +560,12 @@ fun ParentsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink, onSelfRem
         is ApiResult.Conflict -> Unit
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val noScreenLock = remember { !vm.reauth.hasScreenLock(context) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // §12 relies on the phone's own lock: without one, anyone holding the phone can change the parents
+        if (iAmAdmin && noScreenLock) Text(stringResource(R.string.no_screen_lock), color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium)
         list.forEach { p ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {

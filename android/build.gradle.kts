@@ -12,7 +12,7 @@ android {
         applicationId = "com.gametimer.parent"
         minSdk = 26
         targetSdk = 36
-        // Release builds get both from the tag (release.yml): v1.7.0 → "1.7.0", 10700
+        // Release builds get both from the tag (release.yml): v1.7.0 → "1.7.0", 1070099
         versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: 1
         versionName = (findProperty("appVersionName") as String?) ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.core.ktx)
     implementation(libs.biometric)
+    implementation(libs.fragment)
 
     implementation(libs.camerax.camera2)
     implementation(libs.camerax.lifecycle)
