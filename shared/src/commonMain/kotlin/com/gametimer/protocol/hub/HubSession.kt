@@ -99,9 +99,12 @@ public class HubSession private constructor(
             val reply = CompletableDeferred<JsonObject>()
             // id, registration and send in one critical section: ids reach the agent strictly increasing (§5)
             sendLock.withLock {
-                if (closed.isCompleted) throw SessionClosedException(byeCode)
                 val id = ++nextId
-                pendingLock.withLock { pending[id] = reply }
+                pendingLock.withLock {
+                    // checked under the same lock end() clears the map with: no request can slip past it
+                    if (closed.isCompleted) throw SessionClosedException(byeCode)
+                    pending[id] = reply
+                }
                 val message = buildJsonObject {
                     put("t", type); put("id", id)
                     if (rid != null) put("rid", rid)

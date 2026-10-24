@@ -9,6 +9,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -33,13 +34,24 @@ public sealed interface LinkStatus {
 
     public data class Online(val hello: JsonObject) : LinkStatus
 
-    /** Not reachable right now; retrying with back-off. [refused]: the PC answered but closed (not accepted). */
-    public data class Offline(val refused: Boolean) : LinkStatus
+    /** Not reachable right now; retrying with back-off. */
+    public data class Offline(val reason: OfflineReason) : LinkStatus
 
     /** This phone was removed on the PC or by an admin (bye revoked): pair again. */
     public data object Revoked : LinkStatus
 
     public data object Stopped : LinkStatus
+}
+
+public enum class OfflineReason {
+    /** No connection (PC off, asleep, other network). */
+    Unreachable,
+
+    /** The PC answered but closed at once: this phone isn't (or is no longer) paired there. */
+    Refused,
+
+    /** Something answered with a different key or id: not the paired PC (§4.1). Never trusted. */
+    WrongDevice,
 }
 
 /**
@@ -107,7 +119,7 @@ public class AgentLink(
     }
 
     public suspend fun stop() {
-        job?.cancel()
+        job?.cancelAndJoin() // so the loop can't write a status after Stopped
         job = null
         session?.close()
         session = null
@@ -166,13 +178,23 @@ public class AgentLink(
     }
 
     private suspend fun runLoop() {
+        try {
+            loop()
+        } finally {
+            // Cancelled (stop() or the scope): never leave a stale Online behind
+            if (_status.value !is LinkStatus.Revoked) _status.value = LinkStatus.Stopped
+        }
+    }
+
+    private suspend fun loop() {
+        val myJob = kotlin.coroutines.coroutineContext[Job]
         var backoff = 1.seconds
         while (scope.isActive) {
             _status.value = LinkStatus.Connecting
             var bye: String? = null
             var uptime = Duration.ZERO
             try {
-                val s = HubSession.open(connector, agent, hubKey, appName, parent = job)
+                val s = HubSession.open(connector, agent, hubKey, appName, parent = myJob)
                 val openedAt = elapsedRealtimeNanos()
                 session = s
                 try {
@@ -193,15 +215,24 @@ public class AgentLink(
                 throw e
             } catch (e: SessionClosedException) {
                 bye = e.byeCode ?: "dropped"
+            } catch (e: HubProtocolException) {
+                bye = "wrong_device"
             } catch (e: Exception) {
                 bye = "unreachable"
             }
 
             if (bye == "revoked") { _status.value = LinkStatus.Revoked; return }
-            _status.value = LinkStatus.Offline(refused = bye == "not_accepted")
+            _status.value = LinkStatus.Offline(
+                when (bye) {
+                    "not_accepted" -> OfflineReason.Refused
+                    "wrong_device" -> OfflineReason.WrongDevice
+                    else -> OfflineReason.Unreachable
+                },
+            )
             // Back-off grows unless the session had been up for a while (busy / protocol_error loops don't spin)
-            backoff = if (uptime >= 30.seconds) 1.seconds else (backoff * 2).coerceAtMost(30.seconds)
+            if (uptime >= 30.seconds) backoff = 1.seconds
             delay(backoff)
+            backoff = (backoff * 2).coerceAtMost(30.seconds)
         }
     }
 }

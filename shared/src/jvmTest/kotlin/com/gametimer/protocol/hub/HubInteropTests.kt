@@ -181,19 +181,33 @@ class HubInteropTests {
         assertEquals(LinkStatus.Revoked, withTimeout(20.seconds) { b.status.first { it is LinkStatus.Revoked } })
     }
 
-    /** Lets the first socket deliver [dropAfterSends] frames, then cuts it: the reply to the last one is lost. */
+    /**
+     * The first /v2 socket delivers [dropAfterSends] frames to the agent, then swallows the next frame it
+     * receives (the reply) and closes: the request ran on the PC, the phone never learned it.
+     */
     private class DroppingConnector(private val inner: Connector, private val dropAfterSends: Int) : Connector {
         @Volatile var dropped = false
+        @Volatile var connects = 0
         override suspend fun connect(host: String, port: Int, path: String): FrameSocket {
             val socket = inner.connect(host, port, path)
+            if (path == "/v2") connects++
             if (dropped || path != "/v2") return socket
             return object : FrameSocket {
                 var sends = 0
+                @Volatile var swallowNext = false
                 override suspend fun send(frame: ByteArray) {
                     socket.send(frame)
-                    if (++sends == dropAfterSends && !dropped) { dropped = true; kotlinx.coroutines.delay(300); socket.close() }
+                    if (++sends == dropAfterSends) swallowNext = true
                 }
-                override suspend fun receive(): ByteArray? = socket.receive()
+                override suspend fun receive(): ByteArray? {
+                    while (true) {
+                        val f = socket.receive() ?: return null
+                        if (!swallowNext) return f
+                        dropped = true
+                        socket.close()
+                        return null
+                    }
+                }
                 override suspend fun close() = socket.close()
             }
         }
@@ -204,10 +218,12 @@ class HubInteropTests {
         val (key, outcome) = pairHub("Phone")
         val paired = assertIs<PairOutcome.Paired>(outcome).agent
         // msg 1, ready, then timer.start: the agent starts the timer, but the reply never arrives
-        val l = AgentLink(paired, key, DroppingConnector(connector, dropAfterSends = 3), "test", scope).also { it.start() }
+        val dropping = DroppingConnector(connector, dropAfterSends = 3)
+        val l = AgentLink(paired, key, dropping, "test", scope).also { it.start() }
         l.awaitOnline()
         // Executed twice it would answer already_running; with the same rid the stored reply comes back
         assertIs<RequestOutcome.Ok>(withTimeout(60.seconds) { l.send("timer.start", minutes(20)) })
+        assertTrue(dropping.dropped && dropping.connects >= 2, "the reply must have been lost and resent on a new session")
         assertEquals(RequestOutcome.Refused("already_running"), l.send("timer.start", minutes(20)))
     }
 
@@ -228,7 +244,7 @@ class HubInteropTests {
         val forged = real.copy(agentKey = com.gametimer.protocol.encodings.Base64Url.encode(KeyPair.generate().publicKey))
         val l = link(key, forged)
         val status = withTimeout(20.seconds) { l.status.first { it is LinkStatus.Offline } }
-        assertEquals(LinkStatus.Offline(refused = true), status) // the real agent can't answer for another key
+        assertEquals(LinkStatus.Offline(OfflineReason.Refused), status) // the real agent can't answer for another key
     }
 
     @Test
