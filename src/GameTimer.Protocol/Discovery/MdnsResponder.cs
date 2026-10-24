@@ -7,7 +7,7 @@ namespace GameTimer.Protocol.Discovery;
 /// <summary>What is announced (protocol §9): random instance and host labels, the port, the PC's LAN addresses, TXT.</summary>
 public sealed record MdnsService(string InstanceLabel, string HostLabel, int Port, IReadOnlyList<IPAddress> Addresses, IReadOnlyList<string> Txt)
 {
-    public const string ServiceType = "_gametimer._tcp.local";
+    public const string ServiceType = "_sysmon._tcp.local";
 
     /// <summary>Tags per TXT string: <c>tags=</c> + 17 × 13 characters + 16 commas = 242 ≤ 255 bytes.</summary>
     public const int TagsPerString = 17;
@@ -15,9 +15,9 @@ public sealed record MdnsService(string InstanceLabel, string HostLabel, int Por
     public string InstanceName => $"{InstanceLabel}.{ServiceType}".ToLowerInvariant();
     public string HostName => $"{HostLabel}.local".ToLowerInvariant();
 
-    /// <summary>A random label <c>gt-&lt;8 base32&gt;</c>: never the Windows computer name.</summary>
+    /// <summary>A random label <c>pc-&lt;8 base32&gt;</c>: never the Windows computer name.</summary>
     public static string RandomLabel() =>
-        "gt-" + Base32.Encode(System.Security.Cryptography.RandomNumberGenerator.GetBytes(5)).ToLowerInvariant();
+        "pc-" + Base32.Encode(System.Security.Cryptography.RandomNumberGenerator.GetBytes(5)).ToLowerInvariant();
 
     /// <summary>
     /// TXT for protocol v2: <c>v=2</c>, then the tags in groups of <see cref="TagsPerString"/>:
@@ -35,7 +35,7 @@ public sealed record MdnsService(string InstanceLabel, string HostLabel, int Por
 }
 
 /// <summary>
-/// Answers mDNS / DNS-SD queries for one <c>_gametimer._tcp</c> service (RFC 6762, RFC 6763). Pure logic,
+/// Answers mDNS / DNS-SD queries for one <c>_sysmon._tcp</c> service (RFC 6762, RFC 6763). Pure logic,
 /// testable without a network; <see cref="MdnsAdvertiser"/> puts it on the wire.
 /// </summary>
 public static class MdnsResponder

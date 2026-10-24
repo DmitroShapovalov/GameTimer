@@ -141,6 +141,58 @@ public sealed partial class AgentHost : IDisposable
         }
     }
 
+    public const int MaxKnownNetworks = 16;
+
+    /// <summary>
+    /// A hub's session started (hello sent), with its remote address; any thread. The app uses it to
+    /// remember the network (<see cref="RememberNetwork"/>).
+    /// </summary>
+    public event Action<string>? SessionStarted;
+
+    internal void RaiseSessionStarted(string remoteIp)
+    {
+        if (SessionStarted is not { } handlers) return;
+        foreach (var h in handlers.GetInvocationList().Cast<Action<string>>())
+        {
+            try { h(remoteIp); }
+            catch (Exception) { /* an app handler must not break a session, nor the other handlers */ }
+        }
+    }
+
+    /// <summary>How many networks are known (<see cref="RememberNetwork"/>).</summary>
+    public int KnownNetworkCount
+    {
+        get { lock (_lock) return _state.KnownNetworks.Count; }
+    }
+
+    /// <summary>True if a hub had a session on network <paramref name="id"/> (an id the app chose).</summary>
+    public bool IsKnownNetwork(string id)
+    {
+        lock (_lock) return _state.KnownNetworks.Contains(id);
+    }
+
+    /// <summary>
+    /// Remembers network <paramref name="id"/> (most recent last; the oldest is dropped beyond
+    /// <see cref="MaxKnownNetworks"/>). Returns true if it was new. Persists only when something changed.
+    /// </summary>
+    public bool RememberNetwork(string id)
+    {
+        if (string.IsNullOrEmpty(id) || id.Length > 128) return false;
+        bool added;
+        lock (_lock)
+        {
+            var list = _state.KnownNetworks;
+            int at = list.IndexOf(id);
+            if (at == list.Count - 1 && at >= 0) return false; // already the most recent
+            added = at < 0;
+            if (!added) list.RemoveAt(at);
+            list.Add(id);
+            while (list.Count > MaxKnownNetworks) list.RemoveAt(0);
+        }
+        Persist();
+        return added;
+    }
+
     /// <summary>Today's UTC date by this host's clock (for <see cref="DiscoveryTags"/>).</summary>
     public DateOnly UtcToday => DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
 

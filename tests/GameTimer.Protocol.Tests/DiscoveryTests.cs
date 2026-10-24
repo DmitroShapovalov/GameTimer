@@ -3,9 +3,11 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using GameTimer.Protocol.Agent;
 using GameTimer.Protocol.Discovery;
 using GameTimer.Protocol.Encodings;
 using GameTimer.Protocol.Identity;
+using GameTimer.Protocol.Noise;
 using GameTimer.Protocol.Tests.Agent;
 using Xunit;
 
@@ -15,7 +17,7 @@ namespace GameTimer.Protocol.Tests;
 public class DiscoveryTests
 {
     private static readonly MdnsService Service = new(
-        "gt-abcdefgh", "gt-ijklmnop", 5123,
+        "pc-abcdefgh", "pc-ijklmnop", 5123,
         new[] { IPAddress.Parse("192.168.1.10") },
         MdnsService.TxtFor(new[] { "LUUJIIXZF3BDE", "SFFYZQOCUF7IU" }));
 
@@ -50,6 +52,46 @@ public class DiscoveryTests
     }
 
     [Fact]
+    public void Known_networks_are_kept_most_recent_last_capped_and_persisted()
+    {
+        using var f = new AgentFixture();
+        Assert.False(f.Host.IsKnownNetwork("A"));
+        Assert.True(f.Host.RememberNetwork("A"));
+        Assert.False(f.Host.RememberNetwork("A")); // already known
+        Assert.True(f.Host.IsKnownNetwork("A"));
+        for (int i = 0; i < AgentHost.MaxKnownNetworks; i++) f.Host.RememberNetwork("N" + i);
+        Assert.False(f.Host.IsKnownNetwork("A")); // the oldest is dropped
+        f.Host.RememberNetwork("N0"); // used again: now the most recent
+        f.Host.RememberNetwork("X");
+        Assert.True(f.Host.IsKnownNetwork("N0"));
+        Assert.False(f.Host.IsKnownNetwork("N1"));
+        Assert.Equal(AgentHost.MaxKnownNetworks, f.Store.State!.KnownNetworks.Count);
+        Assert.Equal("X", f.Store.State.KnownNetworks[^1]);
+        Assert.False(f.Host.RememberNetwork(""));
+        Assert.False(f.Host.RememberNetwork(new string('x', 129)));
+    }
+
+    [Fact]
+    public async Task Session_start_is_reported_with_the_remote_address()
+    {
+        using var f = new AgentFixture();
+        var (key, _) = await f.PairAsync();
+        var started = new TaskCompletionSource<string>();
+        int calls = 0;
+        f.Host.SessionStarted += _ => throw new InvalidOperationException("a broken app handler");
+        f.Host.SessionStarted += ip => { Interlocked.Increment(ref calls); started.TrySetResult(ip); };
+        var (hub, _) = await TestHub.ConnectAsync(f.Host, key, ip: "192.168.1.33");
+        Assert.Equal("192.168.1.33", await started.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        // The throwing handler broke neither the other handler nor the session
+        var state = await hub.RequestAsync("state.get");
+        Assert.Equal("result", state.GetProperty("t").GetString());
+        // A hub this agent doesn't know never gets that far
+        await TestHub.HandshakeAsync(f.Host, KeyPair.Generate(), pairing: false);
+        await Task.Delay(200);
+        Assert.Equal(1, Volatile.Read(ref calls));
+    }
+
+    [Fact]
     public void Txt_splits_many_tags_into_strings_that_fit()
     {
         var tags = Enumerable.Range(0, 40).Select(i => $"TAG{i:D10}").ToList();
@@ -67,28 +109,28 @@ public class DiscoveryTests
     public void Random_labels_are_random_and_not_the_machine_name()
     {
         var a = MdnsService.RandomLabel();
-        Assert.Matches("^gt-[a-z2-7]{8}$", a);
+        Assert.Matches("^pc-[a-z2-7]{8}$", a);
         Assert.NotEqual(a, MdnsService.RandomLabel());
     }
 
     [Fact]
     public void Ptr_query_gets_ptr_with_srv_txt_and_address()
     {
-        var reply = Parse(MdnsResponder.Respond(Service, Query(1234, ("_gametimer._tcp.local", 12, false)), legacyUnicast: false)!);
+        var reply = Parse(MdnsResponder.Respond(Service, Query(1234, ("_sysmon._tcp.local", 12, false)), legacyUnicast: false)!);
         Assert.Equal(0, reply.Id);
         Assert.Empty(reply.Questions);
         var ptr = Assert.Single(reply.Answers);
-        Assert.Equal(("_gametimer._tcp.local", (ushort)12), (ptr.Name, ptr.Type));
-        Assert.Equal("gt-abcdefgh._gametimer._tcp.local", ptr.Target);
+        Assert.Equal(("_sysmon._tcp.local", (ushort)12), (ptr.Name, ptr.Type));
+        Assert.Equal("pc-abcdefgh._sysmon._tcp.local", ptr.Target);
         Assert.False(ptr.CacheFlush);
         var srv = reply.Additional.Single(r => r.Type == 33);
         Assert.Equal(5123, srv.Port);
-        Assert.Equal("gt-ijklmnop.local", srv.Target);
+        Assert.Equal("pc-ijklmnop.local", srv.Target);
         Assert.True(srv.CacheFlush);
         var txt = reply.Additional.Single(r => r.Type == 16);
         Assert.Equal(new[] { "v=2", "tags=LUUJIIXZF3BDE,SFFYZQOCUF7IU" }, txt.Strings);
         var a = reply.Additional.Single(r => r.Type == 1);
-        Assert.Equal("gt-ijklmnop.local", a.Name);
+        Assert.Equal("pc-ijklmnop.local", a.Name);
         Assert.Equal("192.168.1.10", a.Address);
         Assert.All(reply.Answers.Concat(reply.Additional), r => Assert.True(r.Ttl > 0));
     }
@@ -97,18 +139,18 @@ public class DiscoveryTests
     public void Srv_txt_and_a_queries_are_answered_names_case_insensitively()
     {
         var reply = Parse(MdnsResponder.Respond(Service, Query(1,
-            ("GT-ABCDEFGH._gametimer._tcp.local", 33, false),
-            ("gt-abcdefgh._gametimer._tcp.local", 16, false),
-            ("gt-ijklmnop.local", 1, false)), false)!);
+            ("PC-ABCDEFGH._sysmon._tcp.local", 33, false),
+            ("pc-abcdefgh._sysmon._tcp.local", 16, false),
+            ("pc-ijklmnop.local", 1, false)), false)!);
         Assert.Equal(new ushort[] { 33, 16, 1 }, reply.Answers.Select(r => r.Type));
         Assert.Empty(reply.Additional); // the A record is already an answer
     }
 
     [Theory]
     [InlineData("_other._tcp.local", 12)]
-    [InlineData("_gametimer._tcp.local", 1)]
-    [InlineData("gt-zzzzzzzz._gametimer._tcp.local", 33)]
-    [InlineData("gt-ijklmnop.local", 28)]
+    [InlineData("_sysmon._tcp.local", 1)]
+    [InlineData("pc-zzzzzzzz._sysmon._tcp.local", 33)]
+    [InlineData("pc-ijklmnop.local", 28)]
     public void Unrelated_queries_get_no_reply(string name, ushort type) =>
         Assert.Null(MdnsResponder.Respond(Service, Query(1, (name, type, false)), false));
 
@@ -118,7 +160,7 @@ public class DiscoveryTests
         var response = MdnsResponder.Announcement(Service);
         Assert.Null(MdnsResponder.Respond(Service, response, false));
         Assert.Null(MdnsResponder.Respond(Service, new byte[5], false));
-        var q = Query(1, ("_gametimer._tcp.local", 12, false));
+        var q = Query(1, ("_sysmon._tcp.local", 12, false));
         Assert.Null(MdnsResponder.Respond(Service, q.AsSpan(0, q.Length - 3), false));
         // A name that points at itself (forward / self pointers are refused)
         var loop = new byte[] { 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0xC0, 12, 0, 12, 0, 1 };
@@ -130,7 +172,7 @@ public class DiscoveryTests
     {
         // PTR for our type + a question whose 63-byte label is not UTF-8 (U+FFFD would make it 189 bytes)
         var w = new List<byte> { 0, 9, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0 };
-        w.AddRange(Name("_gametimer._tcp.local")); w.AddRange(new byte[] { 0, 12, 0, 1 });
+        w.AddRange(Name("_sysmon._tcp.local")); w.AddRange(new byte[] { 0, 12, 0, 1 });
         w.Add(63); w.AddRange(Enumerable.Repeat((byte)0xFF, 63)); w.Add(0); w.AddRange(new byte[] { 0, 12, 0, 1 });
         var packet = w.ToArray();
         Assert.Null(MdnsResponder.Respond(Service, packet, legacyUnicast: true)); // the whole query is malformed
@@ -140,13 +182,13 @@ public class DiscoveryTests
     [Fact]
     public void Pointer_chains_longer_than_16_are_refused()
     {
-        // Question k (k = 1..n) is "a" + a pointer to question k-1; question 0 is "_gametimer._tcp.local".
+        // Question k (k = 1..n) is "a" + a pointer to question k-1; question 0 is "_sysmon._tcp.local".
         // The last name then needs n jumps to resolve.
         byte[] Chain(int n)
         {
             var w = new List<byte> { 0, 0, 0, 0, 0, (byte)(n + 1), 0, 0, 0, 0, 0, 0 };
             var starts = new List<int> { w.Count };
-            w.AddRange(Name("_gametimer._tcp.local")); w.AddRange(new byte[] { 0, 12, 0, 1 });
+            w.AddRange(Name("_sysmon._tcp.local")); w.AddRange(new byte[] { 0, 12, 0, 1 });
             for (int k = 1; k <= n; k++)
             {
                 starts.Add(w.Count);
@@ -163,10 +205,10 @@ public class DiscoveryTests
     [Fact]
     public void Compressed_question_names_are_understood()
     {
-        // Q1: _gametimer._tcp.local PTR; Q2: gt-abcdefgh + pointer to Q1's name, SRV
+        // Q1: _sysmon._tcp.local PTR; Q2: pc-abcdefgh + pointer to Q1's name, SRV
         var w = new List<byte> { 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0 };
-        w.AddRange(Name("_gametimer._tcp.local")); w.AddRange(new byte[] { 0, 12, 0, 1 });
-        w.Add(11); w.AddRange(Encoding.ASCII.GetBytes("gt-abcdefgh")); w.AddRange(new byte[] { 0xC0, 12 });
+        w.AddRange(Name("_sysmon._tcp.local")); w.AddRange(new byte[] { 0, 12, 0, 1 });
+        w.Add(11); w.AddRange(Encoding.ASCII.GetBytes("pc-abcdefgh")); w.AddRange(new byte[] { 0xC0, 12 });
         w.AddRange(new byte[] { 0, 33, 0, 1 });
         var reply = Parse(MdnsResponder.Respond(Service, w.ToArray(), false)!);
         Assert.Equal(new ushort[] { 12, 33 }, reply.Answers.Select(r => r.Type));
@@ -175,24 +217,24 @@ public class DiscoveryTests
     [Fact]
     public void Legacy_unicast_echoes_id_and_question_with_short_ttls()
     {
-        var reply = Parse(MdnsResponder.Respond(Service, Query(4321, ("_gametimer._tcp.local", 12, false)), legacyUnicast: true)!);
+        var reply = Parse(MdnsResponder.Respond(Service, Query(4321, ("_sysmon._tcp.local", 12, false)), legacyUnicast: true)!);
         Assert.Equal(4321, reply.Id);
-        Assert.Equal("_gametimer._tcp.local", Assert.Single(reply.Questions));
+        Assert.Equal("_sysmon._tcp.local", Assert.Single(reply.Questions));
         Assert.All(reply.Answers.Concat(reply.Additional), r => { Assert.True(r.Ttl <= 10); Assert.False(r.CacheFlush); });
     }
 
     [Fact]
     public void Qu_questions_are_reported_as_unicast()
     {
-        Assert.True(MdnsResponder.Answer(Service, Query(0, ("_gametimer._tcp.local", 12, true)), false)!.Value.AllUnicast);
-        Assert.False(MdnsResponder.Answer(Service, Query(0, ("_gametimer._tcp.local", 12, false)), false)!.Value.AllUnicast);
+        Assert.True(MdnsResponder.Answer(Service, Query(0, ("_sysmon._tcp.local", 12, true)), false)!.Value.AllUnicast);
+        Assert.False(MdnsResponder.Answer(Service, Query(0, ("_sysmon._tcp.local", 12, false)), false)!.Value.AllUnicast);
     }
 
     [Fact]
     public void Services_enumeration_lists_the_type()
     {
         var reply = Parse(MdnsResponder.Respond(Service, Query(0, ("_services._dns-sd._udp.local", 12, false)), false)!);
-        Assert.Equal("_gametimer._tcp.local", Assert.Single(reply.Answers).Target);
+        Assert.Equal("_sysmon._tcp.local", Assert.Single(reply.Answers).Target);
     }
 
     [Fact]
@@ -234,7 +276,7 @@ public class DiscoveryTests
         // (on Windows maybe the system's own responder); multicast reaches all of them
         client.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, local.GetAddressBytes());
         client.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastLoopback, true);
-        var query = Query(777, ("_gametimer._tcp.local", 12, false));
+        var query = Query(777, ("_sysmon._tcp.local", 12, false));
         for (int attempt = 0; attempt < 20; attempt++)
         {
             lock (log) if (log.Any(l => l.Contains("cannot"))) return; // no socket here: nothing to test
@@ -247,7 +289,7 @@ public class DiscoveryTests
                     var got = await client.ReceiveAsync(cts.Token);
                     var reply = Parse(got.Buffer);
                     if (reply.Id != 777) continue;
-                    Assert.Equal("gt-abcdefgh._gametimer._tcp.local", reply.Answers.Single().Target);
+                    Assert.Equal("pc-abcdefgh._sysmon._tcp.local", reply.Answers.Single().Target);
                     return;
                 }
             }

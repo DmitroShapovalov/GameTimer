@@ -114,6 +114,7 @@ public sealed partial class AgentHost
                 return;
             }
             session.SendHello(hello);
+            RaiseSessionStarted(ip);
             await ReceiveLoopAsync(session, transport, recv, cancel).ConfigureAwait(false);
         }
         finally
