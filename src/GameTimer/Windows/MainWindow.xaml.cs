@@ -19,6 +19,7 @@ public partial class MainWindow : FluentWindow
     private readonly DeviceStore _devices;
     private readonly PairingService _pairing;
     private readonly SessionLog _sessionLog;
+    private readonly GameTimer.Services.V2.WindowsPairingUi _pairingUi;
     private bool _isRemoteBusy;
     private bool? _firewallOk; // null = not checked yet
     private bool _isTamperBusy;
@@ -51,7 +52,8 @@ public partial class MainWindow : FluentWindow
     private static readonly int[] ScheduleDayOrder = { 1, 2, 3, 4, 5, 6, 0 };
 
     public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer,
-        RemoteServer remote, DeviceStore devices, PairingService pairing, SessionLog sessionLog)
+        RemoteServer remote, DeviceStore devices, PairingService pairing, SessionLog sessionLog,
+        GameTimer.Services.V2.WindowsPairingUi pairingUi)
     {
         InitializeComponent();
         _settingsService = settingsService;
@@ -70,6 +72,9 @@ public partial class MainWindow : FluentWindow
         _sessionLog = sessionLog;
         _sessionLog.Changed += () => Dispatcher.BeginInvoke(RefreshHistory);
         _devices.Changed += RefreshDevicesList;
+        _pairingUi = pairingUi;
+        _pairingUi.AskForCode = AskPairingCodeAsync;
+        _remote.Agent.PeersChanged += () => Dispatcher.BeginInvoke(RefreshDevicesList);
         _settingsService.SettingsChanged += OnSettingsChanged;
 
         LoadSettingsToUI();
@@ -173,11 +178,7 @@ public partial class MainWindow : FluentWindow
     }
 
     // From <Version> (CI passes the tag: -p:Version=1.2.0); drop the "+commit" suffix the SDK appends
-    private static string AppVersion =>
-        (typeof(MainWindow).Assembly
-             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
-             .FirstOrDefault() as System.Reflection.AssemblyInformationalVersionAttribute)?
-        .InformationalVersion.Split('+')[0] ?? "?";
+    private static string AppVersion => AppInfo.Version;
 
     private void RefreshAlertsList()
     {
@@ -627,6 +628,7 @@ public partial class MainWindow : FluentWindow
             GameTimer.Models.SessionEventType.Resumed => Loc.Get("Ev_Resumed"),
             GameTimer.Models.SessionEventType.Closed => Loc.Get("Ev_Closed"),
             GameTimer.Models.SessionEventType.Tampered => Loc.Get("Ev_Tampered"),
+            GameTimer.Models.SessionEventType.Updated => Loc.Get("Ev_Updated"),
             _ => e.Type.ToString()
         };
         string who = e.Source switch
@@ -1046,7 +1048,41 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        new ConnectPhoneDialog(_pairing, address.ToString(), port) { Owner = this }.ShowDialog();
+        new ConnectPhoneDialog(_pairing, _remote.Agent, _pairingUi, address.ToString(), port) { Owner = this }.ShowDialog();
+    }
+
+    /// <summary>Protocol v2 pairing: the owner types the phone's 6-digit code, then Windows Hello (§8.2).</summary>
+    private Task<string?> AskPairingCodeAsync(string hubName, CancellationToken cancel)
+    {
+        Window owner = OwnedWindows.OfType<ConnectPhoneDialog>().FirstOrDefault() ?? (Window)this;
+        PairingCodeDialog? dialog = null;
+        dialog = new PairingCodeDialog(hubName, () => RequireAuth(owner: dialog)) { Owner = owner };
+        var registration = cancel.Register(() => Dispatcher.BeginInvoke(dialog.Close));
+        dialog.Closed += (_, _) => registration.Dispose();
+        dialog.Show();
+        dialog.Activate();
+        return dialog.Result;
+    }
+
+    private async void RevokePeer_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: PeerItem peer }) return;
+        if (!await RequireAuth()) return;
+        _remote.Agent.RevokeByOwner(peer.Id); // closes its sessions at once (bye revoked)
+    }
+
+    private async void TogglePeerRole_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: PeerItem peer }) return;
+        if (!await RequireAuth()) return;
+        _remote.Agent.SetRoleByOwner(peer.Id,
+            peer.IsAdmin ? GameTimer.Protocol.Agent.PeerRole.Parent : GameTimer.Protocol.Agent.PeerRole.Admin);
+    }
+
+    /// <summary>A paired v2 parent app, as the Settings list shows it.</summary>
+    public sealed record PeerItem(string Id, string Name, string Subtitle, bool IsAdmin, string RoleButtonTip)
+    {
+        public string RevokeTip => Loc.Get("Delete");
     }
 
     private async void RevokeDevice_Click(object sender, RoutedEventArgs e)
@@ -1060,7 +1096,17 @@ public partial class MainWindow : FluentWindow
     {
         DevicesList.ItemsSource = null;
         DevicesList.ItemsSource = _devices.Devices;
-        NoDevicesText.Visibility = _devices.Devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        var peers = _remote.Agent.Peers.Select(p =>
+        {
+            bool admin = p.Role == GameTimer.Protocol.Agent.PeerRole.Admin;
+            var role = Loc.Get(admin ? "PeerRole_Admin" : "PeerRole_Parent");
+            var seen = p.LastSeen is { } t ? " · " + string.Format(Loc.Get("Device_LastSeen"), t.ToLocalTime().ToString("g")) : "";
+            return new PeerItem(p.Id, p.Name, string.Format(Loc.Get("Peer_App"), role) + seen, admin,
+                Loc.Get(admin ? "Peer_MakeParent" : "Peer_MakeAdmin"));
+        }).ToList();
+        PeersList.ItemsSource = peers;
+        NoDevicesText.Visibility = _devices.Devices.Count == 0 && peers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void UpdateRemoteStatus()
@@ -1145,19 +1191,65 @@ public partial class MainWindow : FluentWindow
         FocusTimeInput();
     }
 
+    // Exiting needs the parent while the app is enforcing something: a running timer or the daily schedule
+    private bool ExitNeedsAuth => _timer.IsRunning || _settings.ScheduleEnabled;
+
     private async void TrayExit()
     {
-        if (_timer.IsRunning)
-        {
-            if (!await RequireAuth()) return;
-            _timer.Stop();
-        }
+        if (ExitNeedsAuth && !await RequireAuth()) return;
+        if (_timer.IsRunning) _timer.Stop();
+        CloseApp();
+    }
 
+    private bool _setupExitPending;
+
+    /// <summary>
+    /// The installer or uninstaller asked the app to close (named events, see App / SetupSignals). Same
+    /// gate as the tray exit — a child sending the signal can't close the app without the parent.
+    /// Update: a running timer is kept, saved and resumed by the new version.
+    /// Uninstall: a running timer is stopped and its saved state cleared, so a later reinstall doesn't
+    /// start with an "expired" timer and lock the PC.
+    /// </summary>
+    public async void ExitForSetup(bool uninstall)
+    {
+        if (_setupExitPending) return;
+        _setupExitPending = true;
+        try
+        {
+            BringToFront();
+            bool asked = ExitNeedsAuth;
+            if (asked && !await RequireAuth(uninstall ? "AuthPrompt_Uninstall" : "AuthPrompt_Update"))
+                return; // Setup offers Retry
+            if (!SetupSignals.SetupIsWaiting())
+            {
+                // Setup gave up while the prompt was open, or the signal didn't come from Setup at all
+                DiagnosticLog.Write("setup exit ignored: no installer is waiting");
+                return;
+            }
+            if (uninstall)
+            {
+                if (_timer.IsRunning) _timer.Stop();
+            }
+            else
+            {
+                _timer.PrepareForUpdate(parentConfirmed: asked);
+            }
+            CloseApp();
+        }
+        finally
+        {
+            _setupExitPending = false;
+        }
+    }
+
+    private void CloseApp()
+    {
         HideOverlay();
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
+            _trayIcon = null;
         }
         System.Windows.Application.Current.Shutdown();
     }
@@ -1423,7 +1515,7 @@ public partial class MainWindow : FluentWindow
 
     #region Authentication
 
-    private async Task<bool> RequireAuth()
+    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt", Window? owner = null)
     {
         try
         {
@@ -1431,13 +1523,13 @@ public partial class MainWindow : FluentWindow
             if (availability == global::Windows.Security.Credentials.UI.UserConsentVerifierAvailability.Available)
             {
                 var result = await global::Windows.Security.Credentials.UI.UserConsentVerifier.RequestVerificationAsync(
-                    Loc.Get("AuthPrompt"));
+                    Loc.Get(promptKey));
                 return result == global::Windows.Security.Credentials.UI.UserConsentVerificationResult.Verified;
             }
         }
         catch { }
 
-        var dialog = new PasswordDialog { Owner = this };
+        var dialog = new PasswordDialog { Owner = owner ?? this };
         return dialog.ShowDialog() == true;
     }
 

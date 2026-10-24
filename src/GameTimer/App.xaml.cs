@@ -9,13 +9,14 @@ namespace GameTimer;
 
 public partial class App : System.Windows.Application
 {
-    // "Local\" = per Windows session, so different users on one PC don't block each other
-    private const string MutexName = @"Local\SystemMonitor_7F3A2C1E_Instance";
-    private const string ShowEventName = @"Local\SystemMonitor_7F3A2C1E_Show";
+    // Names are shared with the installer: see SetupSignals ("Local\" = per Windows session)
+    private const string MutexName = SetupSignals.InstanceMutex;
+    private const string ShowEventName = SetupSignals.ShowEvent;
 
     // Kept as fields so the GC never releases them while the app runs
     private Mutex? _instanceMutex;
     private EventWaitHandle? _showEvent;
+    private readonly List<EventWaitHandle> _setupEvents = new();
 
     private RemoteServer? _remoteServer;
 
@@ -83,9 +84,31 @@ public partial class App : System.Windows.Application
         var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
         var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
         var pairing = new PairingService();
-        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService, sessionLog);
+        // Protocol v2 (native parent app): identity + paired apps in a DPAPI file; pairing asks the owner here
+        var pairingUi = new GameTimer.Services.V2.WindowsPairingUi(ui);
+        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService, sessionLog,
+            new GameTimer.Services.V2.AgentFileStore(), pairingUi);
 
-        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing, sessionLog);
+        var agentId = _remoteServer.Agent.AgentId;
+        if (_remoteServer.Agent.InitialSaveError is { } saveError)
+            DiagnosticLog.Write("v2 identity not saved: " + saveError.Message); // not remembered: no false tamper report next run
+        else if (settings.V2AgentId != agentId)
+        {
+            if (settings.V2AgentId != null)
+            {
+                DiagnosticLog.Write($"v2 identity changed ({settings.V2AgentId} → {agentId}): remote-v2.json lost or replaced");
+                sessionLog.Add(new GameTimer.Models.SessionEvent
+                {
+                    Time = DateTimeOffset.Now,
+                    Type = GameTimer.Models.SessionEventType.Tampered,
+                    Source = GameTimer.Models.ActionSource.System
+                });
+            }
+            settings.V2AgentId = agentId;
+            settingsService.Save(settings);
+        }
+
+        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing, sessionLog, pairingUi);
         MainWindow = mainWindow;
         mainWindow.Show();
 
@@ -131,6 +154,32 @@ public partial class App : System.Windows.Application
         })
         { IsBackground = true, Name = "SingleInstanceListener" };
         listener.Start();
+
+        // Installer listeners: close for an update / uninstall once the parent confirms (MainWindow.ExitForSetup)
+        ListenForSetup(SetupSignals.UpdateEvent, () => mainWindow.ExitForSetup(uninstall: false));
+        ListenForSetup(SetupSignals.UninstallEvent, () => mainWindow.ExitForSetup(uninstall: true));
+    }
+
+    private void ListenForSetup(string eventName, Action onSignal)
+    {
+        try
+        {
+            // Create-or-open. If something else squatted the name (other object type, hostile DACL) this
+            // throws: then updates fall back to "exit from the tray" — never a crash.
+            var signal = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
+            _setupEvents.Add(signal);
+            var thread = new Thread(() =>
+            {
+                while (signal.WaitOne())
+                    Dispatcher.BeginInvoke(onSignal);
+            })
+            { IsBackground = true, Name = "SetupListener" };
+            thread.Start();
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write($"setup listener {eventName} unavailable: {ex.Message}");
+        }
     }
 
     protected override void OnExit(System.Windows.ExitEventArgs e)
@@ -146,11 +195,9 @@ public partial class App : System.Windows.Application
             DiagnosticLog.Write("server stop on exit failed: " + ex);
         }
 
-        if (_instanceMutex != null)
-        {
-            _instanceMutex.ReleaseMutex();
-            _instanceMutex.Dispose();
-        }
+        // The instance mutex is deliberately NOT released here: Windows releases it when the process is
+        // torn down, together with unmapping the exe. Setup waits for the mutex to disappear before
+        // replacing files, so releasing it early would let Setup hit a still-locked exe ("file in use").
         base.OnExit(e);
     }
 }

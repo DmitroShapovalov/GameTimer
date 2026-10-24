@@ -383,4 +383,46 @@
   <data name="Ev_Tampered" xml:space="preserve">
     <value>Виявлено підміну — відновлено</value>
   </data>
+  <data name="Ev_Updated" xml:space="preserve">
+    <value>Закрито для оновлення</value>
+  </data>
+  <data name="AuthPrompt_Update" xml:space="preserve">
+    <value>GameTimer: підтвердьте закриття для оновлення</value>
+  </data>
+  <data name="AuthPrompt_Uninstall" xml:space="preserve">
+    <value>GameTimer: підтвердьте закриття для видалення</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Скасувати</value>
+  </data>
+  <data name="PairCode_Title" xml:space="preserve">
+    <value>Підтвердження телефона</value>
+  </data>
+  <data name="PairCode_Prompt" xml:space="preserve">
+    <value>«{0}» хоче підключитися. Введіть код, показаний на телефоні.</value>
+  </data>
+  <data name="PairCode_Hint" xml:space="preserve">
+    <value>Підтверджуйте лише телефон, який тримаєте в руках. Неправильний код скасовує підключення.</value>
+  </data>
+  <data name="PairCode_Confirm" xml:space="preserve">
+    <value>Підключити</value>
+  </data>
+  <data name="ConnectPhone_TwoPhones" xml:space="preserve">
+    <value>З цим кодом намагалися підключитися два телефони — можливо, його сфотографували. Закрийте вікно й почніть знову.</value>
+  </data>
+  <data name="Peer_App" xml:space="preserve">
+    <value>Застосунок батьків · {0}</value>
+  </data>
+  <data name="PeerRole_Admin" xml:space="preserve">
+    <value>адмін</value>
+  </data>
+  <data name="PeerRole_Parent" xml:space="preserve">
+    <value>батьки</value>
+  </data>
+  <data name="Peer_MakeAdmin" xml:space="preserve">
+    <value>Зробити адміном</value>
+  </data>
+  <data name="Peer_MakeParent" xml:space="preserve">
+    <value>Зробити батьками (не адміном)</value>
+  </data>
 </root>

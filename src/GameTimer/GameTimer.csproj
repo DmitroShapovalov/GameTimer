@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>SystemMonitor</AssemblyName>
     <!-- Local builds; CI overrides it from the tag (-p:Version=x.y.z) -->
-    <Version>1.6.0</Version>
+    <Version>1.6.1</Version>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
@@ -21,6 +21,11 @@
     <Using Remove="System.Drawing" />
     <Using Include="System.Windows" />
     <Using Include="System.Windows.Input" />
+  </ItemGroup>
+
+  <!-- Protocol v2 core (Noise, agent host): docs/protocol.md -->
+  <ItemGroup>
+    <ProjectReference Include="..\GameTimer.Protocol\GameTimer.Protocol.csproj" />
   </ItemGroup>
 
   <ItemGroup>

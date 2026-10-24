@@ -25,6 +25,9 @@ public sealed class SessionLog
     /// <summary>Raised after an event is recorded, so the UI can refresh.</summary>
     public event Action? Changed;
 
+    /// <summary>Raised with the event itself after it was recorded (UI thread).</summary>
+    public event Action<SessionEvent>? Added;
+
     public void Add(SessionEvent e)
     {
         try
@@ -42,6 +45,7 @@ public sealed class SessionLog
         {
             // History is non-critical
         }
+        Added?.Invoke(e);
         Changed?.Invoke();
     }
 

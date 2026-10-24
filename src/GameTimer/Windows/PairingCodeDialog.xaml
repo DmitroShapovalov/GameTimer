@@ -1,0 +1,33 @@
+<ui:FluentWindow x:Class="GameTimer.Windows.PairingCodeDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="Confirm phone"
+        Width="380" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ExtendsContentIntoTitleBar="True">
+
+    <StackPanel>
+        <ui:TitleBar x:Name="DialogTitleBar" Title="Confirm phone" ShowMaximize="False" ShowMinimize="False"/>
+
+        <StackPanel Margin="16,0,16,16">
+            <TextBlock x:Name="PromptText" TextWrapping="Wrap" FontSize="13" Margin="0,0,0,12"
+                       Text="'Phone' wants to connect. Enter the code shown on your phone."/>
+
+            <ui:TextBox x:Name="CodeBox" MaxLength="6" FontSize="24" HorizontalContentAlignment="Center"
+                        InputScope="Number" PreviewTextInput="CodeBox_PreviewTextInput"
+                        TextChanged="CodeBox_TextChanged"/>
+
+            <TextBlock x:Name="HintText" TextWrapping="Wrap" FontSize="12" Margin="0,8,0,12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="Only confirm a phone you are holding yourself."/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <ui:Button x:Name="ConfirmButton" Content="Connect" Appearance="Primary" Width="110" Margin="0,0,8,0"
+                           IsEnabled="False" IsDefault="True" Click="Confirm_Click"/>
+                <ui:Button x:Name="CancelButton" Content="Cancel" Width="100" IsCancel="True" Click="Cancel_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</ui:FluentWindow>

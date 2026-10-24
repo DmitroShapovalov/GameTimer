@@ -1,16 +1,23 @@
 name: Build & Release
 
+# Every pull request and manual run builds the installer and attaches it as an artifact, so it can be
+# tested on a real PC before release (and a broken setup.iss is caught before a tag is pushed).
+# Tags (v*) additionally publish a GitHub Release — in a separate job, the only one with write access.
 on:
   push:
     tags:
       - 'v*'
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -20,23 +27,45 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Publish
+      - name: Version
+        id: ver
+        shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}" -replace '^v',''
-          dotnet publish src/GameTimer/GameTimer.csproj -c Release -r win-x64 --self-contained -o publish -p:Version=$version
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}" -replace '^v','' }
+          else { $v = "0.0.0-ci.${{ github.run_number }}" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Publish
+        run: dotnet publish src/GameTimer/GameTimer.csproj -c Release -r win-x64 --self-contained -o publish -p:Version=${{ steps.ver.outputs.version }}
 
       - name: Install Inno Setup
         run: choco install innosetup -y
 
       - name: Build Installer
-        run: |
-          $version = "${{ github.ref_name }}" -replace '^v',''
-          iscc installer/setup.iss /DAppVersion=$version
+        run: iscc installer/setup.iss /DAppVersion=${{ steps.ver.outputs.version }}
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameTimerSetup-${{ steps.ver.outputs.version }}
+          path: installer/Output/GameTimerSetup.exe
+          retention-days: 14
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GameTimerSetup-${{ needs.build.outputs.version }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/Output/GameTimerSetup.exe
+          files: GameTimerSetup.exe
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

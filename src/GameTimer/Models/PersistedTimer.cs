@@ -26,4 +26,16 @@ public sealed class PersistedTimer
 
     /// <summary>Alert points already played, so they are not repeated after a resume.</summary>
     public int[] FiredAlerts { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Saved by a parent-confirmed exit for an update / uninstall: the next start resumes the timer
+    /// without reporting an unclean close.
+    /// </summary>
+    public bool ClosedForUpdate { get; set; }
+
+    /// <summary>Version that wrote this state. An update exit counts as clean only if the next start is a different version.</summary>
+    public string? AppVersion { get; set; }
+
+    /// <summary>A "closed at HH:MM" notice the parent hasn't acknowledged yet, carried across restarts.</summary>
+    public DateTimeOffset? PendingInterruption { get; set; }
 }

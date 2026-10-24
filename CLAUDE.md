@@ -52,6 +52,10 @@ src/GameTimer/
     RemoteServer.cs        Embedded Kestrel for the phone remote: LAN filter, rate limits, bearer auth, pairing, devices
     RemoteServer.Api.cs    Timer and settings endpoints, DTOs, validation (partial class)
     RemoteServer.Events.cs /ws endpoint: first-message auth, event subscriptions → broadcasts (partial class)
+    RemoteServer.V2.cs     Protocol v2: /v2 + /v2/pair (Origin → 403, slots → 503) into AgentHost; V2Backend maps
+                           requests to TimerController / settings (rev, ifRev); v2 events from the Events.cs handlers
+    V2/AgentFileStore.cs   v2 state (PC key pair, paired parent apps, rid cache) in DPAPI file remote-v2.json
+    V2/WindowsPairingUi.cs IPairingUi: asks the owner for the phone's 6-digit code (PairingCodeDialog + Windows Hello)
     WebSocketHub.cs        Open sockets: per-connection outbox + send loop, broadcast, disconnect, graceful close
     NetworkFilter.cs       Allows only loopback / private LAN remote addresses; finds the PC's LAN IP for the QR
     DeviceStore.cs         Paired devices: Add/Revoke on UI thread, thread-safe token lookup (snapshot)
@@ -73,7 +77,9 @@ src/GameTimer/
     MainWindow             FluentWindow, 4 tabs (Timer, Display, Notifications, Settings), tray, keyboard
     OverlayWindow          Countdown overlay, color zones, pulse animation
     PasswordDialog         Fallback when Windows Hello is unavailable
-    ConnectPhoneDialog     QR code with the one-time pairing link, countdown, "connected" state
+    ConnectPhoneDialog     QR code with the one-time pairing link (v1 code in the query, v2 secret in the #fragment),
+                           countdown, "connected" state, "two phones" warning
+    PairingCodeDialog      v2 pairing: owner types the code the phone shows, then Windows Hello
   Remote/                  Phone UI (plain HTML/CSS/JS, no build step), embedded by LogicalName ("Remote/app.js"):
                            index.html, app.js (EN/RU strings inside), app.css, manifest.webmanifest, icons
 installer/setup.iss        Inno Setup script (per-user install, optional autostart)
@@ -81,8 +87,42 @@ docs/remote-api.http       Every phone API request and WebSocket message, with e
 docs/ws-watch.ps1          PowerShell: pair with a code and print /ws events with timestamps
 docs/SECURITY.md           Threat model of the phone remote, residual risks, dependencies
 docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API and /ws events on the real PC (PASS/FAIL)
-.github/workflows/release.yml   On tag v*: publish + build installer + GitHub Release
+.github/workflows/release.yml   PRs: build installer artifact; tag v*: GitHub Release
+.github/workflows/protocol.yml  Protocol core: C# + Kotlin vectors/behaviour tests, live Kotlin <-> C# interop, iOS simulator
+.github/workflows/android.yml   Android app: debug APK artifact, on-device test on an emulator against the C# test agent
+
+src/GameTimer.Protocol/    Protocol v2 core in C# (net8.0, no WPF), no web server or UI inside:
+  Noise/                   IK + IKpsk1 on libsodium (Sodium.Core)
+  Encodings/, Identity/    base32 / base64url, agent and hub ids, the 6-digit pairing code
+  Messages/StrictJson.cs   I-JSON parsing (duplicate names, 2^53 integers) → ProtocolViolation
+  Agent/AgentHost*.cs      The agent side: admission + limits, /v2 handshake and the ready rule, hello,
+                           requests (capabilities, roles, rid cache, §5 ordering via an explicit RequestOrigin),
+                           /v2/pair (secret window, two-phones rule, typed code), peers and roles.
+                           The app plugs in IAgentBackend (timer etc.), IPairingUi, IAgentStore, IFrameTransport
+shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, android, iosArm64, iosSimulatorArm64):
+                           noise/ (mirrors the C# classes 1:1, libsodium via ionspin), encodings/, identity/,
+                           hub/ = the parent-app side: PairingLink (QR), pair(), HubSession (IK + ready + hello,
+                           requests, events, ping), AgentLink (reconnect, latest state, resend with the same rid),
+                           KtorConnector (WebSocket: OkHttp on Android/JVM, Darwin on iOS),
+                           Models + AgentApi (typed §7.2 calls; writes send ifRev, conflicts return the current value)
+android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, applicationId com.gametimer.parent):
+  HubStore.kt              hub key (AES-GCM wrapped by an Android Keystore key) + paired PCs, in noBackupFilesDir
+  MainViewModel.kt         AgentLink per PC (connected while the app is visible), pairing flow, commands
+  MainActivity.kt          Compose screens: PCs list, QR scan (or paste link), pairing code, PC screen with tabs
+  PcTabs.kt                PC tabs (protocol §7.2 via shared AgentApi): Timer (for / until, presets, zone colours,
+                           interruption, schedule chip), Schedule, Settings (rev / conflict), History (paged), Parents (roles, revoke)
+  QrScanner.kt             CameraX + ML Kit (on-device) QR reader
+  res/values*/strings.xml  EN / RU / NL / UK
+  src/androidTest/         On-device test (CI emulator): Keystore key, libsodium JNI, pairing + control of TestAgent
+tests/vectors/             Published Noise vectors (cacophony, snow) + protocol-vectors.json (ids, pairing code,
+                           encodings; generated by an independent Python script), used by both cores
+tests/GameTimer.Protocol.Tests/  xunit: vectors + behaviour tests for the C# core
+tests/interop/NoisePeer/   Test-only C# peer driven over stdin by shared/src/jvmTest/.../NoiseInteropTests.kt
+tests/interop/TestAgent/   Test-only: the real C# AgentHost behind Kestrel, scripted by .../hub/HubInteropTests.kt
+tools/GameTimer.TestHub/   gt-testhub.exe: scripted v2 parent app for testing on the real PC (CI artifact gt-testhub-win-x64)
 ```
+
+The Gradle root is the repo root (`settings.gradle.kts`, `gradlew`, `gradle/libs.versions.toml`); the .NET projects build separately with `dotnet`. Any change to one Noise core is made in the other too, and both must keep passing the vectors and the interop test.
 
 `App` creates `SettingsService`, `AppSettings` and `TimerController` and passes them to `MainWindow`. The window is only a client of `TimerController`: it calls its methods and updates the UI in `OnTimerStateChanged`. Every control surface (window, phone API) must go through the controller, on the UI thread (`Dispatcher.InvokeAsync` from background threads; the controller calls `VerifyAccess`).
 
@@ -91,6 +131,8 @@ docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API an
 - **Auth:** `RequireAuth()` in MainWindow: Windows Hello (PIN / fingerprint / face) → fallback `PasswordDialog`. Required for Stop, Reset, changing the expiry action, and Exit while a timer runs.
 - **Tray:** closing the window always hides to tray; real exit only from the tray menu. `ShutdownMode=OnExplicitShutdown`.
 - **Single instance:** second launch signals the first (`Local\SystemMonitor_7F3A2C1E_*`) and exits; first calls `MainWindow.BringToFront()`.
+- **Update / uninstall:** the app ignores the Restart Manager by design, so `setup.iss` has `CloseApplications=no` and its `[Code]` asks the app to close itself. Object names live in `Services/SetupSignals.cs` (keep `setup.iss` in sync). Setup holds `…_SetupWaiting`, sets `…_Exit` (update) or `…_Uninstall`, and waits up to 60 s for the instance mutex to vanish (Retry / Cancel; an older version without the signal gets "exit from the tray"). The app (`MainWindow.ExitForSetup`) asks Windows Hello under the tray-exit rule (`ExitNeedsAuth`: timer running or schedule on), closes only if `…_SetupWaiting` still exists, and then: **update** → `TimerController.PrepareForUpdate` logs `Updated` and saves a running timer with `ClosedForUpdate` + `AppVersion`; **uninstall** → stops the timer (and `[UninstallDelete]` removes `timer-state.json*`, so a reinstall never starts "expired"). `TryResume` treats it as clean only if a *different* version starts within 10 min; otherwise it is reported like any unclean close. An unacknowledged "closed at" notice is carried across restarts (`PendingInterruption`). The instance mutex is **not** released in `OnExit` — Windows releases it at process teardown, so Setup can't race a still-locked exe. Setup relaunches the app as the original user after a successful install, and also if the install / uninstall didn't complete.
+- **CI:** `release.yml` builds the installer on every PR (artifact, 14 days, read-only token) and publishes a Release only on `v*` tags in a separate job with write access.
 - **Overlay position:** stored as 0..1 fractions mapped to `[0, screen - overlaySize]`.
 - **Keyboard:** Enter = start / add alert, ↑↓ (+Shift) adjust, `:` jumps to minutes, Ctrl+1..6 tabs, Esc = tray.
 - **Phone control:** toggle in the Settings tab (auth required) starts/stops `RemoteServer` on `RemotePort` (5123); `RemoteEnabled` is restored at launch without a prompt. `App.OnExit` stops the host. The status line shows the phone URL (`http://<lan-ip>:<port>`).
@@ -131,7 +173,16 @@ dotnet build
 dotnet publish -c Release -r win-x64 --self-contained -o ../../publish
 ```
 
-Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTimerSetup.exe` and attaches it to the GitHub Release. Released so far: v1.0.0, v1.0.1, v1.1.0, v1.2.0, v1.3.0, v1.4.0, v1.5.0. Bump `<Version>` in the csproj for local builds; CI takes the version from the tag.
+Protocol core (Linux/macOS/Windows; JDK 21):
+
+```bash
+dotnet test tests/GameTimer.Protocol.Tests/GameTimer.Protocol.Tests.csproj
+dotnet build tests/interop/NoisePeer/NoisePeer.csproj -c Release -o /tmp/peer
+dotnet build tests/interop/TestAgent/TestAgent.csproj -c Release -o /tmp/agent
+./gradlew :shared:jvmTest -PcsharpPeer=/tmp/peer/NoisePeer.dll -PcsharpAgent=/tmp/agent/TestAgent.dll   # without them the interop tests are skipped (CI fails instead)
+```
+
+Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTimerSetup.exe` and attaches it to the GitHub Release. Released so far: v1.0.0, v1.0.1, v1.1.0, v1.2.0, v1.3.0, v1.4.0, v1.5.0, v1.6.0, v1.6.1. Bump `<Version>` in the csproj for local builds; CI takes the version from the tag.
 
 ## Agent environment notes (Cowork)
 
@@ -151,3 +202,5 @@ Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTime
   cd ~/build/GameTimer && ~/.dotnet/dotnet build -p:EnableWindowsTargeting=true -v q
   ```
   `EnableWindowsTargeting` lets Linux compile `net8.0-windows` (WPF + WinForms). The app can't run there: behaviour is tested by the owner on Windows.
+- **Android in the agent VM.** The VM has 4 GB RAM and no KVM (no emulator): build with `./gradlew :android:assembleDebug --no-daemon --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs="-Xmx1800m -XX:MaxMetaspaceSize=512m"`, otherwise Gradle is killed silently (out of memory). compileSdk 37 (Compose needs it). On-device behaviour is tested in CI (emulator) and by the owner on his phone.
+- **Kotlin in the agent VM.** Install a Temurin JDK 21 into `~/tools/jdk21` (Adoptium API tarball), export `JAVA_HOME`, and run `./gradlew` in an rsync copy (`rsync -a --exclude .git --exclude bin --exclude obj --exclude .gradle --exclude build ~/mnt/Projects/GameTimer/ ~/build/GameTimer/`) so Gradle caches never land in the owner's folder. `dotnet` must be on `PATH` for the interop test. iOS targets are skipped on Linux (`kotlin.native.ignoreDisabledTargets`); they build in the macOS CI job. The android target needs an Android SDK: cmdline-tools into `~/tools/android`, `sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"`, and `sdk.dir=…` in the build copy's `local.properties` (never in the repo).

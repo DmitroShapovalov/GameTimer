@@ -9,7 +9,8 @@ public enum SessionEventType
     Expired,
     Resumed,
     Closed,
-    Tampered
+    Tampered,
+    Updated
 }
 
 /// <summary>Who caused an event, for the history view.</summary>

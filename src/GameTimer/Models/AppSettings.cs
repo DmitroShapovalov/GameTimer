@@ -58,6 +58,12 @@ public class AppSettings
     public bool RemoteEnabled { get; set; } = false;
     public int RemotePort { get; set; } = 5123;
 
+    /// <summary>
+    /// Protocol v2 agent id last seen at startup (protected settings.json). If remote-v2.json is lost or
+    /// replaced, the id changes: logged as tampering, because every parent app then has to pair again.
+    /// </summary>
+    public string? V2AgentId { get; set; }
+
     // Paired phones (token hashes only)
     public List<PairedDevice> Devices { get; set; } = new();
 

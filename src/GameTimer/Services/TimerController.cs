@@ -67,6 +67,10 @@ public sealed class TimerController
     /// </summary>
     public DateTimeOffset? LastInterruption { get; private set; }
 
+    // Max downtime for an update exit to count as clean (see TryResume)
+    private static readonly TimeSpan UpdateGrace = TimeSpan.FromMinutes(10);
+    private bool _closingForUpdate;
+
     public TimerState State { get; private set; } = TimerState.NotStarted;
     public TimerMode? Mode { get; private set; }
     public bool IsRunning => State == TimerState.Running;
@@ -119,12 +123,30 @@ public sealed class TimerController
             return;
         }
 
-        // A leftover running state means the app did not exit cleanly through the tray (which stops the
-        // timer after Windows Hello). That is the tamper signal shown to the parent.
-        LastInterruption = saved.LastSeenUtc;
-        InterruptionChanged?.Invoke();
-        // Backdated: the app was closed around when it was last seen
-        _log.Add(new SessionEvent { Time = saved.LastSeenUtc.ToLocalTime(), Type = SessionEventType.Closed, Source = ActionSource.System });
+        // A clean update: closed through the installer flow, a *different* version is starting now, and soon.
+        // A same-version start (no update happened — e.g. the exit signal was sent by something else) or a
+        // long gap (the new version wasn't started) is reported like any other unclean close.
+        bool cleanUpdate = saved.ClosedForUpdate
+                           && saved.AppVersion != AppInfo.Version
+                           && DateTimeOffset.UtcNow - saved.LastSeenUtc < UpdateGrace;
+        if (cleanUpdate)
+        {
+            DiagnosticLog.Write($"resume: after update {saved.AppVersion} -> {AppInfo.Version}");
+            if (saved.PendingInterruption is { } pending) // an older notice the parent hasn't seen yet
+            {
+                LastInterruption = pending;
+                InterruptionChanged?.Invoke();
+            }
+        }
+        else
+        {
+            // A leftover running state means the app did not exit cleanly through the tray (which stops the
+            // timer after Windows Hello). That is the tamper signal shown to the parent.
+            LastInterruption = saved.LastSeenUtc;
+            InterruptionChanged?.Invoke();
+            // Backdated: the app was closed around when it was last seen
+            _log.Add(new SessionEvent { Time = saved.LastSeenUtc.ToLocalTime(), Type = SessionEventType.Closed, Source = ActionSource.System });
+        }
 
         // Same boot → trust the monotonic deadline (clock-change proof). Rebooted → fall back to wall clock.
         var bootNow = DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
@@ -155,6 +177,22 @@ public sealed class TimerController
         Persist();
     }
 
+    /// <summary>
+    /// Clean exit for an update or uninstall that the parent confirmed. A running timer keeps running:
+    /// it is saved (flagged) so the new version resumes it — the update's downtime still counts — and
+    /// the next start doesn't report it as an unclean close. Call right before shutting down.
+    /// </summary>
+    public void PrepareForUpdate(bool parentConfirmed)
+    {
+        _dispatcher.VerifyAccess();
+        _closingForUpdate = true;   // every later Persist() keeps the flag (schedule clamp, a late phone command)
+        _scheduleCheck.Stop();
+        Log(SessionEventType.Updated, parentConfirmed ? ActionSource.Pc : ActionSource.System);
+        if (!IsRunning) return;
+        _heartbeat.Stop();
+        Persist();
+    }
+
     /// <summary>Clears the "app was closed while running" note once the parent has seen it.</summary>
     public void AcknowledgeInterruption()
     {
@@ -162,6 +200,7 @@ public sealed class TimerController
         if (LastInterruption == null) return;
         LastInterruption = null;
         InterruptionChanged?.Invoke();
+        if (IsRunning) Persist(); // drop the pending notice from the saved state too
     }
 
     /// <summary>Starts a countdown of the given length. Returns false if running or input is invalid.</summary>
@@ -390,6 +429,9 @@ public sealed class TimerController
         if (Mode is not TimerMode mode) return;
         _store.Save(new PersistedTimer
         {
+            ClosedForUpdate = _closingForUpdate,
+            AppVersion = AppInfo.Version,
+            PendingInterruption = LastInterruption,
             Mode = mode,
             DeadlineTick = _timer.DeadlineTick,
             TargetUtc = DateTimeOffset.UtcNow + Remaining,
