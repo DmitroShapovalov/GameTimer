@@ -263,4 +263,80 @@ class HubInteropTests {
         assertEquals(RequestOutcome.Revoked, l.send("timer.stop"))
         assertTrue(System.nanoTime() - t0 < 1_000_000_000)
     }
+
+    // ---------------- §7.2 typed API (A5) ----------------
+
+    private suspend fun api(name: String = "Phone"): Pair<AgentApi, AgentLink> {
+        val (key, outcome) = pairHub(name)
+        val l = link(key, assertIs<PairOutcome.Paired>(outcome).agent)
+        l.awaitOnline()
+        return AgentApi(l) to l
+    }
+
+    @Test
+    fun settingsRoundTripAndAStaleEditIsAConflict(): Unit = runBlocking {
+        val (a, _) = api("A")
+        val (b, _) = api("B")
+        val loaded = assertIs<ApiResult.Ok<AgentSettings>>(a.settings()).value
+        val stale = assertIs<ApiResult.Ok<AgentSettings>>(b.settings()).value
+
+        val saved = assertIs<ApiResult.Ok<AgentSettings>>(a.saveSettings(loaded.copy(action = "shutdown", redThreshold = 3))).value
+        assertEquals("shutdown", saved.action)
+        assertEquals(3, saved.redThreshold)
+        assertTrue(saved.rev > loaded.rev)
+
+        // B edited the old version: it gets the current value back instead of overwriting A's change
+        val conflict = assertIs<ApiResult.Conflict<AgentSettings>>(b.saveSettings(stale.copy(language = "nl")))
+        assertEquals("shutdown", conflict.current.action)
+        assertEquals("en", conflict.current.language)
+
+        // A validation error comes back as its §7.2 code
+        val invalid = assertIs<ApiResult.Failed>(a.saveSettings(conflict.current.copy(colorRed = "red")))
+        assertEquals(RequestOutcome.Refused("invalid_color"), invalid.outcome)
+    }
+
+    @Test
+    fun scheduleRoundTrip(): Unit = runBlocking {
+        val (a, _) = api()
+        val loaded = assertIs<ApiResult.Ok<AgentSchedule>>(a.schedule()).value
+        assertEquals(7, loaded.week.size)
+        val edited = loaded.copy(enabled = true, week = loaded.week.mapIndexed { i, d -> if (i == 0) d.copy(allowed = false) else d.copy(limitMinutes = 90) })
+        val saved = assertIs<ApiResult.Ok<AgentSchedule>>(a.saveSchedule(edited)).value
+        assertTrue(saved.enabled)
+        assertEquals(false, saved.week[0].allowed)
+        assertEquals(90, saved.week[3].limitMinutes)
+    }
+
+    @Test
+    fun historyPagesNewestFirst(): Unit = runBlocking {
+        val (a, _) = api()
+        assertIs<RequestOutcome.Ok>(a.startInterval(0, 30))
+        assertIs<RequestOutcome.Ok>(a.extend(15))
+        assertIs<RequestOutcome.Ok>(a.stop())
+        val first = assertIs<ApiResult.Ok<HistoryPage>>(a.history(limit = 2)).value
+        assertEquals(listOf("stopped", "extended"), first.events.map { it.type })
+        assertTrue(first.more)
+        val second = assertIs<ApiResult.Ok<HistoryPage>>(a.history(limit = 2, before = first.next)).value
+        assertEquals(listOf("started"), second.events.map { it.type })
+        assertEquals(false, second.more)
+        assertEquals("Phone", second.events[0].device)
+    }
+
+    @Test
+    fun rolesAndRevokeThroughTheApi(): Unit = runBlocking {
+        val (admin, _) = api("Admin")
+        val (parent, parentLink) = api("Parent")
+        val peers = assertIs<ApiResult.Ok<List<PeerInfo>>>(parent.peers()).value
+        val me = peers.single { it.current }
+        val other = peers.single { !it.current }
+        assertEquals("parent", me.role)
+
+        assertEquals(RequestOutcome.Refused("forbidden"), assertIs<ApiResult.Failed>(parent.revoke(other.id)).outcome)
+        assertIs<ApiResult.Ok<List<PeerInfo>>>(admin.setRole(me.id, admin = true))
+        assertEquals("admin", assertIs<ApiResult.Ok<List<PeerInfo>>>(parent.peers()).value.single { it.current }.role)
+
+        // This phone disconnects itself: result, then the link ends as Revoked
+        assertIs<ApiResult.Ok<List<PeerInfo>>>(parent.revoke(me.id))
+        withTimeout(20.seconds) { parentLink.status.first { it is LinkStatus.Revoked } }
+    }
 }

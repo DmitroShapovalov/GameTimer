@@ -75,8 +75,12 @@ public class AgentState(public val json: JsonObject, public val receivedAtNanos:
 public sealed interface RequestOutcome {
     public data class Ok(val reply: JsonObject) : RequestOutcome
 
-    /** The agent refused it: an error code from §7.2 (e.g. not_running, forbidden). */
-    public data class Refused(val code: String) : RequestOutcome
+    /** The agent refused it: an error code from §7.2 (e.g. not_running, forbidden); [reply] is the whole error. */
+    public data class Refused(val code: String, val reply: JsonObject? = null) : RequestOutcome {
+        // Equal by code: callers (and tests) compare outcomes; the reply is extra detail (e.g. conflict's value)
+        override fun equals(other: Any?): Boolean = other is Refused && other.code == code
+        override fun hashCode(): Int = code.hashCode()
+    }
 
     /** No answer within the resend window (§5: the hub stops after 5 minutes and asks the user). */
     public data object GaveUp : RequestOutcome
@@ -164,7 +168,7 @@ public class AgentLink(
             if (reply.type() == "error") {
                 val code = reply.string("code") ?: "unknown"
                 if (code == "internal" && changesState) { delay(1.seconds); continue }
-                return RequestOutcome.Refused(code)
+                return RequestOutcome.Refused(code, reply)
             }
             // The session updated its state before completing the reply; let [state] catch up, so a caller
             // reading it right after send() sees the effect of its own request

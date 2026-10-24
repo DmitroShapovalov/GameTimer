@@ -46,6 +46,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -220,7 +222,7 @@ private fun statusText(status: LinkStatus): String = stringResource(
 
 /** Seconds left, recomputed every second from the local clock (protocol §7.1). */
 @Composable
-private fun rememberCountdown(state: com.gametimer.protocol.hub.AgentState?): Int {
+internal fun rememberCountdown(state: com.gametimer.protocol.hub.AgentState?): Int {
     var now by remember { mutableIntStateOf(state?.remainingSecondsNow() ?: 0) }
     LaunchedEffect(state) {
         while (true) {
@@ -232,7 +234,7 @@ private fun rememberCountdown(state: com.gametimer.protocol.hub.AgentState?): In
     return now
 }
 
-private fun formatSeconds(total: Int): String {
+internal fun formatSeconds(total: Int): String {
     val h = total / 3600
     val m = (total % 3600) / 60
     val s = total % 60
@@ -333,45 +335,40 @@ private fun PairScreen(vm: MainViewModel, onDone: () -> Unit) {
 private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHostState, onBack: () -> Unit) {
     val link = remember(agent.agentId) { vm.link(agent.agentId) } ?: return
     val status by link.status.collectAsState()
-    val state by link.state.collectAsState()
-    val seconds = rememberCountdown(state)
-    var minutes by rememberSaveable { mutableStateOf("60") }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
     var confirmRemove by remember { mutableStateOf(false) }
-    val online = status is LinkStatus.Online
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(agent.name) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } })
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(agent.name)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            StatusDot(status)
+                            Text(statusText(status), Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } },
+                actions = { TextButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.remove)) } },
+            )
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(Modifier.padding(padding).padding(24.dp).fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                StatusDot(status)
-                Text(statusText(status), Modifier.padding(start = 8.dp))
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            val tabs = listOf(R.string.tab_timer, R.string.tab_schedule, R.string.tab_settings, R.string.tab_history, R.string.tab_parents)
+            PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
+                tabs.forEachIndexed { i, label -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(stringResource(label)) }) }
             }
-            if (state?.isRunning == true) {
-                Text(formatSeconds(seconds), fontSize = 64.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.timer_left))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { vm.extend(agent, -15) }, enabled = online) { Text(stringResource(R.string.minus15)) }
-                    OutlinedButton(onClick = { vm.extend(agent, 15) }, enabled = online) { Text(stringResource(R.string.plus15)) }
-                }
-                Button(onClick = { vm.stopTimer(agent) }, enabled = online) { Text(stringResource(R.string.stop)) }
-            } else {
-                Text(stringResource(R.string.timer_idle), style = MaterialTheme.typography.titleMedium)
-                val valid = minutes.toIntOrNull()?.takeIf { it in 1..1440 }
-                OutlinedTextField(minutes, { v -> minutes = v.filter { it.isDigit() }.take(4) }, label = { Text(stringResource(R.string.minutes)) },
-                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = valid == null, supportingText = { if (valid == null) Text(stringResource(R.string.minutes_range)) })
-                Button(onClick = { valid?.let { vm.startTimer(agent, it) } }, enabled = online && valid != null) {
-                    Text(stringResource(R.string.start))
-                }
+            when (tab) {
+                0 -> TimerTab(vm, agent, link)
+                1 -> ScheduleTab(vm, agent, link)
+                2 -> SettingsTab(vm, agent, link)
+                3 -> HistoryTab(vm, agent, link)
+                // Removing the PC from the list is enough: the screen for a PC that isn't listed goes home by itself
+                else -> ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })
             }
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.remove)) }
         }
     }
     if (confirmRemove) {

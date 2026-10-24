@@ -40,10 +40,10 @@ interop tests in lock-step.
 | A3a | **Agent core** in `GameTimer.Protocol` (no web server / UI): handshake + ready rule, sessions and limits, envelope + I-JSON, rid cache, roles / peers, pairing state machine; ids + pairing code in both languages | Tests cover §3–§8 on Linux CI, incl. replays, limits, timeouts, two-phones rule | ✓ (PR #21) |
 | A3 | **Windows agent endpoint**: new `/v2` WebSocket carrying Noise frames next to the v1 API; agent key pair (DPAPI-protected); pairing v2 QR; capability descriptor; commands routed to `TimerController` | A scripted client (`gt-testhub.exe`, C# on the shared core; the Kotlin hub follows in A4) pairs, handshakes and starts / stops / extends the timer on the real PC; `gt-testhub replay-test` passes (a replayed msg 1 + `ready` never reaches `TimerController`) | in review ✎ |
 | A4a | **Hub client in `shared`** (Kotlin, for Android and iOS): QR link, pairing, session, requests, events, reconnect + resend with the same `rid`, local countdown; android target | The Kotlin client pairs with and controls the production C# agent over real WebSockets in CI | ✓ (PR #23) |
-| A4 | **Android app skeleton** (Compose): QR-scan pairing, paired-device list, LAN connect + reconnect, live status screen; EN / RU / NL / UK | On the owner's phone: scan QR → see the live countdown | in review ✎ (A4b: app; CI emulator test pairs with the C# agent) |
-| A5 | **Feature parity with the PWA**: start / stop / ±15, settings, schedule editor, history, revoke | Everything the PWA can do works from the app | ☐ |
+| A4 | **Android app skeleton** (Compose): QR-scan pairing, paired-device list, LAN connect + reconnect, live status screen; EN / RU / NL / UK | On the owner's phone: scan QR → see the live countdown | ✓ (PRs #23, #24; owner check on the phone pending) |
+| A5 | **Feature parity with the PWA**: start / stop / ±15, settings, schedule editor, history, revoke | Everything the PWA can do works from the app | in review ✎ |
 | A6 | **Discovery**: mDNS / DNS-SD announce + browse, so a PC IP change needs no re-pairing | Change the PC's IP → the app reconnects by itself | ☐ |
-| A7 | **Acceptance + release**: Windows v1.7.0; parent app as an Android APK (and iOS via TestFlight when the Apple account exists) | Checklist passes on real devices | ☐ |
+| A7 | **Acceptance + release**: Windows v1.7.0; parent app as an Android APK (and iOS via TestFlight when the Apple account exists) | Checklist passes on real devices; open items: §12 re-auth (biometrics) before admin actions in the app, release signing | ☐ |
 
 Notes:
 - The Windows agent keeps the v1 API so the PWA and existing pairings keep working; v1 can be retired later.

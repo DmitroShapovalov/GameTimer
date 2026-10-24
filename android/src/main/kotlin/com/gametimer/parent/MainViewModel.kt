@@ -20,9 +20,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 /** Where the pairing flow is (§8.2). */
 sealed interface PairState {
@@ -100,6 +97,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val editors = HashMap<String, PcEditors>()
+
+    /** Unsaved settings / schedule edits of a PC, surviving tab switches (main thread). */
+    fun editors(agentId: String): PcEditors = editors.getOrPut(agentId) { PcEditors() }
+
+    /** Runs a save in the view model, so leaving the screen doesn't cancel it. */
+    fun launchSave(block: suspend () -> Unit) {
+        viewModelScope.launch { block() }
+    }
+
+    /** Shows a one-off notice (empty texts, e.g. for a request cut by stopping the link, are skipped). */
+    fun say(text: String) {
+        if (text.isNotBlank()) _message.value = text
+    }
+
+    /** Text for a failed request, translated where the code is known. */
+    fun outcomeText(outcome: RequestOutcome): String {
+        val res = getApplication<Application>().resources
+        return when (outcome) {
+            is RequestOutcome.Refused -> res.getString(R.string.request_refused, errorText(outcome.code))
+            RequestOutcome.GaveUp -> res.getString(R.string.request_gave_up)
+            RequestOutcome.Revoked -> res.getString(R.string.status_revoked)
+            RequestOutcome.Stopped, is RequestOutcome.Ok -> ""
+        }
+    }
+
     /** Links stay connected only while the app is visible (no background service in this step). */
     fun setForeground(value: Boolean) {
         wantForeground.trySend(value)
@@ -139,26 +162,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun remove(agent: PairedAgent) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { store.remove(agent.agentId) } // first: no screen recreates its link
+            editors.remove(agent.agentId)
             links.remove(agent.agentId)?.stop()
-        }
-    }
-
-    fun startTimer(agent: PairedAgent, minutes: Int) =
-        command(agent, "timer.start", buildJsonObject { put("mode", "interval"); put("hours", minutes / 60); put("minutes", minutes % 60) })
-
-    fun stopTimer(agent: PairedAgent) = command(agent, "timer.stop", JsonObject(emptyMap()))
-
-    fun extend(agent: PairedAgent, minutes: Int) = command(agent, "timer.extend", buildJsonObject { put("minutes", minutes) })
-
-    private fun command(agent: PairedAgent, type: String, fields: JsonObject) {
-        val l = link(agent.agentId) ?: return
-        viewModelScope.launch {
-            val res = getApplication<Application>().resources
-            when (val r = l.send(type, fields)) {
-                is RequestOutcome.Refused -> _message.value = res.getString(R.string.request_refused, errorText(r.code))
-                RequestOutcome.GaveUp -> _message.value = res.getString(R.string.request_gave_up)
-                else -> Unit
-            }
         }
     }
 
@@ -171,6 +176,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "invalid_minutes" -> R.string.err_invalid_minutes
             "forbidden" -> R.string.err_forbidden
             "busy" -> R.string.err_busy
+            "last_admin" -> R.string.err_last_admin
+            "conflict" -> R.string.err_conflict
+            "invalid_threshold", "invalid_alerts", "invalid_color", "invalid_language" -> R.string.err_settings
+            "invalid_schedule" -> R.string.err_schedule
             else -> return code
         }
         return getApplication<Application>().getString(id)
