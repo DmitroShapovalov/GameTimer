@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.gametimer.protocol.hub.AgentApi
 import com.gametimer.protocol.hub.AgentLink
 import com.gametimer.protocol.hub.KtorConnector
 import com.gametimer.protocol.hub.PairOutcome
@@ -20,9 +21,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 /** Where the pairing flow is (§8.2). */
 sealed interface PairState {
@@ -100,6 +98,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The typed §7.2 API for a PC (A5 screens). */
+    fun api(agentId: String): AgentApi? = link(agentId)?.let { AgentApi(it) }
+
+    /** Shows a one-off notice. */
+    fun say(text: String) {
+        _message.value = text
+    }
+
+    /** Text for a failed request, translated where the code is known. */
+    fun outcomeText(outcome: RequestOutcome): String {
+        val res = getApplication<Application>().resources
+        return when (outcome) {
+            is RequestOutcome.Refused -> res.getString(R.string.request_refused, errorText(outcome.code))
+            RequestOutcome.GaveUp -> res.getString(R.string.request_gave_up)
+            RequestOutcome.Revoked -> res.getString(R.string.status_revoked)
+            RequestOutcome.Stopped, is RequestOutcome.Ok -> ""
+        }
+    }
+
     /** Links stay connected only while the app is visible (no background service in this step). */
     fun setForeground(value: Boolean) {
         wantForeground.trySend(value)
@@ -143,25 +160,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun startTimer(agent: PairedAgent, minutes: Int) =
-        command(agent, "timer.start", buildJsonObject { put("mode", "interval"); put("hours", minutes / 60); put("minutes", minutes % 60) })
-
-    fun stopTimer(agent: PairedAgent) = command(agent, "timer.stop", JsonObject(emptyMap()))
-
-    fun extend(agent: PairedAgent, minutes: Int) = command(agent, "timer.extend", buildJsonObject { put("minutes", minutes) })
-
-    private fun command(agent: PairedAgent, type: String, fields: JsonObject) {
-        val l = link(agent.agentId) ?: return
-        viewModelScope.launch {
-            val res = getApplication<Application>().resources
-            when (val r = l.send(type, fields)) {
-                is RequestOutcome.Refused -> _message.value = res.getString(R.string.request_refused, errorText(r.code))
-                RequestOutcome.GaveUp -> _message.value = res.getString(R.string.request_gave_up)
-                else -> Unit
-            }
-        }
-    }
-
     /** §7.2 error codes the user may see, translated; others shown as the code. */
     private fun errorText(code: String): String {
         val id = when (code) {
@@ -171,6 +169,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "invalid_minutes" -> R.string.err_invalid_minutes
             "forbidden" -> R.string.err_forbidden
             "busy" -> R.string.err_busy
+            "last_admin" -> R.string.err_last_admin
+            "conflict" -> R.string.err_conflict
+            "invalid_threshold", "invalid_alerts", "invalid_color", "invalid_language" -> R.string.err_settings
+            "invalid_schedule" -> R.string.err_schedule
             else -> return code
         }
         return getApplication<Application>().getString(id)

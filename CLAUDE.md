@@ -94,11 +94,14 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            noise/ (mirrors the C# classes 1:1, libsodium via ionspin), encodings/, identity/,
                            hub/ = the parent-app side: PairingLink (QR), pair(), HubSession (IK + ready + hello,
                            requests, events, ping), AgentLink (reconnect, latest state, resend with the same rid),
-                           KtorConnector (WebSocket: OkHttp on Android/JVM, Darwin on iOS)
+                           KtorConnector (WebSocket: OkHttp on Android/JVM, Darwin on iOS),
+                           Models + AgentApi (typed §7.2 calls; writes send ifRev, conflicts return the current value)
 android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, applicationId com.gametimer.parent):
   HubStore.kt              hub key (AES-GCM wrapped by an Android Keystore key) + paired PCs, in noBackupFilesDir
   MainViewModel.kt         AgentLink per PC (connected while the app is visible), pairing flow, commands
-  MainActivity.kt          Compose screens: PCs list, QR scan (or paste link), pairing code, PC (countdown, start/stop/±15)
+  MainActivity.kt          Compose screens: PCs list, QR scan (or paste link), pairing code, PC screen with tabs
+  PcTabs.kt                PC tabs (protocol §7.2 via shared AgentApi): Timer (for / until, presets, zone colours,
+                           interruption, schedule chip), Schedule, Settings (rev / conflict), History (paged), Parents (roles, revoke)
   QrScanner.kt             CameraX + ML Kit (on-device) QR reader
   res/values*/strings.xml  EN / RU / NL / UK
   src/androidTest/         On-device test (CI emulator): Keystore key, libsodium JNI, pairing + control of TestAgent

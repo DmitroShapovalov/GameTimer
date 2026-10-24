@@ -94,16 +94,35 @@ sealed class ConsolePairingUi : IPairingUi
     }
 }
 
-/// <summary>A countdown timer like the Windows backend's (timer capability only).</summary>
+/// <summary>
+/// A stand-in for the Windows backend with the same message shapes (RemoteServer.V2.cs): a countdown,
+/// settings and schedule with rev / ifRev / conflict, and a history.
+/// </summary>
 sealed class SimBackend : IAgentBackend
 {
     private readonly object _gate = new();
     private readonly Stopwatch _clock = new();
     private int _durationSeconds;
+    private long _settingsRev = 1, _scheduleRev = 1;
+    private JsonObject _settings = new()
+    {
+        ["action"] = "lock", ["yellowThreshold"] = 10, ["redThreshold"] = 5,
+        ["alertPoints"] = new JsonArray(new JsonObject { ["minutes"] = 5, ["enabled"] = true }),
+        ["colorGreen"] = "#4CAF50", ["colorYellow"] = "#FFC107", ["colorRed"] = "#F44336", ["language"] = "en",
+    };
+    private JsonObject _schedule = new()
+    {
+        ["enabled"] = false,
+        ["week"] = new JsonArray(Enumerable.Range(0, 7).Select(_ => (JsonNode)new JsonObject
+        {
+            ["allowed"] = true, ["limitMinutes"] = 120, ["windowStartMinutes"] = 0, ["windowEndMinutes"] = 1440,
+        }).ToArray()),
+    };
+    private readonly List<JsonObject> _history = new();
     public AgentHost? Host { get; set; }
 
     public AgentInfo Info { get; } = new("Test PC", "windows", "0.0.0-test");
-    public IReadOnlyCollection<string> Capabilities { get; } = new[] { "timer" };
+    public IReadOnlyCollection<string> Capabilities { get; } = new[] { "timer", "settings", "schedule", "history" };
 
     public Task<JsonObject> GetStateAsync() { lock (_gate) return Task.FromResult(State()); }
 
@@ -119,20 +138,74 @@ sealed class SimBackend : IAgentBackend
                     _durationSeconds = (m.GetProperty("hours").GetInt32() * 60 + m.GetProperty("minutes").GetInt32()) * 60;
                     if (_durationSeconds <= 0) return Err("invalid_time");
                     _clock.Restart();
+                    Log("started", context, _durationSeconds / 60);
                     return Changed(context);
                 case "timer.stop":
                     if (!_clock.IsRunning) return Err("not_running");
                     _clock.Reset();
+                    Log("stopped", context, null);
                     return Changed(context);
                 case "timer.extend":
                     if (!_clock.IsRunning) return Err("not_running");
                     if (!m.TryGetProperty("minutes", out var min) || min.GetInt32() == 0) return Err("invalid_minutes");
                     _durationSeconds += min.GetInt32() * 60;
+                    Log("extended", context, min.GetInt32());
                     return Changed(context);
                 case "interruption.ack": return Ok();
+                case "settings.get": return Task.FromResult(Reply.Ok(new JsonObject { ["settings"] = WithRev(_settings, _settingsRev) }));
+                case "settings.put":
+                {
+                    if (m.TryGetProperty("ifRev", out var r) && r.GetInt64() != _settingsRev)
+                        return Task.FromResult(Reply.Error("conflict", new JsonObject { ["value"] = WithRev(_settings, _settingsRev) }));
+                    foreach (var key in new[] { "action", "yellowThreshold", "redThreshold", "alertPoints", "colorGreen", "colorYellow", "colorRed", "language" })
+                        if (m.TryGetProperty(key, out var v)) _settings[key] = JsonNode.Parse(v.GetRawText());
+                    _settingsRev++;
+                    Host!.Publish("ev.settings", new JsonObject { ["settings"] = WithRev(_settings, _settingsRev) }, context.Origin);
+                    return Task.FromResult(Reply.Ok(new JsonObject { ["settings"] = WithRev(_settings, _settingsRev) }));
+                }
+                case "schedule.get": return Task.FromResult(Reply.Ok(new JsonObject { ["schedule"] = WithRev(_schedule, _scheduleRev) }));
+                case "schedule.put":
+                {
+                    if (m.TryGetProperty("ifRev", out var r) && r.GetInt64() != _scheduleRev)
+                        return Task.FromResult(Reply.Error("conflict", new JsonObject { ["value"] = WithRev(_schedule, _scheduleRev) }));
+                    if (!m.TryGetProperty("week", out var week) || week.GetArrayLength() != 7) return Err("invalid_schedule");
+                    _schedule = new JsonObject { ["enabled"] = m.GetProperty("enabled").GetBoolean(), ["week"] = JsonNode.Parse(week.GetRawText()) };
+                    _scheduleRev++;
+                    Host!.Publish("ev.schedule", new JsonObject { ["schedule"] = WithRev(_schedule, _scheduleRev) }, context.Origin);
+                    return Task.FromResult(Reply.Ok(new JsonObject { ["schedule"] = WithRev(_schedule, _scheduleRev) }));
+                }
+                case "history.get":
+                {
+                    int limit = m.TryGetProperty("limit", out var l) ? l.GetInt32() : 50;
+                    int start = m.TryGetProperty("before", out var b) ? int.Parse(b.GetString()!) : 0;
+                    var newestFirst = Enumerable.Reverse(_history).ToList();
+                    var page = newestFirst.Skip(start).Take(limit).ToList();
+                    bool more = start + page.Count < newestFirst.Count;
+                    var reply = new JsonObject { ["events"] = new JsonArray(page.Select(e => (JsonNode)e.DeepClone()).ToArray()), ["more"] = more };
+                    if (more) reply["next"] = (start + page.Count).ToString();
+                    return Task.FromResult(Reply.Ok(reply));
+                }
             }
             return Err("unknown_command");
         }
+    }
+
+    private static JsonObject WithRev(JsonObject value, long rev)
+    {
+        var o = (JsonObject)value.DeepClone();
+        o["rev"] = rev;
+        return o;
+    }
+
+    private void Log(string type, RequestContext context, int? minutes)
+    {
+        var e = new JsonObject
+        {
+            ["time"] = DateTimeOffset.Now.ToString("o"), ["type"] = type, ["source"] = "phone", ["device"] = context.HubName,
+            ["mode"] = type == "started" ? "interval" : null, ["minutes"] = minutes, ["action"] = null,
+        };
+        _history.Add(e);
+        Host!.Publish("ev.history", new JsonObject { ["event"] = e.DeepClone() });
     }
 
     private Task<Reply> Changed(RequestContext context)
