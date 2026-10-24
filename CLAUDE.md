@@ -19,8 +19,17 @@ Owner: Dmytro (GitHub: DmitroShapovalov/GameTimer). The app is used at home on t
 - Talk to the owner in **Russian**. Code, comments, commit messages, README and docs in **English**.
 - The agent compiles the code itself (see "Agent environment notes"), but can't run the WPF app: the owner tests behaviour on his Windows PC.
 - Commit only when asked ("коммить"). Tags and releases are done by the owner. Feature work goes to a branch and a PR to `master`.
-- Keep UI text localized: every user-visible string goes to both `.resx` files (see Localization).
+- Keep UI text localized in all four languages (en / ru / nl / uk): Windows `Strings*.resx`, the PWA `app.js` STR blocks, and the Android `res/values*/strings.xml` (see Localization).
 - Before larger features, propose the approach briefly; for UI changes he usually sends screenshots with feedback.
+- **Independent review of every PR (owner's rule).** Before handing a PR to the owner, run a fresh
+  subagent as an adversarial reviewer. It gets the diff / changed files and the goal of the change, not
+  the author's reasoning, and reports findings with severity, a failure scenario and a fix. Then:
+  - fix real defects in the same PR; for anything not fixed, say why;
+  - add an **"Independent review"** section to the PR description: what was found, fixed, declined;
+  - security-relevant changes (crypto, pairing, auth, tamper resistance, installer / update, API) get a
+    second pass after the fixes;
+  - trivial PRs (version bump, typo) may skip it — say so in the description.
+  The owner checks behaviour on real devices; the reviewer catches what he can't check in the code.
 
 ## Stack
 
