@@ -28,6 +28,12 @@ class PairingLinkTests {
         assertNull(PairingLink.parse("http://192.168.1.10:5123/pair#v=2&k=$k"))
         assertNull(PairingLink.parse("http://192.168.1.10:5123/pair#v=2&k=AAAA&s=$s"))
         assertNull(PairingLink.parse("https://example.com/pair#v=2&k=$k&s=$s"))
+        assertNull(PairingLink.parse("http://example.com/pair#v=2&k=$k&s=$s"))     // host name
+        assertNull(PairingLink.parse("http://8.8.8.8:5123/pair#v=2&k=$k&s=$s"))    // public address
+        assertNull(PairingLink.parse("http://172.32.0.1:5123/pair#v=2&k=$k&s=$s")) // outside 172.16/12
+        assertNotNull(PairingLink.parse("http://10.0.2.2:5123/pair#v=2&k=$k&s=$s"))
+        assertNotNull(PairingLink.parse("http://172.20.1.5:5123/pair#v=2&k=$k&s=$s"))
+        assertNotNull(PairingLink.parse("http://[fe80::1]:5123/pair#v=2&k=$k&s=$s"))
         assertNull(PairingLink.parse("not a link"))
     }
 }

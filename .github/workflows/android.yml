@@ -1,0 +1,98 @@
+name: Android app
+
+# The parent app (android/): debug APK as an artifact, and an on-device test on an emulator that
+# pairs with and controls the production C# agent (tests/interop/TestAgent --emulator, 10.0.2.2:5123).
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'shared/**'
+      - 'src/GameTimer.Protocol/**'
+      - 'tests/interop/TestAgent/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - '.github/workflows/android.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'android/**'
+      - 'shared/**'
+      - 'src/GameTimer.Protocol/**'
+      - 'tests/interop/TestAgent/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the debug APK
+        run: ./gradlew :android:assembleDebug :android:assembleDebugAndroidTest
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gametimer-parent-debug-apk
+          path: android/build/outputs/apk/debug/android-debug.apk
+          retention-days: 14
+
+      - name: Start the C# test agent
+        run: |
+          dotnet build tests/interop/TestAgent/TestAgent.csproj -c Release -o "$RUNNER_TEMP/agent"
+          nohup dotnet "$RUNNER_TEMP/agent/TestAgent.dll" --emulator > "$RUNNER_TEMP/agent.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:5123/control/health > /dev/null && break; sleep 1; done
+          cat "$RUNNER_TEMP/agent.log"
+          curl -sf http://127.0.0.1:5123/control/health || { echo "test agent did not start"; exit 1; }
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: On-device test (emulator)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew :android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireAgent=true
+
+      - name: "Test report (kept on success too, to show the on-device tests ran)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-report
+          path: |
+            android/build/reports/androidTests
+            ${{ runner.temp }}/agent.log
+          retention-days: 7

@@ -18,3 +18,4 @@ dependencyResolutionManagement {
 }
 
 include(":shared")
+include(":android")
