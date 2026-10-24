@@ -373,7 +373,9 @@ The agent announces `_sysmon._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<tag
 - **Known networks only.** The agent announces only on a network where a hub already had a session
   (Windows: identified by a hash of the subnet and the default gateway's MAC address; the last 16 are
   kept with the agent's state). On a café's or school's Wi-Fi it stays silent. After a move to a new
-  network the hub reconnects by the stored address once, or the parent pairs again.
+  network the hub reconnects by the stored address once, or the parent pairs again. A network
+  whose gateway MAC can't be read counts as unknown. A new router (new gateway MAC) is a new network
+  too: until a hub has had a session there, a changed PC address needs the stored one or re-pairing.
 - The service type is deliberately neutral (`_sysmon._tcp`, like the Windows exe and firewall rule
   names), so a Bonjour browser on the LAN doesn't name the product.
 - The app tries the last known host first; only if no session could be opened there it browses mDNS

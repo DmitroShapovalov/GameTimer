@@ -151,8 +151,18 @@ public sealed partial class AgentHost : IDisposable
 
     internal void RaiseSessionStarted(string remoteIp)
     {
-        try { SessionStarted?.Invoke(remoteIp); }
-        catch (Exception) { /* the app's handler must not break a session */ }
+        if (SessionStarted is not { } handlers) return;
+        foreach (var h in handlers.GetInvocationList().Cast<Action<string>>())
+        {
+            try { h(remoteIp); }
+            catch (Exception) { /* an app handler must not break a session, nor the other handlers */ }
+        }
+    }
+
+    /// <summary>How many networks are known (<see cref="RememberNetwork"/>).</summary>
+    public int KnownNetworkCount
+    {
+        get { lock (_lock) return _state.KnownNetworks.Count; }
     }
 
     /// <summary>True if a hub had a session on network <paramref name="id"/> (an id the app chose).</summary>

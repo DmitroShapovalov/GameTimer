@@ -78,6 +78,10 @@ public sealed partial class RemoteServer
         _mdns = mdns;
         Agent.PeersChanged += mdns.Refresh;
         Agent.SessionStarted += OnV2SessionStarted;
+        Agent.Paired += OnV2Paired;
+        // Upgrade from a build without known networks: the PC already has parent apps, so the network it
+        // is on now is taken as known (otherwise it would stay silent until their next session)
+        if (Agent.Peers.Count > 0 && Agent.KnownNetworkCount == 0) RememberCurrentNetwork();
         System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
         mdns.Start();
     }
@@ -89,6 +93,7 @@ public sealed partial class RemoteServer
         _mdns = null;
         Agent.PeersChanged -= mdns.Refresh;
         Agent.SessionStarted -= OnV2SessionStarted;
+        Agent.Paired -= OnV2Paired;
         System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
         await mdns.StopAsync(); // sends the goodbye
     }
@@ -97,11 +102,19 @@ public sealed partial class RemoteServer
     private void OnV2SessionStarted(string remoteIp)
     {
         if (!IPAddress.TryParse(remoteIp, out var ip) || NetworkFilter.IsLoopback(ip)) return; // gt-testhub on this PC
+        RememberCurrentNetwork(ip);
+    }
+
+    // Pairing happens with the phone next to the PC, on this network
+    private void OnV2Paired(Peer peer) => RememberCurrentNetwork();
+
+    private void RememberCurrentNetwork(IPAddress? from = null)
+    {
         _ = Task.Run(() => // off the session: the gateway lookup (ARP) can take a moment
         {
             try
             {
-                if (!NetworkFilter.IsInSubnet(ip, NetworkFilter.GetLanInterface())) return; // not via the LAN interface
+                if (from != null && !NetworkFilter.IsInSubnet(from, NetworkFilter.GetLanInterface())) return; // not via the LAN interface
                 var network = NetworkFilter.GetNetworkId();
                 if (network != null && Agent.RememberNetwork(network)) _mdns?.Refresh();
             }

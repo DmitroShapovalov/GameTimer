@@ -71,19 +71,13 @@ public static class NetworkFilter
         }
     }
 
-    private static volatile Tuple<string, IPAddress?, string, long>? _networkIdBox;
-
-    private static (string Subnet, IPAddress? Gateway, string Id, long At)? _networkIdCache
-    {
-        get => _networkIdBox is { } t ? (t.Item1, t.Item2, t.Item3, t.Item4) : null;
-        set => _networkIdBox = value is { } v ? Tuple.Create(v.Subnet, v.Gateway, v.Id, v.At) : null;
-    }
-
     /// <summary>
     /// An opaque id of the network the PC is on now, for "announce discovery only where a parent app
     /// already connected" (protocol §9): a hash of the default gateway's MAC address and the subnet, so
-    /// another network with the same 192.168.1.x numbers is still a different network. Without a
-    /// readable gateway MAC, just the subnet. Null when not connected. Cached for a minute (ARP can block).
+    /// another network with the same 192.168.1.x numbers is still a different network. Null when not
+    /// connected or the gateway's MAC can't be read (no gateway, ARP failed): then the network counts
+    /// as unknown — never a weaker id that other networks could share. Not cached: Windows answers
+    /// from its ARP cache, so a network change is seen at once.
     /// </summary>
     public static string? GetNetworkId()
     {
@@ -96,15 +90,11 @@ public static class NetworkFilter
         for (int i = 0; i < 4; i++) net[i] = (byte)(a[i] & m[i]);
         var subnet = $"{new IPAddress(net)}/{mask}";
 
-        var now = Environment.TickCount64;
-        if (_networkIdCache is { } c && c.Subnet == subnet && Equals(c.Gateway, gateway) && now - c.At < 60_000)
-            return c.Id;
-        string? mac = gateway == null ? null : GatewayMac(gateway);
-        var input = $"GameTimer network v1|{subnet}|{mac ?? "-"}";
+        var mac = gateway == null ? null : GatewayMac(gateway);
+        if (mac == null) return null;
+        var input = $"GameTimer network v1|{subnet}|{mac}";
         var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
-        var id = Convert.ToHexString(hash, 0, 16);
-        _networkIdCache = (subnet, gateway, id, now);
-        return id;
+        return Convert.ToHexString(hash, 0, 16);
     }
 
     private static string? GatewayMac(IPAddress gateway)

@@ -7,6 +7,7 @@ using GameTimer.Protocol.Agent;
 using GameTimer.Protocol.Discovery;
 using GameTimer.Protocol.Encodings;
 using GameTimer.Protocol.Identity;
+using GameTimer.Protocol.Noise;
 using GameTimer.Protocol.Tests.Agent;
 using Xunit;
 
@@ -67,6 +68,7 @@ public class DiscoveryTests
         Assert.Equal(AgentHost.MaxKnownNetworks, f.Store.State!.KnownNetworks.Count);
         Assert.Equal("X", f.Store.State.KnownNetworks[^1]);
         Assert.False(f.Host.RememberNetwork(""));
+        Assert.False(f.Host.RememberNetwork(new string('x', 129)));
     }
 
     [Fact]
@@ -75,9 +77,18 @@ public class DiscoveryTests
         using var f = new AgentFixture();
         var (key, _) = await f.PairAsync();
         var started = new TaskCompletionSource<string>();
-        f.Host.SessionStarted += ip => started.TrySetResult(ip);
-        await TestHub.ConnectAsync(f.Host, key, ip: "192.168.1.33");
+        int calls = 0;
+        f.Host.SessionStarted += _ => throw new InvalidOperationException("a broken app handler");
+        f.Host.SessionStarted += ip => { Interlocked.Increment(ref calls); started.TrySetResult(ip); };
+        var (hub, _) = await TestHub.ConnectAsync(f.Host, key, ip: "192.168.1.33");
         Assert.Equal("192.168.1.33", await started.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        // The throwing handler broke neither the other handler nor the session
+        var state = await hub.RequestAsync("state.get");
+        Assert.Equal("result", state.GetProperty("t").GetString());
+        // A hub this agent doesn't know never gets that far
+        await TestHub.HandshakeAsync(f.Host, KeyPair.Generate(), pairing: false);
+        await Task.Delay(200);
+        Assert.Equal(1, Volatile.Read(ref calls));
     }
 
     [Fact]
