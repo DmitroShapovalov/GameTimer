@@ -13,7 +13,6 @@
     <string name="remove">Удалить</string>
     <string name="remove_confirm">Удалить %1$s с этого телефона?</string>
     <string name="cancel">Отмена</string>
-    <string name="timer_left">осталось</string>
     <string name="timer_idle">Таймер не запущен</string>
     <string name="scan_title">Отсканируйте QR-код</string>
     <string name="scan_hint">Наведите камеру на QR-код в окне «Подключить телефон» на ПК.</string>
@@ -43,7 +42,6 @@
     <string name="request_gave_up">Нет ответа от ПК</string>
     <string name="identity_unavailable">Защищённое хранилище телефона сейчас недоступно. Перезапустите приложение; если не поможет — перезагрузите телефон.</string>
     <string name="identity_reset">Android сбросил ключ этого телефона (например, после отключения блокировки экрана). Подключите компьютеры заново.</string>
-    <string name="minutes_range">От 1 до 1440 минут</string>
     <string name="err_not_running">таймер не запущен</string>
     <string name="err_already_running">таймер уже запущен</string>
     <string name="err_invalid_time">такое время невозможно (или расписание не позволяет)</string>
@@ -76,7 +74,6 @@
     <string name="save">Сохранить</string>
     <string name="saved">Сохранено</string>
     <string name="conflict">Пока вы редактировали, изменили на ПК или другой родитель — загружены текущие значения. Проверьте и сохраните снова.</string>
-    <string name="loading">Загрузка…</string>
     <string name="offline_hint">ПК не в сети — изменения сейчас не сохранить.</string>
     <string name="set_action">Когда время вышло</string>
     <string name="set_language">Язык на ПК</string>
@@ -93,7 +90,7 @@
     <string name="no_alerts">Сигналов нет</string>
     <string name="err_settings">Проверьте значения: пороги 1–1440, цвета в виде #RRGGBB, сигналы 1–1440 без повторов.</string>
     <string name="sched_enable">Расписание на день</string>
-    <string name="sched_hint">По дням: можно ли играть, минут в день и часы, когда таймер может работать.</string>
+    <string name="sched_hint">По дням: можно ли играть, минут в день (0 — без ограничения) и часы, когда таймер может работать.</string>
     <string name="sched_limit_label">Мин</string>
     <string name="sched_from">С</string>
     <string name="sched_to">До</string>
@@ -109,7 +106,7 @@
     <string name="ev_resumed">Продолжен после перезапуска</string>
     <string name="ev_closed">Приложение закрыли во время работы</string>
     <string name="ev_tampered">Обнаружено вмешательство</string>
-    <string name="ev_updated">Приложение обновлено</string>
+    <string name="ev_updated">Закрыто для обновления</string>
     <string name="who_pc">На ПК</string>
     <string name="who_system">Система</string>
     <string name="this_phone">этот телефон</string>
@@ -124,4 +121,12 @@
     <string name="err_conflict">изменено в другом месте</string>
     <string name="role_admin">админ</string>
     <string name="role_parent">родитель</string>
+    <string name="state_expired">Время вышло</string>
+    <string name="until_hint">Время суток на ПК</string>
+    <string name="peer_never">%1$s · ещё не подключался</string>
+    <string name="min_short">мин</string>
+    <string name="ev_mode_interval">на время</string>
+    <string name="ev_mode_until">до времени</string>
+    <string name="only_admin">Вы единственный админ этого ПК. Сначала сделайте админом другого родителя — или удалите ПК только с этого телефона (на ПК он останется, пока его не удалят там).</string>
+    <string name="remove_local">Удалить только с телефона</string>
 </resources>

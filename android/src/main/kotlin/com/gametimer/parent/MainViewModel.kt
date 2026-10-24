@@ -4,7 +4,6 @@ import android.app.Application
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.gametimer.protocol.hub.AgentApi
 import com.gametimer.protocol.hub.AgentLink
 import com.gametimer.protocol.hub.KtorConnector
 import com.gametimer.protocol.hub.PairOutcome
@@ -98,12 +97,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** The typed §7.2 API for a PC (A5 screens). */
-    fun api(agentId: String): AgentApi? = link(agentId)?.let { AgentApi(it) }
+    private val editors = HashMap<String, PcEditors>()
 
-    /** Shows a one-off notice. */
+    /** Unsaved settings / schedule edits of a PC, surviving tab switches (main thread). */
+    fun editors(agentId: String): PcEditors = editors.getOrPut(agentId) { PcEditors() }
+
+    /** Runs a save in the view model, so leaving the screen doesn't cancel it. */
+    fun launchSave(block: suspend () -> Unit) {
+        viewModelScope.launch { block() }
+    }
+
+    /** Shows a one-off notice (empty texts, e.g. for a request cut by stopping the link, are skipped). */
     fun say(text: String) {
-        _message.value = text
+        if (text.isNotBlank()) _message.value = text
     }
 
     /** Text for a failed request, translated where the code is known. */
@@ -156,6 +162,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun remove(agent: PairedAgent) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { store.remove(agent.agentId) } // first: no screen recreates its link
+            editors.remove(agent.agentId)
             links.remove(agent.agentId)?.stop()
         }
     }

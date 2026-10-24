@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,7 +123,6 @@ private fun actionText(action: String?): String = stringResource(
 private fun parseColor(hex: String?): Color? =
     hex?.takeIf { Regex("^#[0-9A-Fa-f]{6}$").matches(it) }?.let { Color(android.graphics.Color.parseColor(it)) }
 
-private fun clock(minutes: Int): String = "%02d:%02d".format(minutes / 60, minutes % 60)
 
 /** "HH:MM" (or "H") → minutes 0..1440, else null. */
 private fun parseClock(text: String): Int? {
@@ -197,7 +197,13 @@ fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             val stopMessage = stringResource(R.string.confirm_stop)
             Button(onClick = { confirm = stopMessage to { api.stop() } }, enabled = online) { Text(stringResource(R.string.stop)) }
         } else {
-            Text(stringResource(R.string.timer_idle), style = MaterialTheme.typography.titleMedium)
+            if (timer?.str("state") == "expired") {
+                Text("00:00", fontSize = 64.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
+                    color = parseColor(settings?.colorRed) ?: MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.state_expired), style = MaterialTheme.typography.titleMedium)
+            } else {
+                Text(stringResource(R.string.timer_idle), style = MaterialTheme.typography.titleMedium)
+            }
             StartForm(context, online) { interval, h, m -> run { if (interval) api.startInterval(h, m) else api.startUntil(h, m) } }
         }
     }
@@ -244,6 +250,7 @@ private fun StartForm(context: Context, online: Boolean, onStart: (Boolean, Int,
             }
         }
     }
+    if (!interval) Text(stringResource(R.string.until_hint), style = MaterialTheme.typography.bodySmall)
     val hv = h.toIntOrNull()
     val mv = m.toIntOrNull()
     val valid = hv != null && mv != null && hv in 0..23 && mv in 0..59 && !(interval && hv == 0 && mv == 0)
@@ -267,11 +274,8 @@ private fun StartForm(context: Context, online: Boolean, onStart: (Boolean, Int,
 @Composable
 fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val api = remember(agent.agentId) { AgentApi(link) }
-    val scope = rememberCoroutineScope()
+    val ed = remember(agent.agentId) { vm.editors(agent.agentId) }
     val online = link.status.collectStateValue() is LinkStatus.Online
-    var loaded by remember { mutableStateOf<AgentSettings?>(null) }
-    var edit by remember { mutableStateOf<AgentSettings?>(null) }
-    var dirty by remember { mutableStateOf(false) }
     var newAlert by remember { mutableStateOf("") }
     val conflictText = stringResource(R.string.conflict)
     val savedText = stringResource(R.string.saved)
@@ -279,10 +283,10 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
 
     ReloadOn(link, "ev.settings") {
         val r = api.settings()
-        if (r is ApiResult.Ok) { loaded = r.value; if (!dirty) edit = r.value }
+        if (r is ApiResult.Ok && !ed.settingsDirty && !ed.settingsSaving) ed.fillSettings(r.value)
     }
-    val e = edit ?: return Loading()
-    fun change(v: AgentSettings) { edit = v; dirty = true }
+    val e = ed.settingsEdit ?: return Loading()
+    fun change(v: AgentSettings) { ed.settingsEdit = v; ed.settingsDirty = true }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (!online) Text(stringResource(R.string.offline_hint), color = MaterialTheme.colorScheme.error)
@@ -295,8 +299,8 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         }
         SectionLabel(stringResource(R.string.set_thresholds))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            NumberField(stringResource(R.string.set_yellow), e.yellowThreshold, Modifier.weight(1f)) { change(e.copy(yellowThreshold = it)) }
-            NumberField(stringResource(R.string.set_red), e.redThreshold, Modifier.weight(1f)) { change(e.copy(redThreshold = it)) }
+            NumberText(stringResource(R.string.set_yellow), ed.yellowText, Modifier.weight(1f)) { ed.yellowText = it; ed.settingsDirty = true }
+            NumberText(stringResource(R.string.set_red), ed.redText, Modifier.weight(1f)) { ed.redText = it; ed.settingsDirty = true }
         }
         SectionLabel(stringResource(R.string.set_colors))
         ColorField(stringResource(R.string.color_green), e.colorGreen) { change(e.copy(colorGreen = it)) }
@@ -316,7 +320,7 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.width(140.dp))
             OutlinedButton(onClick = {
                 val m = newAlert.toIntOrNull()
-                if (m == null || m !in 1..1440 || e.alertPoints.any { it.minutes == m }) vm.say(invalidText)
+                if (m == null || m !in 1..1440 || e.alertPoints.any { it.minutes == m } || e.alertPoints.size >= 20) vm.say(invalidText)
                 else { change(e.copy(alertPoints = (e.alertPoints + AlertPoint(m, true)).sortedByDescending { it.minutes })); newAlert = "" }
             }) { Text(stringResource(R.string.alert_add)) }
         }
@@ -330,27 +334,30 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         }
         Spacer(Modifier.height(8.dp))
         Button(onClick = {
-            if (!settingsValid(e)) { vm.say(invalidText); return@Button }
-            scope.launch {
-                when (val r = api.saveSettings(e)) {
-                    is ApiResult.Ok -> { loaded = r.value; edit = r.value; dirty = false; vm.say(savedText) }
-                    is ApiResult.Conflict -> { loaded = r.current; edit = r.current; dirty = false; vm.say(conflictText) }
+            val toSave = e.copy(yellowThreshold = ed.yellowText.toIntOrNull() ?: -1, redThreshold = ed.redText.toIntOrNull() ?: -1)
+            if (!settingsValid(toSave)) { vm.say(invalidText); return@Button }
+            ed.settingsSaving = true
+            vm.launchSave {
+                when (val r = api.saveSettings(toSave)) {
+                    is ApiResult.Ok -> { ed.fillSettings(r.value); vm.say(savedText) }
+                    is ApiResult.Conflict -> { ed.fillSettings(r.current); vm.say(conflictText) }
                     is ApiResult.Failed -> vm.say(vm.outcomeText(r.outcome))
                 }
+                ed.settingsSaving = false
             }
-        }, enabled = online && dirty) { Text(stringResource(R.string.save)) }
+        }, enabled = online && ed.settingsDirty && !ed.settingsSaving) { Text(stringResource(R.string.save)) }
     }
 }
 
 private fun settingsValid(s: AgentSettings): Boolean =
     s.yellowThreshold in 1..1440 && s.redThreshold in 1..1440 &&
-        listOf(s.colorGreen, s.colorYellow, s.colorRed).all { parseColor(it) != null } &&
+        listOf(s.colorGreen, s.colorYellow, s.colorRed).all { parseColor(it) != null } && s.alertPoints.size <= 20 &&
         s.alertPoints.all { it.minutes in 1..1440 } && s.alertPoints.map { it.minutes }.toSet().size == s.alertPoints.size
 
+/** A number field over the text the user typed (validated on save, marked while out of range). */
 @Composable
-private fun NumberField(label: String, value: Int, modifier: Modifier, onChange: (Int) -> Unit) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
-    OutlinedTextField(text, { v -> text = v.filter { it.isDigit() }.take(4); text.toIntOrNull()?.let(onChange) },
+private fun NumberText(label: String, text: String, modifier: Modifier, onChange: (String) -> Unit) {
+    OutlinedTextField(text, { v -> onChange(v.filter { it.isDigit() }.take(4)) },
         label = { Text(label) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         isError = text.toIntOrNull()?.let { it !in 1..1440 } ?: true, modifier = modifier)
 }
@@ -360,8 +367,10 @@ private fun ColorField(label: String, value: String, onChange: (String) -> Unit)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(32.dp).background(parseColor(value) ?: Color.Transparent, RoundedCornerShape(6.dp))
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp)))
-        OutlinedTextField(value, { v -> onChange(v.trim().take(7).uppercase()) }, label = { Text(label) }, singleLine = true,
-            isError = parseColor(value) == null, modifier = Modifier.weight(1f))
+        OutlinedTextField(value, { v ->
+            val hex = v.trim().uppercase().filter { it == '#' || it.isDigit() || it in 'A'..'F' }
+            onChange(("#" + hex.removePrefix("#").replace("#", "")).take(7))
+        }, label = { Text(label) }, singleLine = true, isError = parseColor(value) == null, modifier = Modifier.weight(1f))
     }
 }
 
@@ -369,36 +378,28 @@ private fun ColorField(label: String, value: String, onChange: (String) -> Unit)
 
 private val DAY_ORDER = listOf(1, 2, 3, 4, 5, 6, 0) // Mon..Sun, index = weekday with 0 = Sunday
 
-private data class DayEdit(val allowed: Boolean, val limit: String, val from: String, val to: String)
-
 @Composable
 fun ScheduleTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val api = remember(agent.agentId) { AgentApi(link) }
-    val scope = rememberCoroutineScope()
+    val ed = remember(agent.agentId) { vm.editors(agent.agentId) }
     val online = link.status.collectStateValue() is LinkStatus.Online
-    var loaded by remember { mutableStateOf<AgentSchedule?>(null) }
-    var enabled by remember { mutableStateOf(false) }
-    val days = remember { mutableStateListOf<DayEdit>() }
-    var dirty by remember { mutableStateOf(false) }
     val conflictText = stringResource(R.string.conflict)
     val savedText = stringResource(R.string.saved)
     val invalidText = stringResource(R.string.err_schedule)
 
-    fun fill(s: AgentSchedule) {
-        loaded = s
-        enabled = s.enabled
-        days.clear()
-        s.week.forEach { d -> days.add(DayEdit(d.allowed, d.limitMinutes.toString(), clock(d.windowStartMinutes), clock(d.windowEndMinutes))) }
-        dirty = false
+    ReloadOn(link, "ev.schedule") {
+        val r = api.schedule()
+        if (r is ApiResult.Ok && !ed.scheduleDirty && !ed.scheduleSaving) ed.fillSchedule(r.value)
     }
-    ReloadOn(link, "ev.schedule") { (api.schedule() as? ApiResult.Ok)?.let { if (!dirty) fill(it.value) } }
-    if (loaded == null || days.size != 7) return Loading()
+    val loaded = ed.scheduleLoaded
+    if (loaded == null || ed.days.size != 7) return Loading()
+    val days = ed.days
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (!online) Text(stringResource(R.string.offline_hint), color = MaterialTheme.colorScheme.error)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.sched_enable), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            Switch(enabled, { enabled = it; dirty = true })
+            Switch(ed.scheduleEnabled, { ed.scheduleEnabled = it; ed.scheduleDirty = true })
         }
         Text(stringResource(R.string.sched_hint), style = MaterialTheme.typography.bodySmall)
         DAY_ORDER.forEach { wd ->
@@ -407,10 +408,13 @@ fun ScheduleTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(java.time.DayOfWeek.of(if (wd == 0) 7 else wd).getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault()),
                     Modifier.width(44.dp))
-                Checkbox(d.allowed, { days[wd] = d.copy(allowed = it); dirty = true })
-                SmallField(stringResource(R.string.sched_limit_label), d.limit, KeyboardType.Number, Modifier.weight(1f)) { days[wd] = d.copy(limit = it.filter(Char::isDigit).take(4)); dirty = true }
-                SmallField(stringResource(R.string.sched_from), d.from, KeyboardType.Text, Modifier.weight(1.2f)) { days[wd] = d.copy(from = it.take(5)); dirty = true }
-                SmallField(stringResource(R.string.sched_to), d.to, KeyboardType.Text, Modifier.weight(1.2f)) { days[wd] = d.copy(to = it.take(5)); dirty = true }
+                Checkbox(d.allowed, { days[wd] = d.copy(allowed = it); ed.scheduleDirty = true })
+                SmallField(stringResource(R.string.sched_limit_label), d.limit, KeyboardType.Number, Modifier.weight(1f),
+                    error = d.limit.toIntOrNull()?.let { it !in 0..1440 } ?: true) { days[wd] = d.copy(limit = it.filter(Char::isDigit).take(4)); ed.scheduleDirty = true }
+                SmallField(stringResource(R.string.sched_from), d.from, KeyboardType.Text, Modifier.weight(1.2f),
+                    error = parseClock(d.from) == null) { days[wd] = d.copy(from = it.take(5)); ed.scheduleDirty = true }
+                SmallField(stringResource(R.string.sched_to), d.to, KeyboardType.Text, Modifier.weight(1.2f),
+                    error = parseClock(d.to) == null) { days[wd] = d.copy(to = it.take(5)); ed.scheduleDirty = true }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -422,20 +426,23 @@ fun ScheduleTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 if (limit == null || from == null || to == null) null else DaySchedule(d.allowed, limit, from, to)
             }
             if (week.any { it == null }) { vm.say(invalidText); return@Button }
-            scope.launch {
-                when (val r = api.saveSchedule(loaded!!.copy(enabled = enabled, week = week.map { it!! }))) {
-                    is ApiResult.Ok -> { fill(r.value); vm.say(savedText) }
-                    is ApiResult.Conflict -> { fill(r.current); vm.say(conflictText) }
+            val toSave = loaded.copy(enabled = ed.scheduleEnabled, week = week.map { it!! })
+            ed.scheduleSaving = true
+            vm.launchSave {
+                when (val r = api.saveSchedule(toSave)) {
+                    is ApiResult.Ok -> { ed.fillSchedule(r.value); vm.say(savedText) }
+                    is ApiResult.Conflict -> { ed.fillSchedule(r.current); vm.say(conflictText) }
                     is ApiResult.Failed -> vm.say(vm.outcomeText(r.outcome))
                 }
+                ed.scheduleSaving = false
             }
-        }, enabled = online && dirty) { Text(stringResource(R.string.save)) }
+        }, enabled = online && ed.scheduleDirty && !ed.scheduleSaving) { Text(stringResource(R.string.save)) }
     }
 }
 
 @Composable
-private fun SmallField(label: String, value: String, type: KeyboardType, modifier: Modifier, onChange: (String) -> Unit) {
-    OutlinedTextField(value, onChange, label = { Text(label, fontSize = 11.sp) }, singleLine = true,
+private fun SmallField(label: String, value: String, type: KeyboardType, modifier: Modifier, error: Boolean, onChange: (String) -> Unit) {
+    OutlinedTextField(value, onChange, label = { Text(label, fontSize = 11.sp) }, singleLine = true, isError = error,
         keyboardOptions = KeyboardOptions(keyboardType = type), modifier = modifier)
 }
 
@@ -448,10 +455,24 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val events = remember { mutableStateListOf<HistoryEvent>() }
     var next by remember { mutableStateOf<String?>(null) }
     var loadedOnce by remember { mutableStateOf(false) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var generation by remember { mutableIntStateOf(0) } // a reload makes older "load more" results stale
 
-    ReloadOn(link, "ev.history") {
+    suspend fun reload() {
+        val gen = ++generation
         val r = api.history()
-        if (r is ApiResult.Ok) { events.clear(); events.addAll(r.value.events); next = r.value.next.takeIf { r.value.more }; loadedOnce = true }
+        if (r is ApiResult.Ok && gen == generation) {
+            events.clear(); events.addAll(r.value.events); next = r.value.next.takeIf { r.value.more }; loadedOnce = true
+        }
+    }
+    val online = link.status.collectStateValue() is LinkStatus.Online
+    LaunchedEffect(online) { if (online) reload() }
+    // A new event is put on top; the pages below stay as they are (their cursors remain valid)
+    LaunchedEffect(link) {
+        link.events.filter { it.type() == "ev.history" }.collect { ev ->
+            val e = (ev["event"] as? JsonObject)?.let { runCatching { HistoryJson.decodeFromJsonElement(HistoryEvent.serializer(), it) }.getOrNull() }
+            if (e != null && loadedOnce) events.add(0, e) else reload()
+        }
     }
     if (!loadedOnce) return Loading()
 
@@ -469,17 +490,29 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         }
         next?.let { cursor ->
             OutlinedButton(onClick = {
+                if (loadingMore) return@OutlinedButton
+                loadingMore = true
+                val gen = generation
                 scope.launch {
                     when (val r = api.history(before = cursor)) {
-                        is ApiResult.Ok -> { events.addAll(r.value.events); next = r.value.next.takeIf { r.value.more } }
-                        is ApiResult.Failed -> vm.say(vm.outcomeText(r.outcome))
+                        is ApiResult.Ok -> if (gen == generation && next == cursor) {
+                            events.addAll(r.value.events); next = r.value.next.takeIf { r.value.more }
+                        }
+                        is ApiResult.Failed -> {
+                            val refused = r.outcome as? RequestOutcome.Refused
+                            if (refused?.code == "bad_request") reload() // the cursor was trimmed from the log: start over
+                            else vm.say(vm.outcomeText(r.outcome))
+                        }
                         else -> Unit
                     }
+                    loadingMore = false
                 }
-            }) { Text(stringResource(R.string.load_more)) }
+            }, enabled = !loadingMore) { Text(stringResource(R.string.load_more)) }
         }
     }
 }
+
+private val HistoryJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
 @Composable
 private fun who(e: HistoryEvent): String = when (e.source) {
@@ -492,8 +525,8 @@ private fun who(e: HistoryEvent): String = when (e.source) {
 private fun eventText(e: HistoryEvent): String = when (e.type) {
     "started" -> {
         val m = e.minutes ?: 0
-        val dur = if (m >= 60) "%d:%02d".format(m / 60, m % 60) else "$m ${stringResource(R.string.minutes).lowercase()}"
-        stringResource(R.string.ev_started, dur, stringResource(if (e.mode == "absolute") R.string.mode_until else R.string.mode_interval))
+        val dur = if (m >= 60) "%d:%02d".format(m / 60, m % 60) else "$m ${stringResource(R.string.min_short)}"
+        stringResource(R.string.ev_started, dur, stringResource(if (e.mode == "absolute") R.string.ev_mode_until else R.string.ev_mode_interval))
     }
     "stopped" -> stringResource(R.string.ev_stopped)
     "reset" -> stringResource(R.string.ev_reset)
@@ -515,6 +548,7 @@ fun ParentsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink, onSelfRem
     val online = link.status.collectStateValue() is LinkStatus.Online
     var peers by remember { mutableStateOf<List<PeerInfo>?>(null) }
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
+    var onlyAdmin by remember { mutableStateOf(false) }
 
     ReloadOn(link, "ev.peers") { (api.peers() as? ApiResult.Ok)?.let { peers = it.value } }
     val list = peers ?: return Loading()
@@ -536,8 +570,9 @@ fun ParentsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink, onSelfRem
                         if (p.current) Text(stringResource(R.string.this_phone), style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp))
                     }
-                    Text(stringResource(R.string.peer_sub, stringResource(if (p.role == "admin") R.string.role_admin else R.string.role_parent),
-                        shortDateTime(p.lastSeen)), style = MaterialTheme.typography.bodySmall)
+                    val role = stringResource(if (p.role == "admin") R.string.role_admin else R.string.role_parent)
+                    Text(if (p.lastSeen == null) stringResource(R.string.peer_never, role) else stringResource(R.string.peer_sub, role, shortDateTime(p.lastSeen)),
+                        style = MaterialTheme.typography.bodySmall)
                     if (iAmAdmin && !p.current) {
                         val removeText = stringResource(R.string.confirm_revoke, p.name)
                         Row {
@@ -556,10 +591,16 @@ fun ParentsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink, onSelfRem
             val disconnectText = stringResource(R.string.confirm_disconnect)
             OutlinedButton(onClick = {
                 confirm = disconnectText to {
-                    scope.launch {
+                    vm.launchSave {
                         when (val r = api.revoke(me.id)) {
                             is ApiResult.Ok -> onSelfRemoved()
-                            is ApiResult.Failed -> vm.say(vm.outcomeText(r.outcome))
+                            is ApiResult.Failed -> when (val o = r.outcome) {
+                                // Already removed (the reply was lost and the resend met a revoked session)
+                                RequestOutcome.Revoked -> onSelfRemoved()
+                                is RequestOutcome.Refused -> if (o.code == "last_admin") onlyAdmin = true
+                                    else if (o.code == "forbidden") onSelfRemoved() else vm.say(vm.outcomeText(o))
+                                else -> vm.say(vm.outcomeText(o))
+                            }
                             else -> Unit
                         }
                     }
@@ -572,6 +613,11 @@ fun ParentsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink, onSelfRem
         AlertDialog(onDismissRequest = { confirm = null }, text = { Text(text) },
             confirmButton = { TextButton(onClick = { confirm = null; action() }) { Text(stringResource(R.string.yes)) } },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text(stringResource(R.string.cancel)) } })
+    }
+    if (onlyAdmin) {
+        AlertDialog(onDismissRequest = { onlyAdmin = false }, text = { Text(stringResource(R.string.only_admin)) },
+            confirmButton = { TextButton(onClick = { onlyAdmin = false; onSelfRemoved() }) { Text(stringResource(R.string.remove_local)) } },
+            dismissButton = { TextButton(onClick = { onlyAdmin = false }) { Text(stringResource(R.string.cancel)) } })
     }
 }
 

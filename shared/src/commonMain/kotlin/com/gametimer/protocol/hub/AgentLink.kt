@@ -77,6 +77,7 @@ public sealed interface RequestOutcome {
 
     /** The agent refused it: an error code from §7.2 (e.g. not_running, forbidden); [reply] is the whole error. */
     public data class Refused(val code: String, val reply: JsonObject? = null) : RequestOutcome {
+        // Equal by code: callers (and tests) compare outcomes; the reply is extra detail (e.g. conflict's value)
         override fun equals(other: Any?): Boolean = other is Refused && other.code == code
         override fun hashCode(): Int = code.hashCode()
     }

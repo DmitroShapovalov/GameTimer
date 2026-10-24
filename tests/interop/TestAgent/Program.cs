@@ -157,6 +157,9 @@ sealed class SimBackend : IAgentBackend
                 {
                     if (m.TryGetProperty("ifRev", out var r) && r.GetInt64() != _settingsRev)
                         return Task.FromResult(Reply.Error("conflict", new JsonObject { ["value"] = WithRev(_settings, _settingsRev) }));
+                    foreach (var key in new[] { "colorGreen", "colorYellow", "colorRed" })
+                        if (m.TryGetProperty(key, out var c) && !System.Text.RegularExpressions.Regex.IsMatch(c.GetString() ?? "", "^#[0-9A-Fa-f]{6}$"))
+                            return Err("invalid_color"); // like RemoteServer.Validate
                     foreach (var key in new[] { "action", "yellowThreshold", "redThreshold", "alertPoints", "colorGreen", "colorYellow", "colorRed", "language" })
                         if (m.TryGetProperty(key, out var v)) _settings[key] = JsonNode.Parse(v.GetRawText());
                     _settingsRev++;

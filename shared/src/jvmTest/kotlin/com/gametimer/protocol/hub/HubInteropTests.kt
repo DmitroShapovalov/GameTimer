@@ -289,6 +289,10 @@ class HubInteropTests {
         val conflict = assertIs<ApiResult.Conflict<AgentSettings>>(b.saveSettings(stale.copy(language = "nl")))
         assertEquals("shutdown", conflict.current.action)
         assertEquals("en", conflict.current.language)
+
+        // A validation error comes back as its §7.2 code
+        val invalid = assertIs<ApiResult.Failed>(a.saveSettings(conflict.current.copy(colorRed = "red")))
+        assertEquals(RequestOutcome.Refused("invalid_color"), invalid.outcome)
     }
 
     @Test
