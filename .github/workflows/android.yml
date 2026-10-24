@@ -87,7 +87,7 @@ jobs:
           disable-animations: true
           script: ./gradlew :android:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireAgent=true
 
-      - name: Test report (kept also on success: shows the on-device tests ran, not skipped)
+      - name: "Test report (kept on success too, to show the on-device tests ran)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
