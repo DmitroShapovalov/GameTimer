@@ -1,0 +1,151 @@
+using System.Diagnostics;
+using System.Net;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using GameTimer.Protocol.Agent;
+
+// A scriptable agent for the Kotlin hub tests: the production AgentHost behind a real WebSocket, wired
+// like the Windows app's RemoteServer.V2. Output lines: "PORT <n>", "LINK <url>", "ASK <name>",
+// "ABORTED <reason>", "PAIRED <hub id>", "OK". Input lines: "pair", "code <digits>", "cancel",
+// "revoke <hub id>", "alert <minutes>", "quit".
+
+var store = new MemoryAgentStore();
+var ui = new ConsolePairingUi();
+var backend = new SimBackend();
+var host = new AgentHost(store, backend, ui);
+backend.Host = host;
+host.Paired += p => Out("PAIRED " + p.Id);
+
+var builder = WebApplication.CreateSlimBuilder();
+builder.Logging.ClearProviders();
+builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, 0));
+var app = builder.Build();
+app.UseWebSockets();
+app.Map("/v2", c => Accept(c, false));
+app.Map("/v2/pair", c => Accept(c, true));
+await app.StartAsync();
+var port = new Uri(app.Urls.First()).Port;
+Out("PORT " + port);
+
+string? line;
+while ((line = Console.ReadLine()) != null)
+{
+    var parts = line.Split(' ', 2);
+    switch (parts[0])
+    {
+        case "pair":
+            var offer = host.StartPairing("Test PC");
+            Out($"LINK http://127.0.0.1:{port}/pair?code=X#{offer.QrFragment}");
+            break;
+        case "code": ui.Answer(parts[1]); break;
+        case "cancel": ui.Answer(null); break;
+        case "revoke": Out(host.RevokeByOwner(parts[1]) ? "OK" : "NOTFOUND"); break;
+        case "alert": host.Publish("ev.alert", new JsonObject { ["minutes"] = int.Parse(parts[1]) }); Out("OK"); break;
+        case "quit": await host.ShutdownAsync(); await app.StopAsync(); return 0;
+    }
+}
+return 0;
+
+async Task Accept(HttpContext context, bool pairing)
+{
+    if (context.Request.Headers.Origin.Count > 0) { context.Response.StatusCode = 403; return; }
+    if (!context.WebSockets.IsWebSocketRequest) { context.Response.StatusCode = 400; return; }
+    using var ticket = host.TryAdmit(context.Connection.RemoteIpAddress!.ToString());
+    if (ticket == null) { context.Response.StatusCode = 503; return; }
+    using var socket = await context.WebSockets.AcceptWebSocketAsync();
+    await host.RunWebSocketAsync(socket, ticket, pairing, context.RequestAborted);
+}
+
+static void Out(string s)
+{
+    lock (Console.Out) { Console.Out.WriteLine(s); Console.Out.Flush(); }
+}
+
+sealed class ConsolePairingUi : IPairingUi
+{
+    private TaskCompletionSource<string?>? _pending;
+
+    public Task<string?> AskForCodeAsync(string hubName, CancellationToken cancel)
+    {
+        var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancel.Register(() => tcs.TrySetResult(null));
+        Interlocked.Exchange(ref _pending, tcs);
+        lock (Console.Out) { Console.Out.WriteLine("ASK " + hubName); Console.Out.Flush(); }
+        return tcs.Task;
+    }
+
+    public void Answer(string? code) => Interlocked.Exchange(ref _pending, null)?.TrySetResult(code);
+
+    public void PairingAborted(PairingAbortReason reason)
+    {
+        lock (Console.Out) { Console.Out.WriteLine("ABORTED " + reason); Console.Out.Flush(); }
+    }
+}
+
+/// <summary>A countdown timer like the Windows backend's (timer capability only).</summary>
+sealed class SimBackend : IAgentBackend
+{
+    private readonly object _gate = new();
+    private readonly Stopwatch _clock = new();
+    private int _durationSeconds;
+    public AgentHost? Host { get; set; }
+
+    public AgentInfo Info { get; } = new("Test PC", "windows", "0.0.0-test");
+    public IReadOnlyCollection<string> Capabilities { get; } = new[] { "timer" };
+
+    public Task<JsonObject> GetStateAsync() { lock (_gate) return Task.FromResult(State()); }
+
+    public Task<Reply> HandleAsync(string type, JsonElement m, RequestContext context)
+    {
+        lock (_gate)
+        {
+            switch (type)
+            {
+                case "state.get": return Ok();
+                case "timer.start":
+                    if (_clock.IsRunning) return Err("already_running");
+                    _durationSeconds = (m.GetProperty("hours").GetInt32() * 60 + m.GetProperty("minutes").GetInt32()) * 60;
+                    if (_durationSeconds <= 0) return Err("invalid_time");
+                    _clock.Restart();
+                    return Changed(context);
+                case "timer.stop":
+                    if (!_clock.IsRunning) return Err("not_running");
+                    _clock.Reset();
+                    return Changed(context);
+                case "timer.extend":
+                    if (!_clock.IsRunning) return Err("not_running");
+                    if (!m.TryGetProperty("minutes", out var min) || min.GetInt32() == 0) return Err("invalid_minutes");
+                    _durationSeconds += min.GetInt32() * 60;
+                    return Changed(context);
+                case "interruption.ack": return Ok();
+            }
+            return Err("unknown_command");
+        }
+    }
+
+    private Task<Reply> Changed(RequestContext context)
+    {
+        Host!.Publish("ev.state", new JsonObject { ["state"] = State() }, context.Origin);
+        return Ok();
+    }
+
+    private Task<Reply> Ok() => Task.FromResult(Reply.Ok(new JsonObject { ["state"] = State() }));
+    private static Task<Reply> Err(string code) => Task.FromResult(Reply.Error(code));
+
+    private JsonObject State()
+    {
+        bool running = _clock.IsRunning;
+        int remaining = running ? Math.Max(0, _durationSeconds - (int)_clock.Elapsed.TotalSeconds) : 0;
+        return new JsonObject
+        {
+            ["now"] = DateTimeOffset.Now.ToString("o"),
+            ["timer"] = new JsonObject
+            {
+                ["state"] = running ? "running" : "stopped",
+                ["remainingSeconds"] = remaining,
+            },
+            ["schedule"] = new JsonObject { ["status"] = "off", ["availableSeconds"] = 0, ["usedSecondsToday"] = 0 },
+            ["interruption"] = null,
+        };
+    }
+}

@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.android.kmp.library)
 }
 
 // The test vectors in tests/vectors (shared with the C# tests) become Kotlin constants, so the vector
@@ -33,9 +35,13 @@ kotlin {
     jvmToolchain(21)
     explicitApi()
     jvm()
+    android {
+        namespace = "com.gametimer.shared"
+        compileSdk = 36
+        minSdk = 26
+    }
     iosArm64()
     iosSimulatorArm64()
-    // android target arrives with the Android SDK in A4
 
     compilerOptions {
         allWarningsAsErrors.set(true)
@@ -45,13 +51,25 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.libsodium.bindings)
+            api(libs.coroutines.core)
+            api(libs.serialization.json)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.websockets)
+        }
+        jvmMain.dependencies {
+            implementation(libs.ktor.client.okhttp)
+        }
+        androidMain.dependencies {
+            implementation(libs.ktor.client.okhttp)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
         commonTest {
             kotlin.srcDir(generateNoiseVectors)
             dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.coroutines.test)
-                implementation(libs.serialization.json)
             }
         }
     }
@@ -63,6 +81,11 @@ tasks.withType<Test>().configureEach {
     providers.gradleProperty("csharpPeer").orNull?.let { peer ->
         systemProperty("csharpPeer", peer)
         inputs.dir(file(peer).parentFile).withPropertyName("csharpPeerDir").withPathSensitivity(PathSensitivity.RELATIVE)
+    }
+    // Kotlin hub ↔ C# agent over real WebSockets: -PcsharpAgent=<path to TestAgent.dll>
+    providers.gradleProperty("csharpAgent").orNull?.let { agent ->
+        systemProperty("csharpAgent", agent)
+        inputs.dir(file(agent).parentFile).withPropertyName("csharpAgentDir").withPathSensitivity(PathSensitivity.RELATIVE)
     }
     testLogging { events("passed", "failed", "skipped") }
 }
