@@ -129,4 +129,12 @@
     <string name="ev_mode_until">tot een tijd</string>
     <string name="only_admin">Je bent de enige beheerder van deze pc. Maak eerst een andere ouder beheerder — of verwijder de pc alleen van deze telefoon (op de pc blijft hij gekoppeld tot je hem daar verwijdert).</string>
     <string name="remove_local">Alleen van deze telefoon verwijderen</string>
+    <string name="unlock_title">GameTimer ontgrendelen</string>
+    <string name="unlock_subtitle">Eens per twee weken</string>
+    <string name="locked_text">Voor de veiligheid vraagt de app eens per twee weken om de schermvergrendeling van je telefoon.</string>
+    <string name="unlock_button">Ontgrendelen</string>
+    <string name="admin_auth_title">Bevestig dat jij het bent</string>
+    <string name="admin_auth_subtitle">De ouders van deze pc wijzigen</string>
+    <string name="peer_added_title">Nieuwe ouder-app</string>
+    <string name="peer_added_text">“%1$s” is toegevoegd op %2$s. Ken je dit apparaat niet, verwijder het dan op het tabblad Ouders.</string>
 </resources>

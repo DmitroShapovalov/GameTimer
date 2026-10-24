@@ -129,4 +129,12 @@
     <string name="ev_mode_until">до часу</string>
     <string name="only_admin">Ви єдиний адмін цього ПК. Спершу зробіть адміном когось іншого з батьків — або видаліть ПК лише з цього телефона (на ПК він лишиться, доки його не видалять там).</string>
     <string name="remove_local">Видалити лише з телефона</string>
+    <string name="unlock_title">Розблокувати GameTimer</string>
+    <string name="unlock_subtitle">Раз на два тижні</string>
+    <string name="locked_text">Для безпеки застосунок раз на два тижні просить блокування телефона.</string>
+    <string name="unlock_button">Розблокувати</string>
+    <string name="admin_auth_title">Підтвердьте, що це ви</string>
+    <string name="admin_auth_subtitle">Зміна батьків цього ПК</string>
+    <string name="peer_added_title">Новий батьківський застосунок</string>
+    <string name="peer_added_text">На %2$s додано «%1$s». Якщо ви не знаєте цей пристрій, видаліть його на вкладці «Батьки».</string>
 </resources>

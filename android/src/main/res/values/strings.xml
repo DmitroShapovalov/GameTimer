@@ -129,4 +129,12 @@
     <string name="ev_mode_until">until a time</string>
     <string name="only_admin">You\'re the only admin of this PC. Make another parent admin first — or remove the PC from this phone only (it stays paired on the PC until removed there).</string>
     <string name="remove_local">Remove from this phone only</string>
+    <string name="unlock_title">Unlock GameTimer</string>
+    <string name="unlock_subtitle">Asked every two weeks</string>
+    <string name="locked_text">For safety, the app asks for your phone\'s lock every two weeks.</string>
+    <string name="unlock_button">Unlock</string>
+    <string name="admin_auth_title">Confirm it\'s you</string>
+    <string name="admin_auth_subtitle">Changing the parents of this PC</string>
+    <string name="peer_added_title">New parent app</string>
+    <string name="peer_added_text">“%1$s” was added on %2$s. If you don\'t know this device, remove it on the Parents tab.</string>
 </resources>

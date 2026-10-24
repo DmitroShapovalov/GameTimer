@@ -547,6 +547,7 @@ fun ParentsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink, onSelfRem
     var peers by remember { mutableStateOf<List<PeerInfo>?>(null) }
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var onlyAdmin by remember { mutableStateOf(false) }
+    val adminCheck = rememberAdminCheck(vm)
 
     ReloadOn(link, "ev.peers") { (api.peers() as? ApiResult.Ok)?.let { peers = it.value } }
     val list = peers ?: return Loading()
@@ -574,10 +575,10 @@ fun ParentsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink, onSelfRem
                     if (iAmAdmin && !p.current) {
                         val removeText = stringResource(R.string.confirm_revoke, p.name)
                         Row {
-                            TextButton(onClick = { scope.launch { apply(api.setRole(p.id, admin = p.role != "admin")) } }, enabled = online) {
+                            TextButton(onClick = { scope.launch { if (adminCheck()) apply(api.setRole(p.id, admin = p.role != "admin")) } }, enabled = online) {
                                 Text(stringResource(if (p.role == "admin") R.string.make_parent else R.string.make_admin))
                             }
-                            TextButton(onClick = { confirm = removeText to { scope.launch { apply(api.revoke(p.id)) } } }, enabled = online) {
+                            TextButton(onClick = { confirm = removeText to { scope.launch { if (adminCheck()) apply(api.revoke(p.id)) } } }, enabled = online) {
                                 Text(stringResource(R.string.revoke_peer))
                             }
                         }

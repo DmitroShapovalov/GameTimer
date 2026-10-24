@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Where the pairing flow is (§8.2). */
 sealed interface PairState {
@@ -98,6 +101,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         return AgentLink(agent, key, connector, appName, viewModelScope, locator, onMoved).also {
             links[agentId] = it
+            watchPeers(agent, it)
             if (foreground) it.start()
         }
     }
@@ -130,7 +134,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Links stay connected only while the app is visible (no background service in this step). */
     fun setForeground(value: Boolean) {
+        if (value && reauth.needsUnlock()) _locked.value = true // §12: not unlocked for 14 days
         wantForeground.trySend(value)
+    }
+
+    /** Re-authentication (§12): the app lock after 14 days, and the check before admin actions. */
+    val reauth = ReAuth(app)
+
+    private val _locked = MutableStateFlow(false)
+    /** The app was not unlocked for too long: the UI shows only the unlock screen. */
+    val locked: StateFlow<Boolean> = _locked.asStateFlow()
+
+    fun unlocked() {
+        _locked.value = false
+    }
+
+    /** Another parent app was added on a PC (§12: a clear notice, it may be a child's phone). */
+    data class PeerAdded(val pcName: String, val phoneName: String)
+
+    private val _peerAdded = MutableStateFlow<PeerAdded?>(null)
+    val peerAdded: StateFlow<PeerAdded?> = _peerAdded.asStateFlow()
+
+    fun peerAddedShown() {
+        _peerAdded.value = null
+    }
+
+    private fun watchPeers(agent: PairedAgent, link: AgentLink) {
+        viewModelScope.launch {
+            link.events.collect { ev ->
+                if (ev.string("t") != "ev.peers" || ev.string("change") != "added") return@collect
+                val id = ev.string("peer")
+                val peers = ev["peers"] as? JsonArray ?: return@collect
+                val name = peers.mapNotNull { it as? JsonObject }.firstOrNull { it.string("id") == id }?.string("name") ?: return@collect
+                _peerAdded.value = PeerAdded(agent.name, name)
+            }
+        }
     }
 
     private suspend fun applyForeground(value: Boolean) {
@@ -194,3 +232,5 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _message.value = null
     }
 }
+
+private fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.content

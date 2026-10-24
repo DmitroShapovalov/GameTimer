@@ -12,14 +12,31 @@ android {
         applicationId = "com.gametimer.parent"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Release builds get both from the tag (release.yml): v1.7.0 → "1.7.0", 10700
+        versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: 1
+        versionName = (findProperty("appVersionName") as String?) ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // The release key lives only in GitHub secrets (and the owner's backup); CI passes it by environment.
+    // Without it a release build stays unsigned and can't be installed — debug builds are for testing.
+    val keystore = System.getenv("ANDROID_KEYSTORE_PATH")
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storeType = "pkcs12"
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false // signing and shrinking come with the first release (A7)
+            isMinifyEnabled = false // no R8: Ktor and the libsodium JNI bindings would need keep rules
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
@@ -58,6 +75,7 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.core.ktx)
+    implementation(libs.biometric)
 
     implementation(libs.camerax.camera2)
     implementation(libs.camerax.lifecycle)
