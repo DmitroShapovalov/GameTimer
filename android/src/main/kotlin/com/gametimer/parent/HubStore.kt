@@ -1,0 +1,105 @@
+package com.gametimer.parent
+
+import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import com.gametimer.protocol.hub.PairedAgent
+import com.gametimer.protocol.noise.KeyPair
+import java.io.File
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+
+/**
+ * This phone's hub identity and its paired PCs (protocol §4.4, §8.2 step 8), all in noBackupFilesDir
+ * (and backups are off): nothing leaves the device.
+ *
+ * The X25519 private key is stored encrypted with an AES-256-GCM key that lives in the Android Keystore
+ * (non-exportable, hardware-backed where available). The Keystore can't hold X25519 keys for our
+ * libsodium-based Noise directly, so it wraps the key instead.
+ */
+class HubStore(context: Context) {
+    private val dir = context.noBackupFilesDir
+    private val keyFile = File(dir, "hub-key.bin")
+    private val agentsFile = File(dir, "agents.json")
+    private val json = Json { ignoreUnknownKeys = true }
+    private val _agents = MutableStateFlow(loadAgents())
+
+    val agents: StateFlow<List<PairedAgent>> = _agents.asStateFlow()
+
+    /** The hub key pair; created on first use. */
+    val hubKey: KeyPair by lazy { loadOrCreateKey() }
+
+    @Synchronized
+    fun save(agent: PairedAgent) {
+        val list = _agents.value.filter { it.agentId != agent.agentId } + agent
+        write(list)
+    }
+
+    @Synchronized
+    fun remove(agentId: String) = write(_agents.value.filter { it.agentId != agentId })
+
+    private fun write(list: List<PairedAgent>) {
+        val tmp = File(dir, "agents.json.tmp")
+        tmp.writeText(json.encodeToString(ListSerializer(PairedAgent.serializer()), list))
+        tmp.renameTo(agentsFile)
+        _agents.value = list
+    }
+
+    private fun loadAgents(): List<PairedAgent> =
+        try {
+            if (agentsFile.exists()) json.decodeFromString(ListSerializer(PairedAgent.serializer()), agentsFile.readText()) else emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+    private fun loadOrCreateKey(): KeyPair {
+        val wrap = wrappingKey()
+        if (keyFile.exists()) {
+            try {
+                val blob = keyFile.readBytes()
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, wrap, GCMParameterSpec(128, blob, 0, 12))
+                val priv = cipher.doFinal(blob, 12, blob.size - 12)
+                return KeyPair.fromPrivateKey(priv).also { priv.fill(0) }
+            } catch (e: Exception) {
+                // Unreadable (e.g. the Keystore key was reset): a new identity; the PCs need pairing again
+            }
+        }
+        val key = KeyPair.generate()
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, wrap)
+        val priv = key.privateKey
+        val sealed = cipher.iv + cipher.doFinal(priv)
+        priv.fill(0)
+        val tmp = File(dir, "hub-key.bin.tmp")
+        tmp.writeBytes(sealed)
+        tmp.renameTo(keyFile)
+        return key
+    }
+
+    private fun wrappingKey(): SecretKey {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        gen.init(
+            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build(),
+        )
+        return gen.generateKey()
+    }
+
+    private companion object {
+        const val ALIAS = "gametimer-hub-key-wrap"
+    }
+}

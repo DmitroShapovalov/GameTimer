@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GameTimer</string>
+    <string name="home_title">Ваші комп\'ютери</string>
+    <string name="home_empty">Поки немає комп\'ютерів. На ПК відкрийте Налаштування → Підключити телефон і відскануйте QR-код.</string>
+    <string name="add_pc">Додати ПК</string>
+    <string name="status_online">У мережі</string>
+    <string name="status_connecting">Підключення…</string>
+    <string name="status_offline">Не в мережі</string>
+    <string name="status_refused">Цей телефон більше не підключений до ПК</string>
+    <string name="status_wrong_device">Відповів інший пристрій — не ваш ПК</string>
+    <string name="status_revoked">Видалено на ПК</string>
+    <string name="remove">Видалити</string>
+    <string name="remove_confirm">Видалити %1$s з цього телефона?</string>
+    <string name="cancel">Скасувати</string>
+    <string name="timer_left">залишилося</string>
+    <string name="timer_idle">Таймер не запущено</string>
+    <string name="scan_title">Відскануйте QR-код</string>
+    <string name="scan_hint">Наведіть камеру на QR-код у вікні «Підключити телефон» на ПК.</string>
+    <string name="scan_paste">Вставити посилання</string>
+    <string name="paste_label">Посилання для підключення</string>
+    <string name="connect">Підключити</string>
+    <string name="camera_denied">Для сканування коду потрібен доступ до камери.</string>
+    <string name="grant">Дозволити камеру</string>
+    <string name="not_link">Це не код GameTimer.</string>
+    <string name="phone_name">Ім\'я цього телефона (видно на ПК)</string>
+    <string name="pair_connecting">Підключення до %1$s…</string>
+    <string name="pair_code_title">Введіть цей код на ПК</string>
+    <string name="pair_code_hint">ПК попросить його ввести й підтвердити через Windows Hello. Вводьте лише на своєму ПК.</string>
+    <string name="pair_done">Підключено до %1$s</string>
+    <string name="pair_denied">Не підтверджено на ПК (неправильний код, скасовано або час вийшов). Спробуйте знову.</string>
+    <string name="pair_code_used">Цей QR-код використав інший телефон — можливо, його сфотографували. Почніть знову на ПК.</string>
+    <string name="pair_rejected">Код застарів або замінений. Знову відкрийте «Підключити телефон» на ПК.</string>
+    <string name="pair_failed">Не вдалося підключитися: %1$s</string>
+    <string name="ok">OK</string>
+    <string name="back">Назад</string>
+    <string name="start">Старт</string>
+    <string name="stop">Стоп</string>
+    <string name="plus15">+15 хв</string>
+    <string name="minus15">−15 хв</string>
+    <string name="minutes">Хвилини</string>
+    <string name="request_refused">ПК відмовив: %1$s</string>
+    <string name="request_gave_up">Немає відповіді від ПК</string>
+    <string name="role_admin">адмін</string>
+    <string name="role_parent">батьки</string>
+</resources>

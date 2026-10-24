@@ -8,6 +8,10 @@ using GameTimer.Protocol.Agent;
 // like the Windows app's RemoteServer.V2. Output lines: "PORT <n>", "LINK <url>", "ASK <name>",
 // "ABORTED <reason>", "PAIRED <hub id>", "OK". Input lines: "pair", "code <digits>", "cancel",
 // "revoke <hub id>", "alert <minutes>", "quit".
+// With --emulator: listens on all interfaces and adds test-only HTTP control endpoints for the Android
+// instrumented test in CI (the emulator reaches the host as 10.0.2.2): GET /control/pair → link,
+// GET /control/code?c=<digits> → the "owner" types that code.
+var emulator = args.Contains("--emulator");
 
 var store = new MemoryAgentStore();
 var ui = new ConsolePairingUi();
@@ -18,14 +22,21 @@ host.Paired += p => Out("PAIRED " + p.Id);
 
 var builder = WebApplication.CreateSlimBuilder();
 builder.Logging.ClearProviders();
-builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, 0));
+builder.WebHost.ConfigureKestrel(o => o.Listen(emulator ? IPAddress.Any : IPAddress.Loopback, emulator ? 5123 : 0));
 var app = builder.Build();
 app.UseWebSockets();
 app.Map("/v2", c => Accept(c, false));
 app.Map("/v2/pair", c => Accept(c, true));
+var port = 0;
+if (emulator)
+{
+    app.MapGet("/control/pair", () => $"http://10.0.2.2:{port}/pair?code=X#{host.StartPairing("Test PC").QrFragment}");
+    app.MapGet("/control/code", (string c) => { ui.Answer(c); return "OK"; });
+}
 await app.StartAsync();
-var port = new Uri(app.Urls.First()).Port;
+port = new Uri(app.Urls.First().Replace("0.0.0.0", "127.0.0.1").Replace("[::]", "127.0.0.1")).Port;
 Out("PORT " + port);
+if (emulator) { await Task.Delay(Timeout.Infinite); return 0; } // no stdin in CI
 
 string? line;
 while ((line = Console.ReadLine()) != null)

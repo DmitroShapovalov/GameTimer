@@ -37,7 +37,7 @@ kotlin {
     jvm()
     android {
         namespace = "com.gametimer.shared"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 26
     }
     iosArm64()
