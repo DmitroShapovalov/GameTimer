@@ -12,3 +12,11 @@ installer/Output/
 diagnostics.log
 timer-state.json
 sessions.jsonl
+
+# Gradle / Kotlin
+.gradle/
+/build/
+/shared/build/
+.kotlin/
+local.properties
+.idea/

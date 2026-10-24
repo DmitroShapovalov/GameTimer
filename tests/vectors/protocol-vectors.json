@@ -1,0 +1,110 @@
+{
+ "_about": "Protocol v2 encodings and derivations (docs/protocol.md \u00a74.4, \u00a74.5, \u00a78.2), computed independently with Python hashlib/base64 by gen_protocol_vectors.py.",
+ "ids": [
+  {
+   "publicKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "agentId": "JTL6XBPI2ZQ2MXXV",
+   "hubId": "ZCBWSU7QSRFZAWXG"
+  },
+  {
+   "publicKey": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "agentId": "YZQIYFPSEBJ5NS2K",
+   "hubId": "4YCPZZAUC2LJ7RSI"
+  },
+  {
+   "publicKey": "31e0303fd6418d2f8c0e78b91f22e8caed0fbe48656dcf4767e4834f701b8f62",
+   "agentId": "SXQJDGU7QT2DBGAL",
+   "hubId": "ZS4MDFOOVYGFOWXA"
+  }
+ ],
+ "pairingCodes": [
+  {
+   "handshakeHash": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "code": "708209"
+  },
+  {
+   "handshakeHash": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+   "code": "473673"
+  },
+  {
+   "handshakeHash": "1c8fa891cb414fedba6daa7c6f4ae0a6d98e5f9768cc9cecd27e805614943ee9c8a1b27fbfb76dc197255c8aa69f6b4285c423840b8bedf45e652ca64f797d81",
+   "code": "714150"
+  }
+ ],
+ "base32": [
+  {
+   "hex": "",
+   "text": ""
+  },
+  {
+   "hex": "66",
+   "text": "MY"
+  },
+  {
+   "hex": "666f",
+   "text": "MZXQ"
+  },
+  {
+   "hex": "666f6f",
+   "text": "MZXW6"
+  },
+  {
+   "hex": "666f6f62",
+   "text": "MZXW6YQ"
+  },
+  {
+   "hex": "666f6f6261",
+   "text": "MZXW6YTB"
+  },
+  {
+   "hex": "666f6f626172",
+   "text": "MZXW6YTBOI"
+  },
+  {
+   "hex": "fbfffe",
+   "text": "7P774"
+  },
+  {
+   "hex": "000102030405060708090a0b0c0d0e0f",
+   "text": "AAAQEAYEAUDAOCAJBIFQYDIOB4"
+  }
+ ],
+ "base64url": [
+  {
+   "hex": "",
+   "text": ""
+  },
+  {
+   "hex": "66",
+   "text": "Zg"
+  },
+  {
+   "hex": "666f",
+   "text": "Zm8"
+  },
+  {
+   "hex": "666f6f",
+   "text": "Zm9v"
+  },
+  {
+   "hex": "666f6f62",
+   "text": "Zm9vYg"
+  },
+  {
+   "hex": "666f6f6261",
+   "text": "Zm9vYmE"
+  },
+  {
+   "hex": "666f6f626172",
+   "text": "Zm9vYmFy"
+  },
+  {
+   "hex": "fbfffe",
+   "text": "-__-"
+  },
+  {
+   "hex": "000102030405060708090a0b0c0d0e0f",
+   "text": "AAECAwQFBgcICQoLDA0ODw"
+  }
+ ]
+}

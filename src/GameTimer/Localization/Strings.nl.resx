@@ -392,4 +392,37 @@
   <data name="AuthPrompt_Uninstall" xml:space="preserve">
     <value>GameTimer: bevestig het sluiten om te verwijderen</value>
   </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Annuleren</value>
+  </data>
+  <data name="PairCode_Title" xml:space="preserve">
+    <value>Telefoon bevestigen</value>
+  </data>
+  <data name="PairCode_Prompt" xml:space="preserve">
+    <value>'{0}' wil verbinding maken. Voer de code in die op je telefoon staat.</value>
+  </data>
+  <data name="PairCode_Hint" xml:space="preserve">
+    <value>Bevestig alleen een telefoon die je zelf vasthoudt. Een verkeerde code annuleert de verbinding.</value>
+  </data>
+  <data name="PairCode_Confirm" xml:space="preserve">
+    <value>Verbinden</value>
+  </data>
+  <data name="ConnectPhone_TwoPhones" xml:space="preserve">
+    <value>Twee telefoons probeerden met deze code verbinding te maken — misschien is hij gefotografeerd. Sluit dit venster en begin opnieuw.</value>
+  </data>
+  <data name="Peer_App" xml:space="preserve">
+    <value>Ouder-app · {0}</value>
+  </data>
+  <data name="PeerRole_Admin" xml:space="preserve">
+    <value>beheerder</value>
+  </data>
+  <data name="PeerRole_Parent" xml:space="preserve">
+    <value>ouder</value>
+  </data>
+  <data name="Peer_MakeAdmin" xml:space="preserve">
+    <value>Beheerder maken</value>
+  </data>
+  <data name="Peer_MakeParent" xml:space="preserve">
+    <value>Ouder maken (geen beheerder)</value>
+  </data>
 </root>

@@ -53,7 +53,8 @@ public sealed partial class RemoteServer
     }
 
     public RemoteServer(DeviceStore devices, PairingService pairing, UiThread ui,
-        TimerController timer, AppSettings settings, SettingsService settingsService, SessionLog sessionLog)
+        TimerController timer, AppSettings settings, SettingsService settingsService, SessionLog sessionLog,
+        GameTimer.Protocol.Agent.IAgentStore agentStore, GameTimer.Protocol.Agent.IPairingUi pairingUi)
     {
         _devices = devices;
         _pairing = pairing;
@@ -62,6 +63,7 @@ public sealed partial class RemoteServer
         _settings = settings;
         _settingsService = settingsService;
         _sessionLog = sessionLog;
+        InitV2(agentStore, pairingUi);
     }
 
     public bool IsRunning => _app != null;
@@ -178,6 +180,7 @@ public sealed partial class RemoteServer
             MapTimer(app);
             MapSettings(app);
             MapEvents(app);
+            MapV2(app);
 
             await app.StartAsync();
 
@@ -202,6 +205,8 @@ public sealed partial class RemoteServer
         var app = _app;
         if (app == null) return;
 
+        try { await Agent.ShutdownAsync(); } catch { /* best effort: bye shutdown to the parent apps */ }
+        Agent.CancelPairing();
         _app = null;
         Port = null;
         _pairing.Cancel();
