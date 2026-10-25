@@ -425,4 +425,64 @@
   <data name="Peer_MakeParent" xml:space="preserve">
     <value>Make parent (not admin)</value>
   </data>
+  <data name="Lift" xml:space="preserve">
+    <value>Lift restrictions</value>
+  </data>
+  <data name="LiftToday" xml:space="preserve">
+    <value>Lift restrictions for today</value>
+  </data>
+  <data name="EndNow" xml:space="preserve">
+    <value>End now</value>
+  </data>
+  <data name="EndNow_Confirm" xml:space="preserve">
+    <value>End the timer now? The PC will do this at once: {0}.</value>
+  </data>
+  <data name="Step_Label" xml:space="preserve">
+    <value>Step:</value>
+  </data>
+  <data name="EndAt_Label" xml:space="preserve">
+    <value>End at:</value>
+  </data>
+  <data name="EndAt_Set" xml:space="preserve">
+    <value>Set</value>
+  </data>
+  <data name="Minus_N" xml:space="preserve">
+    <value>−{0} min</value>
+  </data>
+  <data name="Plus_N" xml:space="preserve">
+    <value>+{0} min</value>
+  </data>
+  <data name="Lift_Title" xml:space="preserve">
+    <value>Today's schedule</value>
+  </data>
+  <data name="Lift_Allowed" xml:space="preserve">
+    <value>By the schedule, {0} min are left today.</value>
+  </data>
+  <data name="Lift_Blocked" xml:space="preserve">
+    <value>By the schedule, playing isn't allowed right now.</value>
+  </data>
+  <data name="Schedule_NoMore" xml:space="preserve">
+    <value>The schedule allows no more time today.</value>
+  </data>
+  <data name="Lift_Explain" xml:space="preserve">
+    <value>Ignore the schedule for the rest of today? It applies again at midnight, or when a new timer you start runs out.</value>
+  </data>
+  <data name="Lift_Btn_Today" xml:space="preserve">
+    <value>Ignore today</value>
+  </data>
+  <data name="Lift_Btn_TimerOnly" xml:space="preserve">
+    <value>Only stop the timer</value>
+  </data>
+  <data name="EndAt_TooFar" xml:space="preserve">
+    <value>That's more than 12 hours ahead (a time that has just passed counts as tomorrow). To end earlier, pick a time before the current end — or use End now.</value>
+  </data>
+  <data name="Ev_ScheduleSkipped" xml:space="preserve">
+    <value>Schedule lifted for today</value>
+  </data>
+  <data name="Ev_ScheduleRestored" xml:space="preserve">
+    <value>Schedule applies again</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>The schedule is off for today (lifted by a parent). It applies again at midnight, or when a new timer runs out.</value>
+  </data>
 </root>

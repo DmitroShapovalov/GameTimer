@@ -27,6 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -142,6 +144,9 @@ private fun SectionLabel(text: String) {
 
 private const val PREFS = "timer-form"
 
+/** Steps for − / + on a running timer, in minutes. */
+private val STEPS = listOf(1, 5, 10, 15, 30, 60)
+
 @Composable
 fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val api = remember(agent.agentId) { AgentApi(link) }
@@ -164,6 +169,21 @@ fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val schedule = state?.json?.get("schedule") as? JsonObject
     val interruption = state?.json?.str("interruption")
     val running = state?.isRunning == true
+    // Lift / end now / end at: agents with protocol minor ≥ 1 (v1.7.1); older ones keep Stop and ±
+    val controls = (status as? LinkStatus.Online)?.let { AgentApi.supportsTimerControls(it.hello) } == true
+    val scheduleStatus = schedule?.str("status")
+    val scheduleRestricts = scheduleStatus in setOf("allowed", "outsideWindow", "dayDisabled", "limitReached")
+    var liftAsk by remember { mutableStateOf(false) }
+    var pickEnd by remember { mutableStateOf(false) }
+    LaunchedEffect(running) { if (!running) pickEnd = false } // the timer ended meanwhile: nothing to move
+    val confirmLiftText = stringResource(R.string.confirm_lift)
+    // No schedule today: lifting is just stopping the timer; otherwise ask about today's schedule
+    val askLift: () -> Unit = {
+        if (scheduleRestricts) liftAsk = true
+        else confirm = confirmLiftText to { api.lift(skipScheduleToday = false) }
+    }
+    val prefs = remember { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
+    var step by rememberSaveable { mutableIntStateOf(prefs.getInt("step", 15).takeIf { it in STEPS } ?: 15) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -186,16 +206,34 @@ fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             } ?: MaterialTheme.colorScheme.onSurface
             Text(formatSeconds(seconds), fontSize = 64.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = color)
             timer?.str("targetTime")?.let { Text(stringResource(R.string.ends_at, shortTime(it), actionText(timer.str("action")))) }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                val endText = actionText(timer?.str("action"))
-                val minusMessage = stringResource(R.string.confirm_end, endText)
-                OutlinedButton(onClick = {
-                    if (seconds <= 15 * 60) confirm = minusMessage to { api.extend(-15) } else run { api.extend(-15) }
-                }, enabled = online) { Text(stringResource(R.string.minus15)) }
-                OutlinedButton(onClick = { run { api.extend(15) } }, enabled = online) { Text(stringResource(R.string.plus15)) }
+            val endText = actionText(timer?.str("action"))
+            val endMessage = stringResource(R.string.confirm_end, endText)
+            // The step for − / +, remembered on this phone
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
+                STEPS.forEach { n ->
+                    FilterChip(selected = step == n, onClick = { step = n; prefs.edit().putInt("step", n).apply() },
+                        label = { Text(n.toString()) })
+                }
             }
-            val stopMessage = stringResource(R.string.confirm_stop)
-            Button(onClick = { confirm = stopMessage to { api.stop() } }, enabled = online) { Text(stringResource(R.string.stop)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = {
+                    if (seconds <= step * 60) confirm = endMessage to { api.extend(-step) } else run { api.extend(-step) }
+                }, enabled = online) { Text(stringResource(R.string.minus_n, step)) }
+                Button(onClick = { run { api.extend(step) } }, enabled = online) { Text(stringResource(R.string.plus_n, step)) }
+            }
+            if (controls) {
+                OutlinedButton(onClick = { pickEnd = true }, enabled = online) { Text(stringResource(R.string.end_at_button)) }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { confirm = endMessage to { api.endNow() } }, enabled = online,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError)) { Text(stringResource(R.string.end_now)) }
+                    OutlinedButton(onClick = askLift, enabled = online) { Text(stringResource(R.string.lift)) }
+                }
+            } else {
+                val stopMessage = stringResource(R.string.confirm_stop)
+                Button(onClick = { confirm = stopMessage to { api.stop() } }, enabled = online) { Text(stringResource(R.string.stop)) }
+            }
         } else {
             if (timer?.str("state") == "expired") {
                 Text("00:00", fontSize = 64.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold,
@@ -205,6 +243,37 @@ fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 Text(stringResource(R.string.timer_idle), style = MaterialTheme.typography.titleMedium)
             }
             StartForm(context, online) { interval, h, m -> run { if (interval) api.startInterval(h, m) else api.startUntil(h, m) } }
+            // No timer, but the schedule limits today (or has locked the PC): set it aside for today
+            if (controls && scheduleRestricts) {
+                OutlinedButton(onClick = askLift, enabled = online) { Text(stringResource(R.string.lift_today)) }
+            }
+        }
+    }
+
+    if (liftAsk) {
+        val available = (schedule?.int("availableSeconds") ?: 0) / 60
+        AlertDialog(onDismissRequest = { liftAsk = false },
+            title = { Text(stringResource(R.string.lift_title)) },
+            text = { Text(if (scheduleStatus == "allowed") stringResource(R.string.lift_allowed, available) else stringResource(R.string.lift_blocked)) },
+            confirmButton = { TextButton(onClick = { liftAsk = false; run { api.lift(skipScheduleToday = true) } }) { Text(stringResource(R.string.lift_skip_today)) } },
+            dismissButton = {
+                Row {
+                    if (running) TextButton(onClick = { liftAsk = false; run { api.lift(skipScheduleToday = false) } }) { Text(stringResource(R.string.lift_only_timer)) }
+                    TextButton(onClick = { liftAsk = false }) { Text(stringResource(R.string.cancel)) }
+                }
+            })
+    }
+
+    if (pickEnd) {
+        val now = remember { java.util.Calendar.getInstance() }
+        val target = timer?.str("targetTime")?.let { runCatching { java.time.OffsetDateTime.parse(it).atZoneSameInstant(java.time.ZoneId.systemDefault()) }.getOrNull() }
+        DisposableEffect(Unit) {
+            val dialog = android.app.TimePickerDialog(context, { _, h, m -> run { api.setEnd(h, m) } },
+                target?.hour ?: now.get(java.util.Calendar.HOUR_OF_DAY), target?.minute ?: now.get(java.util.Calendar.MINUTE),
+                android.text.format.DateFormat.is24HourFormat(context))
+            dialog.setOnDismissListener { pickEnd = false }
+            dialog.show()
+            onDispose { dialog.setOnDismissListener(null); dialog.dismiss() }
         }
     }
 
@@ -221,6 +290,7 @@ private fun scheduleChip(schedule: JsonObject?): String? = when (schedule?.str("
     "outsideWindow" -> stringResource(R.string.sched_window)
     "dayDisabled" -> stringResource(R.string.sched_day)
     "limitReached" -> stringResource(R.string.sched_limit)
+    "skippedToday" -> stringResource(R.string.sched_skipped)
     else -> null
 }
 
@@ -250,7 +320,19 @@ private fun StartForm(context: Context, online: Boolean, onStart: (Boolean, Int,
             }
         }
     }
-    if (!interval) Text(stringResource(R.string.until_hint), style = MaterialTheme.typography.bodySmall)
+    if (!interval) {
+        Text(stringResource(R.string.until_hint), style = MaterialTheme.typography.bodySmall)
+        var picking by remember { mutableStateOf(false) }
+        TextButton(onClick = { picking = true }) { Text(stringResource(R.string.pick_time)) }
+        if (picking) DisposableEffect(Unit) {
+            val dialog = android.app.TimePickerDialog(context, { _, ph, pm -> h = ph.toString(); m = "%02d".format(pm) },
+                h.toIntOrNull()?.coerceIn(0, 23) ?: 20, m.toIntOrNull()?.coerceIn(0, 59) ?: 0,
+                android.text.format.DateFormat.is24HourFormat(context))
+            dialog.setOnDismissListener { picking = false }
+            dialog.show()
+            onDispose { dialog.setOnDismissListener(null); dialog.dismiss() }
+        }
+    }
     val hv = h.toIntOrNull()
     val mv = m.toIntOrNull()
     val valid = hv != null && mv != null && hv in 0..23 && mv in 0..59 && !(interval && hv == 0 && mv == 0)
@@ -534,6 +616,8 @@ private fun eventText(e: HistoryEvent): String = when (e.type) {
     "closed" -> stringResource(R.string.ev_closed)
     "tampered" -> stringResource(R.string.ev_tampered)
     "updated" -> stringResource(R.string.ev_updated)
+    "scheduleSkipped" -> stringResource(R.string.ev_sched_skipped)
+    "scheduleRestored" -> stringResource(R.string.ev_sched_restored)
     else -> e.type
 }
 

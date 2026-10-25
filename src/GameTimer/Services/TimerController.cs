@@ -17,6 +17,9 @@ public enum TimerState
 /// Authorization is the caller's job. All members must be called on the UI thread;
 /// background callers (API handlers) marshal with Dispatcher.InvokeAsync.
 /// </summary>
+/// <summary>Outcome of <see cref="TimerController.SetEnd"/>.</summary>
+public enum SetEndResult { Ok, NotRunning, InvalidTime, ScheduleLimit }
+
 public sealed class TimerController
 {
     private const int MaxExtendMinutes = 24 * 60;
@@ -59,6 +62,12 @@ public sealed class TimerController
 
     /// <summary>The schedule decision for right now (Off when the schedule is disabled).</summary>
     public ScheduleDecision CurrentSchedule() =>
+        _settings.ScheduleEnabled && _usage.ScheduleSkippedToday
+            ? new ScheduleDecision(ScheduleStatus.SkippedToday, 0, 1440)
+            : ScheduleEvaluator.Evaluate(DateTime.Now, _settings.ScheduleEnabled, _settings.Week, _usage.UsedSecondsToday);
+
+    /// <summary>The schedule as it would apply today without a lift (for "this lifts N minutes left" prompts).</summary>
+    public ScheduleDecision ScheduleIgnoringLift() =>
         ScheduleEvaluator.Evaluate(DateTime.Now, _settings.ScheduleEnabled, _settings.Week, _usage.UsedSecondsToday);
 
     /// <summary>
@@ -85,6 +94,7 @@ public sealed class TimerController
         _store = store;
         _log = log;
         _usage = usage;
+        _usage.LiftEndedAtMidnight += () => Log(SessionEventType.ScheduleRestored, ActionSource.System);
         _dispatcher = Dispatcher.CurrentDispatcher;
         _timer = new TimerService(settings);
         _timer.Tick += OnTick;
@@ -120,6 +130,7 @@ public sealed class TimerController
         if (saved == null)
         {
             DiagnosticLog.Write("resume: no saved timer");
+            if (_usage.LiftBoundToTimer) EndLiftOnExpiry(); // its timer is gone (state file removed)
             return;
         }
 
@@ -162,6 +173,7 @@ public sealed class TimerController
             // Time ran out while the app was not running — enforce the action now
             _store.Clear();
             Log(SessionEventType.Expired, ActionSource.System, action: _settings.Action);
+            EndLiftOnExpiry();
             SetState(TimerState.Expired);
             try { ShutdownService.Execute(_settings.Action); }
             catch (Exception ex) { DiagnosticLog.Write("resume: action failed: " + ex); }
@@ -211,6 +223,7 @@ public sealed class TimerController
         if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return false;
         if (hours == 0 && minutes == 0) return false;
 
+        // While the schedule is lifted the timer isn't capped by it; when it runs out the lift ends
         var duration = new TimeSpan(hours, minutes, 0);
         if (!CapToSchedule(ref duration)) return false; // schedule blocks or allows a shorter time
         Begin(TimerMode.Interval, duration, source, device);
@@ -227,15 +240,105 @@ public sealed class TimerController
         if (IsRunning) return false;
         if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return false;
 
+        var duration = UntilNext(hour, minute);
+        if (!CapToSchedule(ref duration)) return false;
+        Begin(TimerMode.Absolute, duration, source, device);
+        return true;
+    }
+
+    // The next moment the wall clock shows hour:minute (tomorrow if it has passed today)
+    private static TimeSpan UntilNext(int hour, int minute)
+    {
         var now = DateTime.Now;
         var target = new DateTime(now.Year, now.Month, now.Day, hour, minute, 0);
         if (target <= now)
             target = target.AddDays(1);
+        return target - now;
+    }
 
-        var duration = target - now;
-        if (!CapToSchedule(ref duration)) return false;
-        Begin(TimerMode.Absolute, duration, source, device);
+    /// <summary>
+    /// A timer that ran out while the schedule was lifted ends the lift: the parent's new timer replaced
+    /// it ("until I set a new one myself"), and from then on the schedule applies again.
+    /// </summary>
+    private void EndLiftOnExpiry()
+    {
+        if (!_usage.ScheduleSkippedToday) return;
+        _usage.SetScheduleSkippedToday(false);
+        Log(SessionEventType.ScheduleRestored, ActionSource.System);
+        ScheduleStateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Ends a running timer now, as if its time ran out: the expiry action (lock / log off / shut down)
+    /// runs at once. Logged as an extend by the remaining minutes, then the expiry.
+    /// </summary>
+    public bool EndNow(ActionSource source = ActionSource.Pc, string? device = null)
+    {
+        _dispatcher.VerifyAccess();
+        if (!IsRunning) return false;
+        var left = _timer.Remaining;
+        _timer.Extend(-left);
+        _lastRemainingMs = 0; // the jump isn't game time
+        Log(SessionEventType.Extended, source, device, minutes: -Math.Max(1, (int)Math.Ceiling(left.TotalMinutes)));
+        _timer.EvaluateNow(); // → OnExpired
         return true;
+    }
+
+    /// <summary>
+    /// Moves the end of a running timer to the next hour:minute on the wall clock. A later end can't pass
+    /// what the schedule still allows today (then it ends at that limit). Logged as an extend by the change.
+    /// </summary>
+    public SetEndResult SetEnd(int hour, int minute, ActionSource source = ActionSource.Pc, string? device = null)
+    {
+        _dispatcher.VerifyAccess();
+        if (!IsRunning) return SetEndResult.NotRunning;
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return SetEndResult.InvalidTime;
+        var target = UntilNext(hour, minute);
+        // "20:00" typed at 20:05 means "earlier", not "tomorrow": more than 12 h ahead is refused
+        if (target > TimeSpan.FromHours(12) && target > _timer.Remaining) return SetEndResult.InvalidTime;
+        var dec = CurrentSchedule();
+        if (dec.Restricts && target > _timer.Remaining && target.TotalSeconds > dec.AvailableSeconds)
+        {
+            if (dec.AvailableSeconds <= _timer.Remaining.TotalSeconds + 1) return SetEndResult.ScheduleLimit;
+            target = TimeSpan.FromSeconds(dec.AvailableSeconds); // later, but only up to what today allows
+        }
+        var delta = target - _timer.Remaining;
+        int minutes = (int)Math.Round(delta.TotalMinutes);
+        if (Math.Abs(delta.TotalSeconds) < 30) return SetEndResult.Ok; // already ends at that minute
+        _timer.Extend(delta);
+        _lastRemainingMs = (long)_timer.Remaining.TotalMilliseconds;
+        Log(SessionEventType.Extended, source, device, minutes: minutes);
+        if (_timer.Remaining > TimeSpan.Zero) Persist();
+        if (_timer.Remaining > TimeSpan.Zero)
+        {
+            if (minutes != 0) Extended?.Invoke(minutes);
+            else Tick?.Invoke(Remaining);
+        }
+        _timer.EvaluateNow();
+        return SetEndResult.Ok;
+    }
+
+    /// <summary>
+    /// "Lift restrictions": stops a running timer (no lock), and with <paramref name="skipScheduleToday"/>
+    /// also sets the daily schedule aside until midnight or until the parent starts a new timer. False if
+    /// there was nothing to lift.
+    /// </summary>
+    public bool Lift(bool skipScheduleToday, ActionSource source = ActionSource.Pc, string? device = null)
+    {
+        _dispatcher.VerifyAccess();
+        bool stopped = Stop(source, device);
+        bool skipped = false;
+        if (skipScheduleToday && _settings.ScheduleEnabled)
+        {
+            if (_usage.ScheduleSkippedToday) return true; // already lifted: nothing more to do
+            _usage.SetScheduleSkippedToday(true);
+            _lastBlocked = false;
+            ShutdownService.CancelShutdown();
+            Log(SessionEventType.ScheduleSkipped, source, device);
+            skipped = true;
+            ScheduleStateChanged?.Invoke();
+        }
+        return stopped || skipped;
     }
 
     /// <summary>Stops a running timer and cancels any pending shutdown.</summary>
@@ -249,6 +352,7 @@ public sealed class TimerController
         _store.Clear();
         _lastRemainingMs = 0;
         ShutdownService.CancelShutdown();
+        _usage.SetLiftBoundToTimer(false); // stopped on purpose: an active lift goes on until midnight
         Log(SessionEventType.Stopped, source, device);
         SetState(TimerState.Stopped);
         return true;
@@ -264,6 +368,7 @@ public sealed class TimerController
         _store.Clear();
         _lastRemainingMs = 0;
         ShutdownService.CancelShutdown();
+        _usage.SetLiftBoundToTimer(false);
         Mode = null;
         if (had) Log(SessionEventType.Reset, source, device);
         SetState(TimerState.NotStarted);
@@ -279,9 +384,8 @@ public sealed class TimerController
         if (!IsRunning || minutes == 0 || Math.Abs(minutes) > MaxExtendMinutes) return false;
 
         // A positive extend can't take the timer past what the schedule still allows today
-        if (minutes > 0 && _settings.ScheduleEnabled)
+        if (minutes > 0 && CurrentSchedule() is { Restricts: true } dec)
         {
-            var dec = CurrentSchedule();
             if (dec.IsBlocked) return false;
             int maxAdd = dec.AvailableSeconds - (int)_timer.Remaining.TotalSeconds;
             if (maxAdd <= 0) return false;
@@ -304,6 +408,8 @@ public sealed class TimerController
 
     private void Begin(TimerMode mode, TimeSpan duration, ActionSource source, string? device)
     {
+        // A timer started during a lift is the parent's new limit: the lift ends with it
+        if (_usage.ScheduleSkippedToday) _usage.SetLiftBoundToTimer(true);
         Mode = mode;
         _timer.Start(duration);
         _lastRemainingMs = (long)duration.TotalMilliseconds;
@@ -334,8 +440,8 @@ public sealed class TimerController
     /// </summary>
     private bool CapToSchedule(ref TimeSpan duration)
     {
-        if (!_settings.ScheduleEnabled) return true;
         var dec = CurrentSchedule();
+        if (!dec.Restricts) return true;
         if (dec.IsBlocked) return false;
         if (duration.TotalSeconds > dec.AvailableSeconds)
             duration = TimeSpan.FromSeconds(dec.AvailableSeconds);
@@ -352,6 +458,7 @@ public sealed class TimerController
         _dispatcher.VerifyAccess();
         if (!_settings.ScheduleEnabled || IsRunning) return;
         var dec = CurrentSchedule();
+        if (dec.Status == ScheduleStatus.SkippedToday) return; // lifted for today: no automatic timer
         if (dec.Status == ScheduleStatus.Allowed && dec.AvailableSeconds > 0)
             Begin(TimerMode.Interval, TimeSpan.FromSeconds(dec.AvailableSeconds), ActionSource.System, null);
         else
@@ -364,8 +471,8 @@ public sealed class TimerController
     // Periodic enforcement of the schedule. Does not auto-start (that is AutoStartIfScheduled).
     private void ScheduleCheck()
     {
-        if (!_settings.ScheduleEnabled) { _lastBlocked = false; return; }
         var dec = CurrentSchedule();
+        if (!dec.Restricts) { _lastBlocked = false; return; } // off, or lifted for today
 
         if (dec.IsBlocked)
         {
@@ -405,6 +512,7 @@ public sealed class TimerController
         _store.Clear();
         _lastRemainingMs = 0;
         Log(SessionEventType.Expired, ActionSource.System, action: _settings.Action);
+        EndLiftOnExpiry();
         SetState(TimerState.Expired);
         ShutdownService.Execute(_settings.Action);
     }

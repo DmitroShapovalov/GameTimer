@@ -16,7 +16,7 @@
       tabTimer: "Timer", tabSettings: "Settings", tabDevices: "Phones", tabHistory: "History",
       historyEmpty: "No events yet",
       ev_started: "Started", ev_stopped: "Stopped", ev_reset: "Reset",
-      ev_expired: "Time up", ev_resumed: "Resumed after restart", ev_closed: "App closed", ev_tampered: "Settings tampered — restored", ev_updated: "Closed for update",
+      ev_expired: "Time up", ev_resumed: "Resumed after restart", ev_closed: "App closed", ev_tampered: "Settings tampered — restored", ev_updated: "Closed for update", ev_schedSkipped: "Schedule lifted for today", ev_schedRestored: "Schedule applies again",
       ev_plus: "+{0} min", ev_minus: "−{0} min",
       who_pc: "PC", who_system: "automatic",
       mode_interval: "interval", mode_absolute: "until time",
@@ -64,6 +64,7 @@
       schedBlk_window: "Schedule: outside the allowed hours now",
       schedBlk_day: "Schedule: gaming is off today",
       schedBlk_limit: "Schedule: today's time budget is used up",
+      schedSkipped: "Schedule: off for today",
       schedTitle: "Daily schedule",
       schedHint: "Per weekday: a daily limit (minutes; 0 = none) and the allowed hours (24-hour, e.g. 15:00). Managed from the PC too.",
       schedEnable: "Enable schedule",
@@ -73,7 +74,7 @@
       tabTimer: "Таймер", tabSettings: "Настройки", tabDevices: "Телефоны", tabHistory: "История",
       historyEmpty: "Пока нет событий",
       ev_started: "Запуск", ev_stopped: "Остановлен", ev_reset: "Сброс",
-      ev_expired: "Время вышло", ev_resumed: "Продолжен после перезапуска", ev_closed: "Приложение закрыто", ev_tampered: "Подмена настроек — восстановлено", ev_updated: "Закрыто для обновления",
+      ev_expired: "Время вышло", ev_resumed: "Продолжен после перезапуска", ev_closed: "Приложение закрыто", ev_tampered: "Подмена настроек — восстановлено", ev_updated: "Закрыто для обновления", ev_schedSkipped: "Расписание снято на сегодня", ev_schedRestored: "Расписание снова действует",
       ev_plus: "+{0} мин", ev_minus: "−{0} мин",
       who_pc: "ПК", who_system: "автоматически",
       mode_interval: "интервал", mode_absolute: "до времени",
@@ -121,6 +122,7 @@
       schedBlk_window: "Расписание: сейчас вне разрешённых часов",
       schedBlk_day: "Расписание: сегодня играть нельзя",
       schedBlk_limit: "Расписание: дневной лимит исчерпан",
+      schedSkipped: "Расписание: сегодня не действует",
       schedTitle: "Дневное расписание",
       schedHint: "Для каждого дня: дневной лимит (минуты; 0 = без лимита) и разрешённые часы (24-ч, напр. 15:00). Также настраивается на ПК.",
       schedEnable: "Включить расписание",
@@ -139,7 +141,7 @@
       ev_resumed: "Hervat na herstart",
       ev_closed: "App gesloten",
       ev_tampered: "Instellingen gemanipuleerd — hersteld",
-      ev_updated: "Gesloten voor update",
+      ev_updated: "Gesloten voor update", ev_schedSkipped: "Schema voor vandaag opgeheven", ev_schedRestored: "Schema geldt weer",
       ev_plus: "+{0} min",
       ev_minus: "−{0} min",
       who_pc: "Pc",
@@ -218,6 +220,7 @@
       schedBlk_window: "Schema: nu buiten de toegestane uren",
       schedBlk_day: "Schema: vandaag mag er niet gespeeld worden",
       schedBlk_limit: "Schema: het tijdbudget van vandaag is op",
+      schedSkipped: "Schema: vandaag uit",
       schedTitle: "Dagschema",
       schedHint: "Per weekdag: een daglimiet (minuten; 0 = geen) en de toegestane uren (24-uurs, bijv. 15:00). Ook op de pc te beheren.",
       schedEnable: "Schema inschakelen",
@@ -240,7 +243,7 @@
       ev_resumed: "Відновлено після перезапуску",
       ev_closed: "Програму закрито",
       ev_tampered: "Підміну виявлено — відновлено",
-      ev_updated: "Закрито для оновлення",
+      ev_updated: "Закрито для оновлення", ev_schedSkipped: "Розклад знято на сьогодні", ev_schedRestored: "Розклад знову діє",
       ev_plus: "+{0} хв",
       ev_minus: "−{0} хв",
       who_pc: "ПК",
@@ -319,6 +322,7 @@
       schedBlk_window: "Розклад: зараз поза дозволеними годинами",
       schedBlk_day: "Розклад: сьогодні грати не можна",
       schedBlk_limit: "Розклад: денний ліміт часу вичерпано",
+      schedSkipped: "Розклад: сьогодні не діє",
       schedTitle: "Денний розклад",
       schedHint: "Для кожного дня: денний ліміт (хвилини; 0 = без ліміту) і дозволені години (24-год, напр. 15:00). Також керується з ПК.",
       schedEnable: "Увімкнути розклад",
@@ -813,6 +817,7 @@
       case "outsideWindow": box.textContent = t("schedBlk_window"); box.classList.add("warn"); break;
       case "dayDisabled": box.textContent = t("schedBlk_day"); box.classList.add("warn"); break;
       case "limitReached": box.textContent = t("schedBlk_limit"); box.classList.add("warn"); break;
+      case "skippedToday": box.textContent = t("schedSkipped"); box.classList.add("ok"); break;
       default: box.hidden = true;
     }
   }
@@ -932,6 +937,8 @@
       case "closed": return t("ev_closed");
       case "tampered": return t("ev_tampered");
       case "updated": return t("ev_updated");
+      case "scheduleSkipped": return t("ev_schedSkipped");
+      case "scheduleRestored": return t("ev_schedRestored");
       default: return e.type;
     }
   }

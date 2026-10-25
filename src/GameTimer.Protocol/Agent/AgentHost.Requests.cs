@@ -17,6 +17,8 @@ public sealed partial class AgentHost
         ["timer.start"] = new("timer", true, false),
         ["timer.stop"] = new("timer", true, false),
         ["timer.extend"] = new("timer", true, false),
+        ["timer.end"] = new("timer", true, false),    // minor 1
+        ["timer.setEnd"] = new("timer", true, false), // minor 1
         ["interruption.ack"] = new("timer", true, false),
         ["settings.get"] = new("settings", false, false),
         ["settings.put"] = new("settings", true, false),

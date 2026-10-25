@@ -261,6 +261,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "not_running" -> R.string.err_not_running
             "already_running" -> R.string.err_already_running
             "invalid_time" -> R.string.err_invalid_time
+            "schedule_limit" -> R.string.err_schedule_limit
             "invalid_minutes" -> R.string.err_invalid_minutes
             "forbidden" -> R.string.err_forbidden
             "busy" -> R.string.err_busy

@@ -138,13 +138,41 @@ sealed class SimBackend : IAgentBackend
                     _durationSeconds = (m.GetProperty("hours").GetInt32() * 60 + m.GetProperty("minutes").GetInt32()) * 60;
                     if (_durationSeconds <= 0) return Err("invalid_time");
                     _clock.Restart();
+                    _expired = false; // like the real agent: a timer started during a lift keeps the lift until it runs out
                     Log("started", context, _durationSeconds / 60);
                     return Changed(context);
                 case "timer.stop":
-                    if (!_clock.IsRunning) return Err("not_running");
-                    _clock.Reset();
-                    Log("stopped", context, null);
+                {
+                    bool skip = m.TryGetProperty("skipScheduleToday", out var sk) && sk.ValueKind == JsonValueKind.True;
+                    bool scheduleOn = _schedule["enabled"]!.GetValue<bool>();
+                    if (!_clock.IsRunning && !(skip && scheduleOn)) return Err("not_running"); // a repeated lift is fine
+                    if (_clock.IsRunning) { _clock.Reset(); Log("stopped", context, null); }
+                    if (skip && scheduleOn && !_skipped) { _skipped = true; Log("scheduleSkipped", context, null); }
                     return Changed(context);
+                }
+                case "timer.end":
+                    if (!_clock.IsRunning) return Err("not_running");
+                    Log("extended", context, -Math.Max(1, (Remaining() + 59) / 60));
+                    _clock.Reset();
+                    _expired = true;
+                    if (_skipped) { _skipped = false; Log("scheduleRestored", context, null); } // the lift ends with the timer
+                    return Changed(context);
+                case "timer.setEnd":
+                {
+                    if (!_clock.IsRunning) return Err("not_running");
+                    if (!m.TryGetProperty("hours", out var hp) || !hp.TryGetInt32(out var h)
+                        || !m.TryGetProperty("minutes", out var mp) || !mp.TryGetInt32(out var mi)) return Err("bad_request");
+                    if (h is < 0 or > 23 || mi is < 0 or > 59) return Err("invalid_time");
+                    var now = DateTime.Now;
+                    var target = now.Date.AddHours(h).AddMinutes(mi);
+                    if (target <= now) target = target.AddDays(1);
+                    if (target - now > TimeSpan.FromHours(12) && (target - now).TotalSeconds > Remaining()) return Err("invalid_time");
+                    // (the simulator has no schedule cap: availableSeconds is a fixed 7200)
+                    int before = Remaining();
+                    _durationSeconds = (int)_clock.Elapsed.TotalSeconds + (int)(target - now).TotalSeconds;
+                    Log("extended", context, (int)Math.Round((Remaining() - before) / 60.0));
+                    return Changed(context);
+                }
                 case "timer.extend":
                     if (!_clock.IsRunning) return Err("not_running");
                     if (!m.TryGetProperty("minutes", out var min) || min.GetInt32() == 0) return Err("invalid_minutes");
@@ -220,19 +248,35 @@ sealed class SimBackend : IAgentBackend
     private Task<Reply> Ok() => Task.FromResult(Reply.Ok(new JsonObject { ["state"] = State() }));
     private static Task<Reply> Err(string code) => Task.FromResult(Reply.Error(code));
 
+    private bool _skipped, _expired;
+
+    private int Remaining() => Math.Max(0, _durationSeconds - (int)_clock.Elapsed.TotalSeconds);
+
     private JsonObject State()
     {
+        if (_clock.IsRunning && Remaining() == 0)
+        {
+            // Ran out (or extended to zero): like the agent's OnExpired, which also ends a lift
+            _clock.Reset();
+            _expired = true;
+            _skipped = false;
+        }
         bool running = _clock.IsRunning;
-        int remaining = running ? Math.Max(0, _durationSeconds - (int)_clock.Elapsed.TotalSeconds) : 0;
+        int remaining = running ? Remaining() : 0;
+        bool scheduleOn = _schedule["enabled"]!.GetValue<bool>();
         return new JsonObject
         {
             ["now"] = DateTimeOffset.Now.ToString("o"),
             ["timer"] = new JsonObject
             {
-                ["state"] = running ? "running" : "stopped",
+                ["state"] = running ? "running" : _expired ? "expired" : "stopped",
                 ["remainingSeconds"] = remaining,
             },
-            ["schedule"] = new JsonObject { ["status"] = "off", ["availableSeconds"] = 0, ["usedSecondsToday"] = 0 },
+            ["schedule"] = new JsonObject
+            {
+                ["status"] = !scheduleOn ? "off" : _skipped ? "skippedToday" : "allowed",
+                ["availableSeconds"] = scheduleOn && !_skipped ? 7200 : 0, ["usedSecondsToday"] = 0,
+            },
             ["interruption"] = null,
         };
     }
