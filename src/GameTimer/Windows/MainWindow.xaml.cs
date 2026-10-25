@@ -114,7 +114,12 @@ public partial class MainWindow : FluentWindow
         MinutesLabel.Text = Loc.Get("Minutes");
         HourLabel.Text = Loc.Get("Hour");
         StartButton.Content = Loc.Get("Start");
-        StopButton.Content = Loc.Get("Stop");
+        StopButton.Content = Loc.Get("Lift");
+        EndNowButton.Content = Loc.Get("EndNow");
+        StepLabel.Text = Loc.Get("Step_Label");
+        EndAtLabel.Text = Loc.Get("EndAt_Label");
+        EndAtButton.Content = Loc.Get("EndAt_Set");
+        UpdateStepButtons();
         ResetButton.Content = Loc.Get("Reset");
         StatusText.Text = Loc.Get(_timerStateKey);
 
@@ -542,10 +547,90 @@ public partial class MainWindow : FluentWindow
         // UI updates happen in OnTimerStateChanged
     }
 
+    // "Lift restrictions": the timer stops without a lock; if the schedule limits today, the parent
+    // chooses whether it is set aside until midnight (or the next timer) too
     private async void Stop_Click(object sender, RoutedEventArgs e)
     {
+        var dec = _timer.CurrentSchedule();
+        bool skip = false;
+        if (dec.Restricts)
+        {
+            var text = (dec.Status == ScheduleStatus.Allowed
+                ? string.Format(Loc.Get("Lift_Allowed"), dec.AvailableSeconds / 60)
+                : Loc.Get("Lift_Blocked")) + "\n\n" + Loc.Get(_timer.IsRunning ? "Lift_Choice_Running" : "Lift_Choice_Idle");
+            var answer = System.Windows.MessageBox.Show(this, text, Loc.Get("Lift_Title"),
+                _timer.IsRunning ? System.Windows.MessageBoxButton.YesNoCancel : System.Windows.MessageBoxButton.OKCancel);
+            if (answer == System.Windows.MessageBoxResult.Cancel) return;
+            skip = answer is System.Windows.MessageBoxResult.Yes or System.Windows.MessageBoxResult.OK;
+        }
         if (!await RequireAuth()) return;
-        _timer.Stop();
+        _timer.Lift(skip);
+        UpdateButtonStates(_timer.IsRunning);
+    }
+
+    // Ending early only restricts: no Windows Hello needed
+    private void EndNow_Click(object sender, RoutedEventArgs e)
+    {
+        var action = Loc.Get("Action_" + _settings.Action);
+        if (System.Windows.MessageBox.Show(this, string.Format(Loc.Get("EndNow_Confirm"), action), Loc.Get("EndNow"),
+                System.Windows.MessageBoxButton.OKCancel) != System.Windows.MessageBoxResult.OK) return;
+        _timer.EndNow();
+    }
+
+    private static readonly int[] Steps = { 1, 5, 10, 15, 30, 60 };
+
+    private void UpdateStepButtons()
+    {
+        int step = Steps.Contains(_settings.AdjustStepMinutes) ? _settings.AdjustStepMinutes : 15;
+        if (StepCombo.Items.Count == 0)
+            foreach (var n in Steps) StepCombo.Items.Add(n);
+        StepCombo.SelectedItem = step;
+        MinusButton.Content = string.Format(Loc.Get("Minus_N"), step);
+        PlusButton.Content = string.Format(Loc.Get("Plus_N"), step);
+    }
+
+    private void StepCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading || StepCombo.SelectedItem is not int step || step == _settings.AdjustStepMinutes) return;
+        _settings.AdjustStepMinutes = step;
+        SaveSettings();
+        UpdateStepButtons();
+    }
+
+    private void Minus_Click(object sender, RoutedEventArgs e)
+    {
+        int step = _settings.AdjustStepMinutes;
+        if (_timer.Remaining.TotalMinutes <= step)
+        {
+            var action = Loc.Get("Action_" + _settings.Action);
+            if (System.Windows.MessageBox.Show(this, string.Format(Loc.Get("EndNow_Confirm"), action), Loc.Get("EndNow"),
+                    System.Windows.MessageBoxButton.OKCancel) != System.Windows.MessageBoxResult.OK) return;
+        }
+        _timer.Extend(-step);
+    }
+
+    // More time: Windows Hello, like Stop (the child may be at the PC)
+    private async void Plus_Click(object sender, RoutedEventArgs e)
+    {
+        if (!await RequireAuth()) return;
+        if (!_timer.Extend(_settings.AdjustStepMinutes))
+            System.Windows.MessageBox.Show(this, Loc.Get("Schedule_NoMore"), Loc.Get("Error"), System.Windows.MessageBoxButton.OK);
+    }
+
+    private async void EndAt_Click(object sender, RoutedEventArgs e)
+    {
+        int h = ParseInt(EndAtHour.Text, -1), m = ParseInt(EndAtMinute.Text, -1);
+        if (h is < 0 or > 23 || m is < 0 or > 59)
+        {
+            System.Windows.MessageBox.Show(this, Loc.Get("InvalidTimeRange"), Loc.Get("Error"), System.Windows.MessageBoxButton.OK);
+            return;
+        }
+        // Later than now ends: more time → Windows Hello
+        var now = DateTime.Now;
+        var target = now.Date.AddHours(h).AddMinutes(m);
+        if (target <= now) target = target.AddDays(1);
+        if (target - now > _timer.Remaining && !await RequireAuth()) return;
+        _timer.SetEnd(h, m);
     }
 
     private async void Reset_Click(object sender, RoutedEventArgs e)
@@ -557,8 +642,17 @@ public partial class MainWindow : FluentWindow
     private void UpdateButtonStates(bool running)
     {
         StartButton.IsEnabled = !running;
-        StopButton.IsEnabled = running;
+        // Lift also works without a timer while the schedule limits today (e.g. it has locked the PC)
+        StopButton.IsEnabled = running || _timer.CurrentSchedule().Restricts;
+        StopButton.Content = Loc.Get(running ? "Lift" : "LiftToday");
         ResetButton.IsEnabled = running;
+        EndNowButton.IsEnabled = running;
+        RunningPanel.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        if (running && _timer.TargetTime is { } end && !EndAtHour.IsKeyboardFocusWithin && !EndAtMinute.IsKeyboardFocusWithin)
+        {
+            EndAtHour.Text = end.Hour.ToString("D2");
+            EndAtMinute.Text = end.Minute.ToString("D2");
+        }
     }
 
     #endregion
@@ -568,6 +662,13 @@ public partial class MainWindow : FluentWindow
     private void OnTimerTick(TimeSpan remaining)
     {
         _overlay?.UpdateTime(remaining);
+
+        // The end time follows extends (from here or a phone) unless the parent is typing a new one
+        if (_timer.TargetTime is { } end && !EndAtHour.IsKeyboardFocusWithin && !EndAtMinute.IsKeyboardFocusWithin)
+        {
+            EndAtHour.Text = end.Hour.ToString("D2");
+            EndAtMinute.Text = end.Minute.ToString("D2");
+        }
 
         if (remaining.TotalHours >= 1)
             RemainingText.Text = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
@@ -1476,12 +1577,16 @@ public partial class MainWindow : FluentWindow
                 msg = Loc.Get("Sched_St_LimitReached");
                 sev = Wpf.Ui.Controls.InfoBarSeverity.Warning;
                 break;
+            case ScheduleStatus.SkippedToday:
+                msg = Loc.Get("Sched_St_Skipped");
+                break;
             default:
                 msg = "";
                 break;
         }
         ScheduleStatusBar.Message = msg;
         ScheduleStatusBar.Severity = sev;
+        UpdateButtonStates(_timer.IsRunning); // "Lift restrictions for today" depends on the schedule
     }
 
     // "HH:MM" (24:00 for end-of-day); minutes from midnight

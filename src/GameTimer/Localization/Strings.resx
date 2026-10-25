@@ -425,4 +425,53 @@
   <data name="Peer_MakeParent" xml:space="preserve">
     <value>Make parent (not admin)</value>
   </data>
+  <data name="Lift" xml:space="preserve">
+    <value>Lift restrictions</value>
+  </data>
+  <data name="LiftToday" xml:space="preserve">
+    <value>Lift restrictions for today</value>
+  </data>
+  <data name="EndNow" xml:space="preserve">
+    <value>End now</value>
+  </data>
+  <data name="EndNow_Confirm" xml:space="preserve">
+    <value>End the timer now? The PC will do this at once: {0}.</value>
+  </data>
+  <data name="Step_Label" xml:space="preserve">
+    <value>Step:</value>
+  </data>
+  <data name="EndAt_Label" xml:space="preserve">
+    <value>End at:</value>
+  </data>
+  <data name="EndAt_Set" xml:space="preserve">
+    <value>Set</value>
+  </data>
+  <data name="Minus_N" xml:space="preserve">
+    <value>−{0} min</value>
+  </data>
+  <data name="Plus_N" xml:space="preserve">
+    <value>+{0} min</value>
+  </data>
+  <data name="Lift_Title" xml:space="preserve">
+    <value>Today's schedule</value>
+  </data>
+  <data name="Lift_Allowed" xml:space="preserve">
+    <value>By the schedule, {0} min are left today.</value>
+  </data>
+  <data name="Lift_Blocked" xml:space="preserve">
+    <value>By the schedule, playing isn't allowed right now.</value>
+  </data>
+  <data name="Lift_Choice_Running" xml:space="preserve">
+    <value>Yes — also ignore the schedule for the rest of today (it applies again at midnight or with a new timer).
+No — only stop the timer.</value>
+  </data>
+  <data name="Lift_Choice_Idle" xml:space="preserve">
+    <value>OK — ignore the schedule for the rest of today (it applies again at midnight or with a new timer).</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>The schedule is off for today (lifted by a parent). It applies again at midnight or with a new timer.</value>
+  </data>
+  <data name="Schedule_NoMore" xml:space="preserve">
+    <value>The schedule allows no more time today.</value>
+  </data>
 </root>

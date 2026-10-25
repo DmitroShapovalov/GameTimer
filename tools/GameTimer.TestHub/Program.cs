@@ -25,6 +25,11 @@ try
         case "pair": return args.Length >= 2 ? await Pair(args[1], args.Length >= 3 ? args[2] : "Test hub") : Usage();
         case "status": return await Session(s => { Print(s.Hello); return Task.CompletedTask; });
         case "stop": return await Request("timer.stop", new JsonObject());
+        case "lift": // lift [today]: stop the timer; with "today" also set the schedule aside for today
+            return await Request("timer.stop", args.Length >= 2 && args[1] == "today" ? new JsonObject { ["skipScheduleToday"] = true } : new JsonObject());
+        case "end": return await Request("timer.end", new JsonObject());
+        case "endat" when args.Length >= 2 && TimeOnly.TryParse(args[1], System.Globalization.CultureInfo.InvariantCulture, out var at):
+            return await Request("timer.setEnd", new JsonObject { ["hours"] = at.Hour, ["minutes"] = at.Minute });
         case "start" when args.Length >= 2 && int.TryParse(args[1], out var m):
             return await Request("timer.start", new JsonObject { ["mode"] = "interval", ["hours"] = m / 60, ["minutes"] = m % 60 });
         case "extend" when args.Length >= 2 && int.TryParse(args[1], out var m):
@@ -54,7 +59,8 @@ static int Usage()
 {
     Console.WriteLine("""
         gt-testhub pair "<link from the Connect phone window>" [name]
-        gt-testhub status | stop | start <minutes> | extend <minutes> | peers | history | settings | watch
+        gt-testhub status | stop | lift [today] | end | endat <HH:MM> | start <minutes> | extend <minutes>
+        gt-testhub peers | history | settings | watch
         gt-testhub replay-test
         """);
     return 2;
@@ -79,7 +85,7 @@ async Task<int> Pair(string link, string name)
     var (send, recv) = hs.Split();
     var code = PairingCode.Derive(hs.GetHandshakeHash());
 
-    await SendJson(ws, send, new JsonObject { ["t"] = "pair.hello", ["protocol"] = 2, ["minor"] = 0, ["name"] = name, ["app"] = "gt-testhub" });
+    await SendJson(ws, send, new JsonObject { ["t"] = "pair.hello", ["protocol"] = 2, ["minor"] = 1, ["name"] = name, ["app"] = "gt-testhub" });
     Console.WriteLine($"Enter this code on the PC: {code}");
     var result = await ReceiveJson(ws, recv) ?? throw new InvalidOperationException("the PC closed the connection");
     Print(result);
@@ -137,7 +143,7 @@ async Task<int> ReplayTest()
         await SendRaw(ws, msg1);
         hs.ReadMessage((await ReceiveRaw(ws))!);
         var (send, _) = hs.Split();
-        ready = send.Encrypt(Encoding.UTF8.GetBytes("{\"t\":\"ready\",\"protocol\":2,\"minor\":0,\"app\":\"gt-testhub\"}"));
+        ready = send.Encrypt(Encoding.UTF8.GetBytes("{\"t\":\"ready\",\"protocol\":2,\"minor\":1,\"app\":\"gt-testhub\"}"));
         await SendRaw(ws, ready);
         await ReceiveRaw(ws); // hello
     }
@@ -181,7 +187,7 @@ sealed class HubSession
         var msg2 = await ReceiveRaw(ws) ?? throw new InvalidOperationException("the PC closed the connection (not paired, or revoked?)");
         hs.ReadMessage(msg2);
         var (send, recv) = hs.Split();
-        await SendJson(ws, send, new JsonObject { ["t"] = "ready", ["protocol"] = 2, ["minor"] = 0, ["app"] = "gt-testhub" });
+        await SendJson(ws, send, new JsonObject { ["t"] = "ready", ["protocol"] = 2, ["minor"] = 1, ["app"] = "gt-testhub" });
         var hello = await ReceiveJson(ws, recv) ?? throw new InvalidOperationException("no hello");
         if (hello["t"]?.GetValue<string>() != "hello") throw new InvalidOperationException("expected hello, got " + hello.ToJsonString());
         return new HubSession(ws, send, recv, hello);

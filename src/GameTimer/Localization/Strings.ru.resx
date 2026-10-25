@@ -425,4 +425,53 @@
   <data name="Peer_MakeParent" xml:space="preserve">
     <value>Сделать родителем (не админом)</value>
   </data>
+  <data name="Lift" xml:space="preserve">
+    <value>Снять ограничения</value>
+  </data>
+  <data name="LiftToday" xml:space="preserve">
+    <value>Снять ограничения на сегодня</value>
+  </data>
+  <data name="EndNow" xml:space="preserve">
+    <value>Завершить сейчас</value>
+  </data>
+  <data name="EndNow_Confirm" xml:space="preserve">
+    <value>Завершить таймер сейчас? ПК сразу выполнит: {0}.</value>
+  </data>
+  <data name="Step_Label" xml:space="preserve">
+    <value>Шаг:</value>
+  </data>
+  <data name="EndAt_Label" xml:space="preserve">
+    <value>Закончить в:</value>
+  </data>
+  <data name="EndAt_Set" xml:space="preserve">
+    <value>Применить</value>
+  </data>
+  <data name="Minus_N" xml:space="preserve">
+    <value>−{0} мин</value>
+  </data>
+  <data name="Plus_N" xml:space="preserve">
+    <value>+{0} мин</value>
+  </data>
+  <data name="Lift_Title" xml:space="preserve">
+    <value>Расписание на сегодня</value>
+  </data>
+  <data name="Lift_Allowed" xml:space="preserve">
+    <value>По расписанию сегодня осталось {0} мин.</value>
+  </data>
+  <data name="Lift_Blocked" xml:space="preserve">
+    <value>По расписанию сейчас играть нельзя.</value>
+  </data>
+  <data name="Lift_Choice_Running" xml:space="preserve">
+    <value>Да — также не учитывать расписание до конца дня (оно снова начнёт действовать в полночь или с новым таймером).
+Нет — только выключить таймер.</value>
+  </data>
+  <data name="Lift_Choice_Idle" xml:space="preserve">
+    <value>ОК — не учитывать расписание до конца дня (оно снова начнёт действовать в полночь или с новым таймером).</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>Расписание сегодня не действует (снято родителем). Снова начнёт действовать в полночь или с новым таймером.</value>
+  </data>
+  <data name="Schedule_NoMore" xml:space="preserve">
+    <value>Расписание больше не разрешает времени на сегодня.</value>
+  </data>
 </root>

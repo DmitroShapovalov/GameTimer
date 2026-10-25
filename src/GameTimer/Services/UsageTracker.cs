@@ -13,7 +13,13 @@ public sealed class UsageTracker
     private static readonly string UsagePath = Path.Combine(AppContext.BaseDirectory, "usage.json");
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    private sealed class Record { public string Date { get; set; } = ""; public int UsedSeconds { get; set; } }
+    private sealed class Record
+    {
+        public string Date { get; set; } = "";
+        public int UsedSeconds { get; set; }
+        /// <summary>The parent lifted the schedule for this date (rolls over with it at midnight).</summary>
+        public bool ScheduleSkipped { get; set; }
+    }
 
     private Record _record;
 
@@ -29,6 +35,21 @@ public sealed class UsageTracker
     public int UsedSecondsToday
     {
         get { RollOver(); return _record.UsedSeconds; }
+    }
+
+    /// <summary>True while the parent has lifted the schedule for today.</summary>
+    public bool ScheduleSkippedToday
+    {
+        get { RollOver(); return _record.ScheduleSkipped; }
+    }
+
+    /// <summary>Lifts (or restores) the schedule for the rest of today and persists.</summary>
+    public void SetScheduleSkippedToday(bool skipped)
+    {
+        RollOver();
+        if (_record.ScheduleSkipped == skipped) return;
+        _record.ScheduleSkipped = skipped;
+        Save();
     }
 
     /// <summary>Adds elapsed game time to today's total and persists.</summary>

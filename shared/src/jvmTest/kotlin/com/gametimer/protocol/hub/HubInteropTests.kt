@@ -436,4 +436,37 @@ class HubInteropTests {
         l.awaitOnline() // well before the next search (20 s): both candidates were tried in one go
         assertEquals(agent.port, moved.single().port)
     }
+
+    @Test
+    fun liftEndNowAndEndAt(): Unit = runBlocking {
+        val (a, l) = api()
+        assertTrue(AgentApi.supportsTimerControls(l.awaitOnline().hello)) // minor 1 on both sides
+
+        // End at: the running timer now ends at a chosen time (here: about 90 minutes from now)
+        assertIs<RequestOutcome.Ok>(a.startInterval(0, 30))
+        val at = java.time.LocalTime.now().plusMinutes(90)
+        assertIs<RequestOutcome.Ok>(a.setEnd(at.hour, at.minute))
+        val left = l.state.value!!.remainingSecondsNow()
+        assertTrue(left in (89 * 60 - 60)..(90 * 60), "remaining $left")
+
+        // End now: the time is up at once
+        assertIs<RequestOutcome.Ok>(a.endNow())
+        assertEquals("expired", l.state.value!!.timer?.get("state")?.let { (it as JsonPrimitive).content })
+        assertEquals(RequestOutcome.Refused("not_running"), a.endNow())
+        assertEquals(RequestOutcome.Refused("not_running"), a.setEnd(12, 0))
+
+        // Lift: without a schedule there is nothing to lift once the timer is off
+        assertEquals(RequestOutcome.Refused("not_running"), a.lift(skipScheduleToday = true))
+        // With a schedule: stop the timer and set the schedule aside for today
+        val s = assertIs<ApiResult.Ok<AgentSchedule>>(a.schedule()).value
+        assertIs<ApiResult.Ok<AgentSchedule>>(a.saveSchedule(s.copy(enabled = true)))
+        assertIs<RequestOutcome.Ok>(a.startInterval(0, 20))
+        assertIs<RequestOutcome.Ok>(a.lift(skipScheduleToday = true))
+        val st = l.state.value!!
+        assertTrue(!st.isRunning)
+        assertEquals("skippedToday", ((st.json["schedule"] as kotlinx.serialization.json.JsonObject)["status"] as JsonPrimitive).content)
+        // A new timer brings the schedule back
+        assertIs<RequestOutcome.Ok>(a.startInterval(0, 10))
+        assertEquals("allowed", ((l.state.value!!.json["schedule"] as kotlinx.serialization.json.JsonObject)["status"] as JsonPrimitive).content)
+    }
 }

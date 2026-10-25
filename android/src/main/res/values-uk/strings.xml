@@ -139,4 +139,18 @@
     <string name="peer_added_text">На %2$s додано «%1$s». Якщо ви не знаєте цей пристрій, видаліть його на вкладці «Батьки».</string>
     <string name="no_screen_lock">На цьому телефоні немає блокування екрана, тому будь-хто, у кого він у руках, може змінювати батьків цього ПК. Задайте PIN або відбиток у налаштуваннях телефона.</string>
     <string name="peer_added_text_parent">На %2$s додано «%1$s». Якщо ви не знаєте цей пристрій, попросіть адміністратора видалити його або видаліть його на ПК.</string>
+    <string name="minus_n">−%1$d хв</string>
+    <string name="plus_n">+%1$d хв</string>
+    <string name="end_at_button">Закінчити о…</string>
+    <string name="end_now">Завершити зараз</string>
+    <string name="lift">Зняти обмеження</string>
+    <string name="lift_today">Зняти обмеження на сьогодні</string>
+    <string name="lift_title">Розклад на сьогодні</string>
+    <string name="lift_allowed">За розкладом сьогодні лишилося %1$d хв. Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли ви запустите новий таймер.</string>
+    <string name="lift_blocked">За розкладом зараз грати не можна. Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли ви запустите новий таймер.</string>
+    <string name="lift_skip_today">Не враховувати сьогодні</string>
+    <string name="lift_only_timer">Лише вимкнути таймер</string>
+    <string name="confirm_lift">Вимкнути таймер? ПК не буде заблоковано.</string>
+    <string name="sched_skipped">Розклад: сьогодні не діє</string>
+    <string name="pick_time">Вибрати час</string>
 </resources>

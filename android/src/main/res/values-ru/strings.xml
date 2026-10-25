@@ -139,4 +139,18 @@
     <string name="peer_added_text">На %2$s добавлено «%1$s». Если вы не знаете это устройство, удалите его на вкладке «Родители».</string>
     <string name="no_screen_lock">На этом телефоне нет блокировки экрана, поэтому любой, у кого он в руках, может менять родителей этого ПК. Задайте PIN или отпечаток в настройках телефона.</string>
     <string name="peer_added_text_parent">На %2$s добавлено «%1$s». Если вы не знаете это устройство, попросите администратора удалить его или удалите его на ПК.</string>
+    <string name="minus_n">−%1$d мин</string>
+    <string name="plus_n">+%1$d мин</string>
+    <string name="end_at_button">Закончить в…</string>
+    <string name="end_now">Завершить сейчас</string>
+    <string name="lift">Снять ограничения</string>
+    <string name="lift_today">Снять ограничения на сегодня</string>
+    <string name="lift_title">Расписание на сегодня</string>
+    <string name="lift_allowed">По расписанию сегодня осталось %1$d мин. Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда вы запустите новый таймер.</string>
+    <string name="lift_blocked">По расписанию сейчас играть нельзя. Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда вы запустите новый таймер.</string>
+    <string name="lift_skip_today">Не учитывать сегодня</string>
+    <string name="lift_only_timer">Только выключить таймер</string>
+    <string name="confirm_lift">Выключить таймер? ПК не будет заблокирован.</string>
+    <string name="sched_skipped">Расписание: сегодня не действует</string>
+    <string name="pick_time">Выбрать время</string>
 </resources>

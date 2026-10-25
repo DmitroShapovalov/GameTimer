@@ -30,6 +30,20 @@ public class AgentApi(private val link: AgentLink) {
 
     public suspend fun stop(): RequestOutcome = link.send("timer.stop", JsonObject(emptyMap()))
 
+    /**
+     * Lift the restrictions: stop the timer (no lock) and, with [skipScheduleToday], set the daily schedule
+     * aside until midnight or the next timer a parent starts. Needs [supportsTimerControls].
+     */
+    public suspend fun lift(skipScheduleToday: Boolean): RequestOutcome =
+        link.send("timer.stop", buildJsonObject { if (skipScheduleToday) put("skipScheduleToday", true) })
+
+    /** End the running timer now: the PC locks / logs off / shuts down at once. Needs [supportsTimerControls]. */
+    public suspend fun endNow(): RequestOutcome = link.send("timer.end", JsonObject(emptyMap()))
+
+    /** The running timer now ends at that local time of day on the PC. Needs [supportsTimerControls]. */
+    public suspend fun setEnd(hour: Int, minute: Int): RequestOutcome =
+        link.send("timer.setEnd", buildJsonObject { put("hours", hour); put("minutes", minute) })
+
     public suspend fun extend(minutes: Int): RequestOutcome = link.send("timer.extend", buildJsonObject { put("minutes", minutes) })
 
     public suspend fun acknowledgeInterruption(): RequestOutcome = link.send("interruption.ack", JsonObject(emptyMap()))
@@ -102,5 +116,9 @@ public class AgentApi(private val link: AgentLink) {
     public companion object {
         /** The code used when a reply couldn't be understood. */
         public const val BAD_REPLY: String = "bad_reply"
+
+        /** The agent speaks protocol minor ≥ 1 (§6): [lift], [endNow] and [setEnd] are available. */
+        public fun supportsTimerControls(hello: JsonObject): Boolean =
+            ((hello["minor"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 0) >= 1
     }
 }

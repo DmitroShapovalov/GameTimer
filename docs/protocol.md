@@ -223,6 +223,10 @@ Rules:
 The agent **must not** close a session because of a newer minor; it answers with the minor it
 supports and the hub adapts.
 
+**Minor versions.** `0`: the initial set. `1` (agent v1.7.1): `timer.end`, `timer.setEnd`,
+`timer.stop` with `skipScheduleToday`, and the schedule status `skippedToday`. A hub shows those
+controls only when `hello.minor` ≥ 1.
+
 **Capabilities** — the hub renders a control only if the agent lists the capability. Names are
 stable; a breaking change gets a new name (`timer2`).
 
@@ -254,6 +258,10 @@ Payloads reuse the shapes of the v1 API (`docs/remote-api.http`), so the Windows
 }
 ```
 
+`schedule.status`: `off`, `allowed`, `outsideWindow`, `dayDisabled`, `limitReached`, and (minor 1)
+`skippedToday` — the schedule is on but a parent set it aside for today (`timer.stop` with
+`skipScheduleToday`); it applies again at local midnight or when a parent starts a timer.
+
 The hub counts down from `remainingSeconds` using **its own monotonic clock** from the moment the
 message arrived. `targetTime` and `now` are for display only: the PC clock may be wrong or changed.
 
@@ -263,8 +271,10 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 |---|---|---|---|---|---|
 | `state.get` | — | — | any | — | `state` |
 | `timer.start` | `timer` | ✓ | any | `mode`; for `interval`: `hours` + `minutes` = duration; for `absolute`: `hours` + `minutes` = local time of day on the agent | `state` |
-| `timer.stop` | `timer` | ✓ | any | — | `state` |
+| `timer.stop` | `timer` | ✓ | any | optional `skipScheduleToday` (minor 1): also set the daily schedule aside until midnight or the next timer a parent starts | `state`; `not_running` if there was nothing to stop or lift |
 | `timer.extend` | `timer` | ✓ | any | `minutes` (±) | `state` |
+| `timer.end` | `timer` | ✓ | any | — (minor 1): the running timer ends now, as if its time ran out (the expiry action runs) | `state` |
+| `timer.setEnd` | `timer` | ✓ | any | `hours` + `minutes` (minor 1): the running timer now ends at that local time of day on the agent (the next one), capped by today's schedule | `state` |
 | `interruption.ack` | `timer` | ✓ | any | — | `state` |
 | `settings.get` | `settings` | — | any | — | `settings` (incl. `rev`) |
 | `settings.put` | `settings` | ✓ | any | any subset of the v1 settings fields, optional `ifRev` | `settings` |

@@ -282,7 +282,23 @@ public sealed partial class RemoteServer
                 }
 
                 case "timer.stop":
-                    return t.Stop(ActionSource.Phone, context.HubName) ? Ok("state", State()) : Reply.Error("not_running");
+                {
+                    // minor 1: skipScheduleToday also sets the daily schedule aside until midnight / a new timer
+                    bool skip = m.TryGetProperty("skipScheduleToday", out var sk) && sk.ValueKind == JsonValueKind.True;
+                    if (m.TryGetProperty("skipScheduleToday", out sk) && sk.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                        return Reply.Error("bad_request");
+                    return t.Lift(skip, ActionSource.Phone, context.HubName) ? Ok("state", State()) : Reply.Error("not_running");
+                }
+
+                case "timer.end":
+                    return t.EndNow(ActionSource.Phone, context.HubName) ? Ok("state", State()) : Reply.Error("not_running");
+
+                case "timer.setEnd":
+                {
+                    if (!Int(m, "hours", out var eh) || !Int(m, "minutes", out var em)) return Reply.Error("bad_request");
+                    if (eh is < 0 or > 23 || em is < 0 or > 59) return Reply.Error("invalid_time");
+                    return t.SetEnd(eh, em, ActionSource.Phone, context.HubName) ? Ok("state", State()) : Reply.Error("not_running");
+                }
 
                 case "timer.extend":
                     if (!Int(m, "minutes", out var minutes) || minutes == 0 || Math.Abs(minutes) > MaxMinutes) return Reply.Error("invalid_minutes");
