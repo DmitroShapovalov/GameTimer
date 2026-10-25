@@ -48,31 +48,65 @@ class LinkHub(private val context: Context, private val store: HubStore) {
 
     /** Loads the key once (Keystore + file, off the main thread); throws if it can't be read. */
     suspend fun loadKey(): KeyPair = keyLock.withLock {
-        hubKey ?: withContext(Dispatchers.IO) { store.loadHubKey() }.also { hubKey = it }
+        hubKey ?: withContext(Dispatchers.IO) { store.loadHubKey() }.also {
+            hubKey = it
+            if (store.identityWasReset) { // a new identity: every PC must be paired again, forget what was seen
+                seenPeers.edit().clear().apply()
+                notifier.forgetAll()
+            }
+        }
     }
 
     // ---------------- connected while visible or monitored ----------------
 
     private var uiVisible = false
     private var monitoring = false
+    private var onLan = true
     private var active = false
     private val activeChanges = Channel<Boolean>(Channel.CONFLATED) // latest wins (rotation = stop + start)
 
     init {
         scope.launch { for (want in activeChanges) applyActive(want) }
+        watchNetwork()
     }
 
-    /** Notifications are posted only while no screen shows the PC (the screen shows it itself). */
-    val isUiVisible: Boolean get() = uiVisible
+    /** The PC whose screen is open (its events need no notification: the screen shows them). */
+    var shownAgent: String? = null
+
+    private fun shouldNotify(agentId: String) = !uiVisible || shownAgent != agentId
 
     fun setUiVisible(value: Boolean) {
         uiVisible = value
-        activeChanges.trySend(uiVisible || monitoring)
+        updateActive()
     }
 
     fun setMonitoring(value: Boolean) {
         monitoring = value
-        activeChanges.trySend(uiVisible || monitoring)
+        updateActive()
+    }
+
+    // In the background the links only run on Wi-Fi / Ethernet: the PCs are on the home network, so on
+    // mobile data every attempt would just wake the radio (and the screens connect anyway when opened)
+    private fun updateActive() {
+        activeChanges.trySend(uiVisible || (monitoring && onLan))
+    }
+
+    private fun watchNetwork() {
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        fun lan(caps: android.net.NetworkCapabilities?) = caps != null &&
+            (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET))
+        onLan = lan(cm.getNetworkCapabilities(cm.activeNetwork))
+        try {
+            cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
+                    val now = lan(caps)
+                    scope.launch { if (now != onLan) { onLan = now; updateActive() } }
+                }
+                override fun onLost(network: android.net.Network) {
+                    scope.launch { if (onLan) { onLan = false; updateActive() } }
+                }
+            })
+        } catch (e: RuntimeException) { /* no callback: always try */ }
     }
 
     private suspend fun applyActive(value: Boolean) {
@@ -129,10 +163,10 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         watchers[agent.agentId] = scope.launch {
             val api = AgentApi(link)
             val check = Mutex()
-            var myName: String? = null
+            var me = Me(null, null)
             suspend fun compare() = check.withLock {
                 val list = (api.peers() as? ApiResult.Ok)?.value ?: return@withLock
-                myName = list.firstOrNull { it.current }?.name
+                me = me.copy(name = list.firstOrNull { it.current }?.name)
                 val known = seenPeers.getStringSet(agent.agentId, null)
                 if (known != null) {
                     val added = list.filter { !it.current && it.id !in known }.map { it.name }
@@ -140,7 +174,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
                         val iAmAdmin = list.firstOrNull { it.current }?.role == "admin"
                         val notice = PeerAdded(agent.name, added.joinToString(", "), iAmAdmin)
                         _peerAdded.value += notice
-                        if (!uiVisible) notifier.peerAdded(agent, notice)
+                        if (!uiVisible) notifier.peerAdded(agent, notice) // otherwise the dialog shows it
                     }
                 }
                 seenPeers.edit().putStringSet(agent.agentId, list.map { it.id }.toSet()).apply()
@@ -148,16 +182,18 @@ class LinkHub(private val context: Context, private val store: HubStore) {
             launch {
                 link.status.collect {
                     if (it is LinkStatus.Online) {
+                        // This phone's hub id on that PC: known at once, so even an early event isn't "news"
+                        me = me.copy(hubId = ((it.hello["you"] as? JsonObject)?.get("id") as? JsonPrimitive)?.content)
                         compare()
-                        notifier.catchUp(agent, api, myName, notify = !uiVisible)
+                        notifier.catchUp(agent, api, me, link.state.value?.json?.str("now"), notify = shouldNotify(agent.agentId))
                     }
                 }
             }
             link.events.collect { ev ->
                 when (ev.str("t")) {
                     "ev.peers" -> compare()
-                    "ev.history" -> notifier.liveEvent(agent, ev["event"] as? JsonObject, myName, notify = !uiVisible)
-                    "ev.alert" -> if (!uiVisible) notifier.alert(agent, (ev["minutes"] as? JsonPrimitive)?.content?.toIntOrNull())
+                    "ev.history" -> notifier.liveEvent(agent, ev["event"] as? JsonObject, me, notify = shouldNotify(agent.agentId))
+                    "ev.alert" -> if (shouldNotify(agent.agentId)) notifier.alert(agent, (ev["minutes"] as? JsonPrimitive)?.content?.toIntOrNull())
                 }
             }
         }

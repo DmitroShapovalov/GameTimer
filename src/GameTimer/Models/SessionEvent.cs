@@ -38,6 +38,13 @@ public sealed class SessionEvent
     /// <summary>Phone name when Source is Phone; null otherwise.</summary>
     public string? Device { get; set; }
 
+    /// <summary>
+    /// Protocol v2 hub id of the parent app that caused it (minor 1+), so a phone can tell its own actions
+    /// from another phone with the same name. Null for the PC, the system and v1 phones.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Hub { get; set; }
+
     public TimerMode? Mode { get; set; }
 
     /// <summary>Planned length for Started, or the signed change for Extended.</summary>

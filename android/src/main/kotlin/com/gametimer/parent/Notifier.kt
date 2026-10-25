@@ -43,10 +43,14 @@ class NotifySettings(context: Context) {
     }
 }
 
+/** Who this phone is on a PC: its hub id (from hello) and its name there (from the parent list). */
+data class Me(val hubId: String?, val name: String?)
+
 /**
  * Turns agent events into system notifications. History events are caught up on every connect (the
- * phone may have slept or been away), from the last one seen per PC, so nothing is shown twice and
- * nothing that happened meanwhile is missed — the first connect only remembers where history stands.
+ * phone may have slept or been away): the PC's history is read newest first until an event this phone
+ * has already seen — by the event itself, not its time, since the PC's clock may be wrong or set back
+ * and "app closed" is recorded with an earlier time. The first connect only remembers where history stands.
  */
 class Notifier(private val context: Context) {
     private val settings = NotifySettings(context)
@@ -59,28 +63,55 @@ class Notifier(private val context: Context) {
 
     fun forget(agentId: String) = seen.edit().remove(agentId).apply()
 
-    /** On connect: history newer than the last event seen, oldest first. */
-    suspend fun catchUp(agent: PairedAgent, api: AgentApi, myName: String?, notify: Boolean) {
-        val page = (api.history(limit = 30) as? ApiResult.Ok)?.value ?: return
-        val last = seen.getString(agent.agentId, null)?.let(::parseTime)
-        val newest = page.events.firstOrNull()?.let { parseTime(it.time) }
-        if (last == null) { // first connect: remember where history stands, no flood of old events
-            if (newest != null) seen.edit().putString(agent.agentId, page.events.first().time).apply()
-            return
-        }
-        val fresh = page.events.filter { e -> parseTime(e.time)?.isAfter(last) == true }.reversed()
-        if (fresh.isEmpty()) return
-        seen.edit().putString(agent.agentId, fresh.last().time).apply()
-        if (notify) fresh.forEach { show(agent, it, myName) }
+    /** Forget everything (a new hub identity: the PCs must be paired again). */
+    fun forgetAll() = seen.edit().clear().apply()
+
+    private fun key(e: HistoryEvent) =
+        listOf(e.type, e.time, e.source, e.device, e.hub, e.mode, e.minutes, e.action).joinToString("|").replace('\n', ' ')
+
+    private fun known(agentId: String): MutableList<String>? =
+        seen.getString(agentId, null)?.split('\n')?.filter { it.isNotEmpty() }?.toMutableList()
+
+    private fun remember(agentId: String, keys: List<String>) {
+        seen.edit().putString(agentId, keys.takeLast(MAX_KEYS).joinToString("\n")).apply()
     }
 
-    fun liveEvent(agent: PairedAgent, event: JsonObject?, myName: String?, notify: Boolean) {
+    /**
+     * On connect: the events this phone hasn't seen yet, oldest first. [agentNow] is the PC's clock in its
+     * last state, so "a while ago" is measured on the PC's own clock.
+     */
+    suspend fun catchUp(agent: PairedAgent, api: AgentApi, me: Me, agentNow: String?, notify: Boolean) {
+        val known = known(agent.agentId)
+        val fresh = mutableListOf<HistoryEvent>()
+        var before: String? = null
+        var reachedKnown = false
+        for (pageNo in 0 until MAX_PAGES) {
+            val page = (api.history(limit = PAGE, before = before) as? ApiResult.Ok)?.value ?: return
+            for (e in page.events) {
+                if (known != null && key(e) in known) { reachedKnown = true; break }
+                fresh += e
+            }
+            if (known == null || reachedKnown || !page.more || page.next == null) break
+            before = page.next
+        }
+        if (known == null) { // first connect: remember where history stands, no flood of old events
+            remember(agent.agentId, fresh.reversed().map(::key))
+            return
+        }
+        if (fresh.isEmpty()) return
+        val ordered = fresh.reversed()
+        remember(agent.agentId, known + ordered.map(::key))
+        val pcNow = agentNow?.let(::parseTime) ?: OffsetDateTime.now()
+        if (notify) ordered.takeLast(MAX_SHOWN).forEach { show(agent, it, me, pcNow) }
+    }
+
+    fun liveEvent(agent: PairedAgent, event: JsonObject?, me: Me, notify: Boolean) {
         val e = event?.let { runCatching { json.decodeFromJsonElement(HistoryEvent.serializer(), it) }.getOrNull() } ?: return
-        val time = parseTime(e.time)
-        val last = seen.getString(agent.agentId, null)?.let(::parseTime)
-        if (time != null && (last == null || time.isAfter(last))) seen.edit().putString(agent.agentId, e.time).apply()
-        else if (time != null) return // already shown by a catch-up
-        if (notify) show(agent, e, myName)
+        val known = known(agent.agentId) ?: mutableListOf()
+        val k = key(e)
+        if (k in known) return // already shown by a catch-up
+        remember(agent.agentId, known + k)
+        if (notify) show(agent, e, me, pcNow = null)
     }
 
     fun alert(agent: PairedAgent, minutes: Int?) {
@@ -93,9 +124,10 @@ class Notifier(private val context: Context) {
         post(agent, NotifySettings.Category.Suspicious, context.getString(R.string.ntf_peer_added, notice.phoneName), tag = "peer")
     }
 
-    private fun show(agent: PairedAgent, e: HistoryEvent, myName: String?) {
-        // What this phone did itself is no news
-        if (e.source == "phone" && myName != null && e.device == myName) return
+    private fun show(agent: PairedAgent, e: HistoryEvent, me: Me, pcNow: OffsetDateTime?) {
+        // What this phone did itself is no news (by hub id; agents before v1.7.2 only give the name)
+        val mine = if (e.hub != null) e.hub == me.hubId else e.source == "phone" && me.name != null && e.device == me.name
+        if (mine) return
         val (category, text) = when (e.type) {
             "expired" -> NotifySettings.Category.TimeUp to context.getString(R.string.ntf_time_up, actionText(e.action))
             "closed" -> NotifySettings.Category.Suspicious to context.getString(R.string.ntf_closed)
@@ -115,9 +147,9 @@ class Notifier(private val context: Context) {
             }
         }
         if (!settings.isOn(category)) return
-        // Something from a while ago (the phone was asleep or away): say when it happened
+        // Caught up from a while ago (the phone was asleep or away): say when it happened, by the PC's clock
         val at = parseTime(e.time)
-        val late = at != null && Duration.between(at, OffsetDateTime.now()) > Duration.ofMinutes(2)
+        val late = at != null && pcNow != null && Duration.between(at, pcNow) > Duration.ofMinutes(2)
         val body = if (late) context.getString(R.string.ntf_at, text, at.atZoneSameInstant(java.time.ZoneId.systemDefault())
             .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))) else text
         post(agent, category, body, tag = e.type)
@@ -144,8 +176,12 @@ class Notifier(private val context: Context) {
             .setContentTitle(agent.name)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(openApp(context))
+            .setContentIntent(openApp(context, agent.agentId))
             .setAutoCancel(true)
+            // On the lock screen only "GameTimer" shows; names and actions after unlocking
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(context.getString(R.string.app_name)).setContentText(context.getString(R.string.ntf_public)).build())
             .setCategory(if (category == NotifySettings.Category.Suspicious) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_REMINDER)
             .build()
         // One per PC and kind: a newer "time's up" replaces the older one instead of piling up
@@ -170,8 +206,17 @@ class Notifier(private val context: Context) {
             ))
         }
 
-        fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(context, 0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        const val EXTRA_AGENT = "agent"
+        private const val MAX_KEYS = 400  // events remembered per PC (more than MAX_PAGES × PAGE)
+        private const val PAGE = 50
+        private const val MAX_PAGES = 4
+        private const val MAX_SHOWN = 20  // after a long absence: only the newest ones
+
+        /** Opens the app, on that PC's screen when [agentId] is given. */
+        fun openApp(context: Context, agentId: String? = null): PendingIntent = PendingIntent.getActivity(context,
+            agentId?.hashCode() ?: 0,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .apply { if (agentId != null) putExtra(EXTRA_AGENT, agentId) },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 }

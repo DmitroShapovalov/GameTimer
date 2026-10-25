@@ -49,16 +49,23 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     val settings = remember { NotifySettings(context) }
     var background by remember { mutableStateOf(settings.background) }
     var values by remember { mutableStateOf(NotifySettings.Category.entries.associateWith { settings.isOn(it) }) }
-    fun granted() = Build.VERSION.SDK_INT < 33 ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    // Allowed by the runtime permission (Android 13+) and not switched off for the app in Android's settings
+    fun granted() = (Build.VERSION.SDK_INT < 33 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
+        androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
     fun unrestricted() = (context.getSystemService(PowerManager::class.java))?.isIgnoringBatteryOptimizations(context.packageName) == true
     var permission by remember { mutableStateOf(granted()) }
     var battery by remember { mutableStateOf(unrestricted()) }
     LifecycleResumeEffect(Unit) {
+        val was = permission
         permission = granted(); battery = unrestricted()
+        if (permission != was) MonitorService.update(context) // changed in Android's settings meanwhile
         onPauseOrDispose { }
     }
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permission = it }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        permission = granted()
+        MonitorService.update(context) // allowed now: start watching (or stop when refused)
+    }
 
     Scaffold(topBar = {
         TopAppBar(title = { Text(stringResource(R.string.app_settings)) }, navigationIcon = {
@@ -72,7 +79,10 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 background = it
                 settings.background = it
                 MonitorService.update(context)
-                if (it && !permission && Build.VERSION.SDK_INT >= 33) ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+                if (it && !permission && Build.VERSION.SDK_INT >= 33 && !askedBefore(context)) {
+                    markAsked(context)
+                    ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
             }
             listOf(
                 NotifySettings.Category.TimeUp to (R.string.ntf_cat_time_up to R.string.ntf_cat_time_up_hint),
@@ -88,8 +98,17 @@ fun AppSettingsScreen(onBack: () -> Unit) {
             if (background && !permission) {
                 Text(stringResource(R.string.ntf_no_permission), color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = {
-                    if (Build.VERSION.SDK_INT >= 33) ask.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                    // Ask while Android still offers the prompt; once refused for good, only its settings can allow it
+                    val activity = context.findActivity()
+                    val canAsk = Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+                        (activity == null || !askedBefore(context) || activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))
+                    if (canAsk) {
+                        markAsked(context)
+                        ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                    }
                 }) { Text(stringResource(R.string.ntf_allow)) }
             }
             if (background && !battery) {
@@ -116,4 +135,16 @@ private fun SwitchRow(title: String, hint: String, checked: Boolean, enabled: Bo
         }
         Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
+}
+
+private fun askedBefore(context: android.content.Context) =
+    context.getSharedPreferences("notify", android.content.Context.MODE_PRIVATE).getBoolean("asked", false)
+
+private fun markAsked(context: android.content.Context) =
+    context.getSharedPreferences("notify", android.content.Context.MODE_PRIVATE).edit().putBoolean("asked", true).apply()
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

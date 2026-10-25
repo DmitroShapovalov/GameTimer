@@ -190,4 +190,5 @@
     <string name="ch_activity">Activity</string>
     <string name="monitor_title">Watching your PCs</string>
     <string name="monitor_text">Notifies you when the time is up</string>
+    <string name="ntf_public">New event on a PC</string>
 </resources>

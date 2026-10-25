@@ -232,7 +232,7 @@ sealed class SimBackend : IAgentBackend
     {
         var e = new JsonObject
         {
-            ["time"] = DateTimeOffset.Now.ToString("o"), ["type"] = type, ["source"] = "phone", ["device"] = context.HubName,
+            ["time"] = DateTimeOffset.Now.ToString("o"), ["type"] = type, ["source"] = "phone", ["device"] = context.HubName, ["hub"] = context.HubId,
             ["mode"] = type == "started" ? "interval" : null, ["minutes"] = minutes, ["action"] = null,
         };
         _history.Add(e);

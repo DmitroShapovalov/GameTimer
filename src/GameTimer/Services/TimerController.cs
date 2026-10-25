@@ -526,11 +526,18 @@ public sealed class TimerController
             Type = type,
             Source = source,
             Device = device,
+            Hub = source == ActionSource.Phone ? ActorHubId : null,
             Mode = mode,
             Minutes = minutes,
             Action = action
         });
     }
+
+    /// <summary>
+    /// The v2 hub whose request is being handled right now (set by the v2 backend around a request, UI
+    /// thread), recorded in the history so each phone can tell its own actions apart.
+    /// </summary>
+    public string? ActorHubId { get; set; }
 
     private void Persist()
     {

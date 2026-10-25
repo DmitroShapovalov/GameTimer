@@ -43,6 +43,7 @@ class MonitorService : Service() {
         val hub = app.hub
         hub.scope.launch {
             try { hub.loadKey() } catch (e: Exception) { stopSelf(); return@launch } // no identity: nothing to watch
+            if (app.store.agents.value.isEmpty()) { stopSelf(); return@launch } // e.g. the identity was just reset
             app.store.agents.value.forEach { hub.link(it.agentId) }
             hub.setMonitoring(true)
         }
@@ -60,7 +61,9 @@ class MonitorService : Service() {
         /** Starts or stops watching in the background, per the setting and whether any PC is paired. */
         fun update(context: Context) {
             val app = context.applicationContext as GameTimerApp
-            val wanted = NotifySettings(context).background && app.store.agents.value.isNotEmpty()
+            // Watching without being allowed to notify would only cost battery
+            val wanted = NotifySettings(context).background && app.store.agents.value.isNotEmpty() &&
+                androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
             val intent = Intent(context, MonitorService::class.java)
             if (wanted) {
                 try { ContextCompat.startForegroundService(context, intent) } catch (e: RuntimeException) { /* retried on the next app start */ }

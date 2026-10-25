@@ -262,7 +262,8 @@ Payloads reuse the shapes of the v1 API (`docs/remote-api.http`), so the Windows
 `skippedToday` — the schedule is on but a parent set it aside for today (`timer.stop` with
 `skipScheduleToday`); it applies again at local midnight, or once a timer started during the lift
 runs out (that timer is the parent's new limit and isn't capped by the schedule). History types
-`scheduleSkipped` / `scheduleRestored` record both.
+`scheduleSkipped` / `scheduleRestored` record both. History events caused by a hub carry its id in
+`hub` (agent v1.7.2), so a hub can tell its own actions from another hub with the same name.
 
 The hub counts down from `remainingSeconds` using **its own monotonic clock** from the moment the
 message arrived. `targetTime` and `now` are for display only: the PC clock may be wrong or changed.

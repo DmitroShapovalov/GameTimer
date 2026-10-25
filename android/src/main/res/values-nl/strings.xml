@@ -190,4 +190,5 @@
     <string name="ch_activity">Activiteit</string>
     <string name="monitor_title">Je pc\'s in de gaten houden</string>
     <string name="monitor_text">Meldt wanneer de tijd om is</string>
+    <string name="ntf_public">Nieuwe gebeurtenis op een pc</string>
 </resources>

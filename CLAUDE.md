@@ -115,10 +115,12 @@ android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, appli
                            MonitorService runs), the "new parent app added" queue (peer list compared per PC),
                            events → Notifier
   Notifier.kt              NotifySettings (background + 4 categories) and system notifications: history caught
-                           up on every connect from the last event seen per PC, ev.alert, parent added;
-                           only while no screen is visible; this phone's own actions are skipped
+                           up on every connect back to the last event seen (by the event itself, not its time —
+                           the PC clock may be off), ev.alert, parent added; none for the PC whose screen is
+                           open; this phone's own actions skipped by hub id (history `hub`, agent v1.7.2)
   MonitorService.kt        connectedDevice foreground service (quiet ongoing notification) keeping the links
-                           open in the background; BootReceiver restarts it; MonitorService.update() per setting
+                           open in the background, only on Wi-Fi / Ethernet; BootReceiver restarts it;
+                           MonitorService.update(): on when enabled, a PC paired and notifications allowed
   AppSettingsScreen.kt     This phone's settings (gear on the home screen): notifications, permission, battery
   MainViewModel.kt         UI state over LinkHub: identity, pairing flow, commands, app lock, messages
   ReAuth.kt                §12 re-auth with the phone's lock (androidx.biometric: strong biometric or PIN, weak on 9-10):

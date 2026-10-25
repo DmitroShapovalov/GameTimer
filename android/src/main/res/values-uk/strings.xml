@@ -190,4 +190,5 @@
     <string name="ch_activity">Дії</string>
     <string name="monitor_title">Стеження за ПК</string>
     <string name="monitor_text">Повідомить, коли час вийде</string>
+    <string name="ntf_public">Нова подія на ПК</string>
 </resources>

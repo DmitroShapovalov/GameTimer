@@ -91,6 +91,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        vm.open(intent?.getStringExtra(Notifier.EXTRA_AGENT))
         setContent {
             val scheme = if (isSystemInDarkTheme()) darkColorScheme(primary = Color(0xFF4CA3E8)) else lightColorScheme(primary = Color(0xFF0078D4))
             MaterialTheme(colorScheme = scheme) {
@@ -99,7 +100,11 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    // Links stay connected only while the app is visible (no background service in this step)
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        vm.open(intent.getStringExtra(Notifier.EXTRA_AGENT)) // a notification tapped while the app is open
+    }
+
     override fun onStart() {
         super.onStart()
         vm.setForeground(true)
@@ -125,6 +130,10 @@ private fun App(vm: MainViewModel) {
     val message by vm.message.collectAsState()
     LaunchedEffect(message) {
         message?.let { snackbar.showSnackbar(it); vm.messageShown() }
+    }
+    val openAgent by vm.openAgent.collectAsState()
+    LaunchedEffect(openAgent) {
+        openAgent?.let { id -> if (agents.any { it.agentId == id } && pairState == null) route = "pc:$id"; vm.opened() }
     }
     BackHandler(route != "home" || pairState != null) {
         if (pairState != null) vm.clearPairing()
@@ -356,6 +365,11 @@ private fun PairScreen(vm: MainViewModel, onDone: () -> Unit) {
 @Composable
 private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHostState, onBack: () -> Unit) {
     val link = remember(agent.agentId) { vm.link(agent.agentId) } ?: return
+    // This PC's events show here: no notifications for it while its screen is open
+    androidx.compose.runtime.DisposableEffect(agent.agentId) {
+        vm.setShownAgent(agent.agentId)
+        onDispose { vm.setShownAgent(null) }
+    }
     val status by link.status.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var confirmRemove by remember { mutableStateOf(false) }
@@ -450,7 +464,7 @@ private tailrec fun android.content.Context.findActivity(): FragmentActivity? = 
 private fun AskForNotifications(havePcs: Boolean) {
     if (Build.VERSION.SDK_INT < 33 || !havePcs) return
     val context = LocalContext.current
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { MonitorService.update(context) }
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("notify", android.content.Context.MODE_PRIVATE)
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

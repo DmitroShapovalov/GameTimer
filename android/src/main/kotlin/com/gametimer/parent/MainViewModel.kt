@@ -56,6 +56,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val defaultPhoneName: String = Build.MODEL ?: "Phone"
 
     private val retry = Channel<Unit>(Channel.CONFLATED) // declared before init: the init coroutine uses it
+    private var visible = false // declared before init: the init coroutine may run at once
+
+    private val _openAgent = MutableStateFlow<String?>(null)
+    /** A notification asked to open this PC's screen. */
+    val openAgent: StateFlow<String?> = _openAgent.asStateFlow()
+
+    fun open(agentId: String?) { _openAgent.value = agentId }
+
+    fun opened() { _openAgent.value = null }
+
+    fun setShownAgent(agentId: String?) { hub.shownAgent = agentId }
 
     init {
         viewModelScope.launch {
@@ -66,7 +77,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private var visible = false
+    override fun onCleared() {
+        hub.setUiVisible(false) // e.g. cleared while the Android 9-10 PIN workaround still waited
+        super.onCleared()
+    }
 
     fun retryIdentity() {
         retry.trySend(Unit)
@@ -134,7 +148,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         visible = value
         if (hubKey() != null) hub.setUiVisible(value)
-        if (value) MonitorService.update(getApplication()) // (re)start watching while the app is in front
+        if (value && hubKey() != null) MonitorService.update(getApplication()) // (re)start watching while the app is in front
     }
 
     private var stopSkipped: Job? = null // main thread only
