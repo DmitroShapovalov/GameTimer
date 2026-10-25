@@ -75,18 +75,31 @@ static void Out(string s)
 
 sealed class ConsolePairingUi : IPairingUi
 {
+    private readonly object _gate = new();
     private TaskCompletionSource<string?>? _pending;
+    private string? _early; // a code that arrived before the agent asked (the phone shows it a moment earlier)
 
     public Task<string?> AskForCodeAsync(string hubName, CancellationToken cancel)
     {
         var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         cancel.Register(() => tcs.TrySetResult(null));
-        Interlocked.Exchange(ref _pending, tcs);
+        lock (_gate)
+        {
+            if (_early is { } code) { _early = null; tcs.TrySetResult(code); }
+            else _pending = tcs;
+        }
         lock (Console.Out) { Console.Out.WriteLine("ASK " + hubName); Console.Out.Flush(); }
         return tcs.Task;
     }
 
-    public void Answer(string? code) => Interlocked.Exchange(ref _pending, null)?.TrySetResult(code);
+    public void Answer(string? code)
+    {
+        lock (_gate)
+        {
+            if (_pending is { } p) { _pending = null; p.TrySetResult(code); }
+            else _early = code;
+        }
+    }
 
     public void PairingAborted(PairingAbortReason reason)
     {
