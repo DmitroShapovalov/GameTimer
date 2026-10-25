@@ -35,8 +35,6 @@
     <string name="back">Terug</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>
-    <string name="plus15">+15 min</string>
-    <string name="minus15">−15 min</string>
     <string name="minutes">Minuten</string>
     <string name="request_refused">De pc weigerde: %1$s</string>
     <string name="request_gave_up">Geen antwoord van de pc</string>
@@ -146,11 +144,14 @@
     <string name="lift">Beperkingen opheffen</string>
     <string name="lift_today">Beperkingen voor vandaag opheffen</string>
     <string name="lift_title">Schema van vandaag</string>
-    <string name="lift_allowed">Volgens het schema is er vandaag nog %1$d min. Het schema ook de rest van vandaag negeren? Het geldt weer om middernacht of als je een nieuwe timer start.</string>
-    <string name="lift_blocked">Volgens het schema mag er nu niet gegamed worden. Het schema de rest van vandaag negeren? Het geldt weer om middernacht of als je een nieuwe timer start.</string>
     <string name="lift_skip_today">Vandaag negeren</string>
     <string name="lift_only_timer">Alleen de timer stoppen</string>
     <string name="confirm_lift">Timer stoppen? De pc wordt niet vergrendeld.</string>
     <string name="sched_skipped">Schema: vandaag uit</string>
     <string name="pick_time">Tijd kiezen</string>
+    <string name="err_schedule_limit">Het schema staat vandaag geen extra tijd meer toe.</string>
+    <string name="ev_sched_skipped">Schema voor vandaag opgeheven</string>
+    <string name="ev_sched_restored">Schema geldt weer</string>
+    <string name="lift_allowed">Volgens het schema is er vandaag nog %1$d min. Het schema ook de rest van vandaag negeren? Het geldt weer om middernacht, of zodra een nieuwe timer die je start afloopt.</string>
+    <string name="lift_blocked">Volgens het schema mag er nu niet gegamed worden. Het schema de rest van vandaag negeren? Het geldt weer om middernacht, of zodra een nieuwe timer die je start afloopt.</string>
 </resources>

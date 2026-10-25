@@ -35,8 +35,6 @@
     <string name="back">Назад</string>
     <string name="start">Старт</string>
     <string name="stop">Стоп</string>
-    <string name="plus15">+15 хв</string>
-    <string name="minus15">−15 хв</string>
     <string name="minutes">Хвилини</string>
     <string name="request_refused">ПК відмовив: %1$s</string>
     <string name="request_gave_up">Немає відповіді від ПК</string>
@@ -146,11 +144,14 @@
     <string name="lift">Зняти обмеження</string>
     <string name="lift_today">Зняти обмеження на сьогодні</string>
     <string name="lift_title">Розклад на сьогодні</string>
-    <string name="lift_allowed">За розкладом сьогодні лишилося %1$d хв. Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли ви запустите новий таймер.</string>
-    <string name="lift_blocked">За розкладом зараз грати не можна. Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли ви запустите новий таймер.</string>
     <string name="lift_skip_today">Не враховувати сьогодні</string>
     <string name="lift_only_timer">Лише вимкнути таймер</string>
     <string name="confirm_lift">Вимкнути таймер? ПК не буде заблоковано.</string>
     <string name="sched_skipped">Розклад: сьогодні не діє</string>
     <string name="pick_time">Вибрати час</string>
+    <string name="err_schedule_limit">Розклад більше не дозволяє часу на сьогодні.</string>
+    <string name="ev_sched_skipped">Розклад знято на сьогодні</string>
+    <string name="ev_sched_restored">Розклад знову діє</string>
+    <string name="lift_allowed">За розкладом сьогодні лишилося %1$d хв. Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли закінчиться новий таймер, який ви запустите.</string>
+    <string name="lift_blocked">За розкладом зараз грати не можна. Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли закінчиться новий таймер, який ви запустите.</string>
 </resources>

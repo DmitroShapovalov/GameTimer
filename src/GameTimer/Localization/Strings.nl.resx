@@ -461,17 +461,28 @@
   <data name="Lift_Blocked" xml:space="preserve">
     <value>Volgens het schema mag er nu niet gegamed worden.</value>
   </data>
-  <data name="Lift_Choice_Running" xml:space="preserve">
-    <value>Ja — negeer het schema ook de rest van vandaag (het geldt weer om middernacht of met een nieuwe timer).
-Nee — alleen de timer stoppen.</value>
-  </data>
-  <data name="Lift_Choice_Idle" xml:space="preserve">
-    <value>OK — negeer het schema de rest van vandaag (het geldt weer om middernacht of met een nieuwe timer).</value>
-  </data>
-  <data name="Sched_St_Skipped" xml:space="preserve">
-    <value>Het schema geldt vandaag niet (opgeheven door een ouder). Het geldt weer om middernacht of met een nieuwe timer.</value>
-  </data>
   <data name="Schedule_NoMore" xml:space="preserve">
     <value>Het schema staat vandaag geen extra tijd meer toe.</value>
+  </data>
+  <data name="Lift_Explain" xml:space="preserve">
+    <value>Het schema de rest van vandaag negeren? Het geldt weer om middernacht, of zodra een nieuwe timer die je start afloopt.</value>
+  </data>
+  <data name="Lift_Btn_Today" xml:space="preserve">
+    <value>Vandaag negeren</value>
+  </data>
+  <data name="Lift_Btn_TimerOnly" xml:space="preserve">
+    <value>Alleen de timer stoppen</value>
+  </data>
+  <data name="EndAt_TooFar" xml:space="preserve">
+    <value>Die tijd is net voorbij. Om eerder te stoppen kies je een tijd na nu — of gebruik Nu beëindigen.</value>
+  </data>
+  <data name="Ev_ScheduleSkipped" xml:space="preserve">
+    <value>Schema voor vandaag opgeheven</value>
+  </data>
+  <data name="Ev_ScheduleRestored" xml:space="preserve">
+    <value>Schema geldt weer</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>Het schema geldt vandaag niet (opgeheven door een ouder). Het geldt weer om middernacht, of zodra een nieuwe timer afloopt.</value>
   </data>
 </root>

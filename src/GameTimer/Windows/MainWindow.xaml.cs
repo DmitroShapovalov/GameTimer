@@ -557,11 +557,21 @@ public partial class MainWindow : FluentWindow
         {
             var text = (dec.Status == ScheduleStatus.Allowed
                 ? string.Format(Loc.Get("Lift_Allowed"), dec.AvailableSeconds / 60)
-                : Loc.Get("Lift_Blocked")) + "\n\n" + Loc.Get(_timer.IsRunning ? "Lift_Choice_Running" : "Lift_Choice_Idle");
-            var answer = System.Windows.MessageBox.Show(this, text, Loc.Get("Lift_Title"),
-                _timer.IsRunning ? System.Windows.MessageBoxButton.YesNoCancel : System.Windows.MessageBoxButton.OKCancel);
-            if (answer == System.Windows.MessageBoxResult.Cancel) return;
-            skip = answer is System.Windows.MessageBoxResult.Yes or System.Windows.MessageBoxResult.OK;
+                : Loc.Get("Lift_Blocked")) + "\n\n" + Loc.Get("Lift_Explain");
+            // Own buttons in the app's language (a system MessageBox would say Yes / No in Windows' language)
+            var box = new Wpf.Ui.Controls.MessageBox
+            {
+                Owner = this,
+                Title = Loc.Get("Lift_Title"),
+                Content = text,
+                PrimaryButtonText = Loc.Get("Lift_Btn_Today"),
+                SecondaryButtonText = _timer.IsRunning ? Loc.Get("Lift_Btn_TimerOnly") : "",
+                IsSecondaryButtonEnabled = _timer.IsRunning,
+                CloseButtonText = Loc.Get("Cancel"),
+            };
+            var answer = await box.ShowDialogAsync();
+            if (answer == Wpf.Ui.Controls.MessageBoxResult.None) return;
+            skip = answer == Wpf.Ui.Controls.MessageBoxResult.Primary;
         }
         if (!await RequireAuth()) return;
         _timer.Lift(skip);
@@ -630,7 +640,10 @@ public partial class MainWindow : FluentWindow
         var target = now.Date.AddHours(h).AddMinutes(m);
         if (target <= now) target = target.AddDays(1);
         if (target - now > _timer.Remaining && !await RequireAuth()) return;
-        _timer.SetEnd(h, m);
+        var result = _timer.SetEnd(h, m);
+        if (result is SetEndResult.InvalidTime or SetEndResult.ScheduleLimit)
+            System.Windows.MessageBox.Show(this, Loc.Get(result == SetEndResult.ScheduleLimit ? "Schedule_NoMore" : "EndAt_TooFar"),
+                Loc.Get("Error"), System.Windows.MessageBoxButton.OK);
     }
 
     private async void Reset_Click(object sender, RoutedEventArgs e)
@@ -648,7 +661,7 @@ public partial class MainWindow : FluentWindow
         ResetButton.IsEnabled = running;
         EndNowButton.IsEnabled = running;
         RunningPanel.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
-        if (running && _timer.TargetTime is { } end && !EndAtHour.IsKeyboardFocusWithin && !EndAtMinute.IsKeyboardFocusWithin)
+        if (running && _timer.TargetTime is { } end && !EndAtHour.IsKeyboardFocusWithin && !EndAtMinute.IsKeyboardFocusWithin && !EndAtButton.IsPressed)
         {
             EndAtHour.Text = end.Hour.ToString("D2");
             EndAtMinute.Text = end.Minute.ToString("D2");
@@ -664,7 +677,7 @@ public partial class MainWindow : FluentWindow
         _overlay?.UpdateTime(remaining);
 
         // The end time follows extends (from here or a phone) unless the parent is typing a new one
-        if (_timer.TargetTime is { } end && !EndAtHour.IsKeyboardFocusWithin && !EndAtMinute.IsKeyboardFocusWithin)
+        if (_timer.TargetTime is { } end && !EndAtHour.IsKeyboardFocusWithin && !EndAtMinute.IsKeyboardFocusWithin && !EndAtButton.IsPressed)
         {
             EndAtHour.Text = end.Hour.ToString("D2");
             EndAtMinute.Text = end.Minute.ToString("D2");
@@ -730,6 +743,8 @@ public partial class MainWindow : FluentWindow
             GameTimer.Models.SessionEventType.Closed => Loc.Get("Ev_Closed"),
             GameTimer.Models.SessionEventType.Tampered => Loc.Get("Ev_Tampered"),
             GameTimer.Models.SessionEventType.Updated => Loc.Get("Ev_Updated"),
+            GameTimer.Models.SessionEventType.ScheduleSkipped => Loc.Get("Ev_ScheduleSkipped"),
+            GameTimer.Models.SessionEventType.ScheduleRestored => Loc.Get("Ev_ScheduleRestored"),
             _ => e.Type.ToString()
         };
         string who = e.Source switch

@@ -461,17 +461,28 @@
   <data name="Lift_Blocked" xml:space="preserve">
     <value>По расписанию сейчас играть нельзя.</value>
   </data>
-  <data name="Lift_Choice_Running" xml:space="preserve">
-    <value>Да — также не учитывать расписание до конца дня (оно снова начнёт действовать в полночь или с новым таймером).
-Нет — только выключить таймер.</value>
-  </data>
-  <data name="Lift_Choice_Idle" xml:space="preserve">
-    <value>ОК — не учитывать расписание до конца дня (оно снова начнёт действовать в полночь или с новым таймером).</value>
-  </data>
-  <data name="Sched_St_Skipped" xml:space="preserve">
-    <value>Расписание сегодня не действует (снято родителем). Снова начнёт действовать в полночь или с новым таймером.</value>
-  </data>
   <data name="Schedule_NoMore" xml:space="preserve">
     <value>Расписание больше не разрешает времени на сегодня.</value>
+  </data>
+  <data name="Lift_Explain" xml:space="preserve">
+    <value>Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда закончится новый таймер, который вы запустите.</value>
+  </data>
+  <data name="Lift_Btn_Today" xml:space="preserve">
+    <value>Не учитывать сегодня</value>
+  </data>
+  <data name="Lift_Btn_TimerOnly" xml:space="preserve">
+    <value>Только выключить таймер</value>
+  </data>
+  <data name="EndAt_TooFar" xml:space="preserve">
+    <value>Это время только что прошло. Чтобы закончить раньше, выберите время позже текущего — или нажмите «Завершить сейчас».</value>
+  </data>
+  <data name="Ev_ScheduleSkipped" xml:space="preserve">
+    <value>Расписание снято на сегодня</value>
+  </data>
+  <data name="Ev_ScheduleRestored" xml:space="preserve">
+    <value>Расписание снова действует</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>Расписание сегодня не действует (снято родителем). Снова начнёт действовать в полночь или когда закончится новый таймер.</value>
   </data>
 </root>

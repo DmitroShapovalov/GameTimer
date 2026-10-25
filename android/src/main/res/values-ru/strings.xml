@@ -35,8 +35,6 @@
     <string name="back">Назад</string>
     <string name="start">Старт</string>
     <string name="stop">Стоп</string>
-    <string name="plus15">+15 мин</string>
-    <string name="minus15">−15 мин</string>
     <string name="minutes">Минуты</string>
     <string name="request_refused">ПК отказал: %1$s</string>
     <string name="request_gave_up">Нет ответа от ПК</string>
@@ -146,11 +144,14 @@
     <string name="lift">Снять ограничения</string>
     <string name="lift_today">Снять ограничения на сегодня</string>
     <string name="lift_title">Расписание на сегодня</string>
-    <string name="lift_allowed">По расписанию сегодня осталось %1$d мин. Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда вы запустите новый таймер.</string>
-    <string name="lift_blocked">По расписанию сейчас играть нельзя. Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда вы запустите новый таймер.</string>
     <string name="lift_skip_today">Не учитывать сегодня</string>
     <string name="lift_only_timer">Только выключить таймер</string>
     <string name="confirm_lift">Выключить таймер? ПК не будет заблокирован.</string>
     <string name="sched_skipped">Расписание: сегодня не действует</string>
     <string name="pick_time">Выбрать время</string>
+    <string name="err_schedule_limit">Расписание больше не разрешает времени на сегодня.</string>
+    <string name="ev_sched_skipped">Расписание снято на сегодня</string>
+    <string name="ev_sched_restored">Расписание снова действует</string>
+    <string name="lift_allowed">По расписанию сегодня осталось %1$d мин. Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда закончится новый таймер, который вы запустите.</string>
+    <string name="lift_blocked">По расписанию сейчас играть нельзя. Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда закончится новый таймер, который вы запустите.</string>
 </resources>

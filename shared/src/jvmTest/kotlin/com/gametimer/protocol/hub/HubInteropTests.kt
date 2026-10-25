@@ -465,8 +465,16 @@ class HubInteropTests {
         val st = l.state.value!!
         assertTrue(!st.isRunning)
         assertEquals("skippedToday", ((st.json["schedule"] as kotlinx.serialization.json.JsonObject)["status"] as JsonPrimitive).content)
-        // A new timer brings the schedule back
+        assertIs<RequestOutcome.Ok>(a.lift(skipScheduleToday = true)) // a repeated lift is fine
+        fun scheduleStatus() = ((l.state.value!!.json["schedule"] as kotlinx.serialization.json.JsonObject)["status"] as JsonPrimitive).content
+        // A timer started during the lift keeps it while it runs; when it runs out, the schedule is back
         assertIs<RequestOutcome.Ok>(a.startInterval(0, 10))
-        assertEquals("allowed", ((l.state.value!!.json["schedule"] as kotlinx.serialization.json.JsonObject)["status"] as JsonPrimitive).content)
+        assertEquals("skippedToday", scheduleStatus())
+        assertIs<RequestOutcome.Ok>(a.endNow())
+        assertEquals("allowed", scheduleStatus())
+        // "End at" a time that just passed means "earlier", not tomorrow: refused
+        assertIs<RequestOutcome.Ok>(a.startInterval(0, 30))
+        val past = java.time.LocalTime.now().minusMinutes(5)
+        assertEquals(RequestOutcome.Refused("invalid_time"), a.setEnd(past.hour, past.minute))
     }
 }

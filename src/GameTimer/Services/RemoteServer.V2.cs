@@ -297,7 +297,13 @@ public sealed partial class RemoteServer
                 {
                     if (!Int(m, "hours", out var eh) || !Int(m, "minutes", out var em)) return Reply.Error("bad_request");
                     if (eh is < 0 or > 23 || em is < 0 or > 59) return Reply.Error("invalid_time");
-                    return t.SetEnd(eh, em, ActionSource.Phone, context.HubName) ? Ok("state", State()) : Reply.Error("not_running");
+                    return t.SetEnd(eh, em, ActionSource.Phone, context.HubName) switch
+                    {
+                        SetEndResult.Ok => Ok("state", State()),
+                        SetEndResult.NotRunning => Reply.Error("not_running"),
+                        SetEndResult.ScheduleLimit => Reply.Error("schedule_limit"),
+                        _ => Reply.Error("invalid_time"),
+                    };
                 }
 
                 case "timer.extend":

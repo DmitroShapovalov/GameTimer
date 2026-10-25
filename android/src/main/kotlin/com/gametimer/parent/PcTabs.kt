@@ -175,6 +175,13 @@ fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val scheduleRestricts = scheduleStatus in setOf("allowed", "outsideWindow", "dayDisabled", "limitReached")
     var liftAsk by remember { mutableStateOf(false) }
     var pickEnd by remember { mutableStateOf(false) }
+    LaunchedEffect(running) { if (!running) pickEnd = false } // the timer ended meanwhile: nothing to move
+    val confirmLiftText = stringResource(R.string.confirm_lift)
+    // No schedule today: lifting is just stopping the timer; otherwise ask about today's schedule
+    val askLift: () -> Unit = {
+        if (scheduleRestricts) liftAsk = true
+        else confirm = confirmLiftText to { api.lift(skipScheduleToday = false) }
+    }
     val prefs = remember { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
     var step by rememberSaveable { mutableIntStateOf(prefs.getInt("step", 15).takeIf { it in STEPS } ?: 15) }
 
@@ -202,7 +209,8 @@ fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             val endText = actionText(timer?.str("action"))
             val endMessage = stringResource(R.string.confirm_end, endText)
             // The step for − / +, remembered on this phone
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
                 STEPS.forEach { n ->
                     FilterChip(selected = step == n, onClick = { step = n; prefs.edit().putInt("step", n).apply() },
                         label = { Text(n.toString()) })
@@ -220,7 +228,7 @@ fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                     Button(onClick = { confirm = endMessage to { api.endNow() } }, enabled = online,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError)) { Text(stringResource(R.string.end_now)) }
-                    OutlinedButton(onClick = { liftAsk = true }, enabled = online) { Text(stringResource(R.string.lift)) }
+                    OutlinedButton(onClick = askLift, enabled = online) { Text(stringResource(R.string.lift)) }
                 }
             } else {
                 val stopMessage = stringResource(R.string.confirm_stop)
@@ -237,30 +245,25 @@ fun TimerTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             StartForm(context, online) { interval, h, m -> run { if (interval) api.startInterval(h, m) else api.startUntil(h, m) } }
             // No timer, but the schedule limits today (or has locked the PC): set it aside for today
             if (controls && scheduleRestricts) {
-                OutlinedButton(onClick = { liftAsk = true }, enabled = online) { Text(stringResource(R.string.lift_today)) }
+                OutlinedButton(onClick = askLift, enabled = online) { Text(stringResource(R.string.lift_today)) }
             }
         }
     }
 
     if (liftAsk) {
         val available = (schedule?.int("availableSeconds") ?: 0) / 60
-        val stopMessage = stringResource(R.string.confirm_lift)
-        if (!scheduleRestricts) {
-            // No schedule today: lifting is just stopping the timer
-            LaunchedEffect(Unit) { liftAsk = false; confirm = stopMessage to { api.lift(skipScheduleToday = false) } }
-        } else {
-            AlertDialog(onDismissRequest = { liftAsk = false },
-                title = { Text(stringResource(R.string.lift_title)) },
-                text = { Text(if (scheduleStatus == "allowed") stringResource(R.string.lift_allowed, available) else stringResource(R.string.lift_blocked)) },
-                confirmButton = { TextButton(onClick = { liftAsk = false; run { api.lift(skipScheduleToday = true) } }) { Text(stringResource(R.string.lift_skip_today)) } },
-                dismissButton = {
-                    Row {
-                        if (running) TextButton(onClick = { liftAsk = false; run { api.lift(skipScheduleToday = false) } }) { Text(stringResource(R.string.lift_only_timer)) }
-                        TextButton(onClick = { liftAsk = false }) { Text(stringResource(R.string.cancel)) }
-                    }
-                })
-        }
+        AlertDialog(onDismissRequest = { liftAsk = false },
+            title = { Text(stringResource(R.string.lift_title)) },
+            text = { Text(if (scheduleStatus == "allowed") stringResource(R.string.lift_allowed, available) else stringResource(R.string.lift_blocked)) },
+            confirmButton = { TextButton(onClick = { liftAsk = false; run { api.lift(skipScheduleToday = true) } }) { Text(stringResource(R.string.lift_skip_today)) } },
+            dismissButton = {
+                Row {
+                    if (running) TextButton(onClick = { liftAsk = false; run { api.lift(skipScheduleToday = false) } }) { Text(stringResource(R.string.lift_only_timer)) }
+                    TextButton(onClick = { liftAsk = false }) { Text(stringResource(R.string.cancel)) }
+                }
+            })
     }
+
     if (pickEnd) {
         val now = remember { java.util.Calendar.getInstance() }
         val target = timer?.str("targetTime")?.let { runCatching { java.time.OffsetDateTime.parse(it).atZoneSameInstant(java.time.ZoneId.systemDefault()) }.getOrNull() }
@@ -319,11 +322,16 @@ private fun StartForm(context: Context, online: Boolean, onStart: (Boolean, Int,
     }
     if (!interval) {
         Text(stringResource(R.string.until_hint), style = MaterialTheme.typography.bodySmall)
-        TextButton(onClick = {
-            android.app.TimePickerDialog(context, { _, ph, pm -> h = ph.toString(); m = "%02d".format(pm) },
+        var picking by remember { mutableStateOf(false) }
+        TextButton(onClick = { picking = true }) { Text(stringResource(R.string.pick_time)) }
+        if (picking) DisposableEffect(Unit) {
+            val dialog = android.app.TimePickerDialog(context, { _, ph, pm -> h = ph.toString(); m = "%02d".format(pm) },
                 h.toIntOrNull()?.coerceIn(0, 23) ?: 20, m.toIntOrNull()?.coerceIn(0, 59) ?: 0,
-                android.text.format.DateFormat.is24HourFormat(context)).show()
-        }) { Text(stringResource(R.string.pick_time)) }
+                android.text.format.DateFormat.is24HourFormat(context))
+            dialog.setOnDismissListener { picking = false }
+            dialog.show()
+            onDispose { dialog.setOnDismissListener(null); dialog.dismiss() }
+        }
     }
     val hv = h.toIntOrNull()
     val mv = m.toIntOrNull()
@@ -608,6 +616,8 @@ private fun eventText(e: HistoryEvent): String = when (e.type) {
     "closed" -> stringResource(R.string.ev_closed)
     "tampered" -> stringResource(R.string.ev_tampered)
     "updated" -> stringResource(R.string.ev_updated)
+    "scheduleSkipped" -> stringResource(R.string.ev_sched_skipped)
+    "scheduleRestored" -> stringResource(R.string.ev_sched_restored)
     else -> e.type
 }
 

@@ -138,16 +138,16 @@ sealed class SimBackend : IAgentBackend
                     _durationSeconds = (m.GetProperty("hours").GetInt32() * 60 + m.GetProperty("minutes").GetInt32()) * 60;
                     if (_durationSeconds <= 0) return Err("invalid_time");
                     _clock.Restart();
-                    _skipped = false; _expired = false;
+                    _expired = false; // like the real agent: a timer started during a lift keeps the lift until it runs out
                     Log("started", context, _durationSeconds / 60);
                     return Changed(context);
                 case "timer.stop":
                 {
                     bool skip = m.TryGetProperty("skipScheduleToday", out var sk) && sk.ValueKind == JsonValueKind.True;
                     bool scheduleOn = _schedule["enabled"]!.GetValue<bool>();
-                    if (!_clock.IsRunning && !(skip && scheduleOn && !_skipped)) return Err("not_running");
+                    if (!_clock.IsRunning && !(skip && scheduleOn)) return Err("not_running"); // a repeated lift is fine
                     if (_clock.IsRunning) { _clock.Reset(); Log("stopped", context, null); }
-                    if (skip && scheduleOn) _skipped = true;
+                    if (skip && scheduleOn && !_skipped) { _skipped = true; Log("scheduleSkipped", context, null); }
                     return Changed(context);
                 }
                 case "timer.end":
@@ -155,15 +155,19 @@ sealed class SimBackend : IAgentBackend
                     Log("extended", context, -Math.Max(1, (Remaining() + 59) / 60));
                     _clock.Reset();
                     _expired = true;
+                    if (_skipped) { _skipped = false; Log("scheduleRestored", context, null); } // the lift ends with the timer
                     return Changed(context);
                 case "timer.setEnd":
                 {
                     if (!_clock.IsRunning) return Err("not_running");
-                    int h = m.GetProperty("hours").GetInt32(), mi = m.GetProperty("minutes").GetInt32();
+                    if (!m.TryGetProperty("hours", out var hp) || !hp.TryGetInt32(out var h)
+                        || !m.TryGetProperty("minutes", out var mp) || !mp.TryGetInt32(out var mi)) return Err("bad_request");
                     if (h is < 0 or > 23 || mi is < 0 or > 59) return Err("invalid_time");
                     var now = DateTime.Now;
                     var target = now.Date.AddHours(h).AddMinutes(mi);
                     if (target <= now) target = target.AddDays(1);
+                    if (target - now > TimeSpan.FromHours(12) && (target - now).TotalSeconds > Remaining()) return Err("invalid_time");
+                    // (the simulator has no schedule cap: availableSeconds is a fixed 7200)
                     int before = Remaining();
                     _durationSeconds = (int)_clock.Elapsed.TotalSeconds + (int)(target - now).TotalSeconds;
                     Log("extended", context, (int)Math.Round((Remaining() - before) / 60.0));

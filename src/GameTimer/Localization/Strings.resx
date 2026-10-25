@@ -461,17 +461,28 @@
   <data name="Lift_Blocked" xml:space="preserve">
     <value>By the schedule, playing isn't allowed right now.</value>
   </data>
-  <data name="Lift_Choice_Running" xml:space="preserve">
-    <value>Yes — also ignore the schedule for the rest of today (it applies again at midnight or with a new timer).
-No — only stop the timer.</value>
-  </data>
-  <data name="Lift_Choice_Idle" xml:space="preserve">
-    <value>OK — ignore the schedule for the rest of today (it applies again at midnight or with a new timer).</value>
-  </data>
-  <data name="Sched_St_Skipped" xml:space="preserve">
-    <value>The schedule is off for today (lifted by a parent). It applies again at midnight or with a new timer.</value>
-  </data>
   <data name="Schedule_NoMore" xml:space="preserve">
     <value>The schedule allows no more time today.</value>
+  </data>
+  <data name="Lift_Explain" xml:space="preserve">
+    <value>Ignore the schedule for the rest of today? It applies again at midnight, or when a new timer you start runs out.</value>
+  </data>
+  <data name="Lift_Btn_Today" xml:space="preserve">
+    <value>Ignore today</value>
+  </data>
+  <data name="Lift_Btn_TimerOnly" xml:space="preserve">
+    <value>Only stop the timer</value>
+  </data>
+  <data name="EndAt_TooFar" xml:space="preserve">
+    <value>That time has just passed. To end earlier, pick a time later than now — or use End now.</value>
+  </data>
+  <data name="Ev_ScheduleSkipped" xml:space="preserve">
+    <value>Schedule lifted for today</value>
+  </data>
+  <data name="Ev_ScheduleRestored" xml:space="preserve">
+    <value>Schedule applies again</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>The schedule is off for today (lifted by a parent). It applies again at midnight, or when a new timer runs out.</value>
   </data>
 </root>

@@ -32,7 +32,8 @@ public class AgentApi(private val link: AgentLink) {
 
     /**
      * Lift the restrictions: stop the timer (no lock) and, with [skipScheduleToday], set the daily schedule
-     * aside until midnight or the next timer a parent starts. Needs [supportsTimerControls].
+     * aside until midnight, or until a timer started during the lift runs out (that timer isn't capped by
+     * the schedule). Idempotent. Needs [supportsTimerControls].
      */
     public suspend fun lift(skipScheduleToday: Boolean): RequestOutcome =
         link.send("timer.stop", buildJsonObject { if (skipScheduleToday) put("skipScheduleToday", true) })
