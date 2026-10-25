@@ -425,4 +425,64 @@
   <data name="Peer_MakeParent" xml:space="preserve">
     <value>Ouder maken (geen beheerder)</value>
   </data>
+  <data name="Lift" xml:space="preserve">
+    <value>Beperkingen opheffen</value>
+  </data>
+  <data name="LiftToday" xml:space="preserve">
+    <value>Beperkingen voor vandaag opheffen</value>
+  </data>
+  <data name="EndNow" xml:space="preserve">
+    <value>Nu beëindigen</value>
+  </data>
+  <data name="EndNow_Confirm" xml:space="preserve">
+    <value>De timer nu beëindigen? De pc doet dit meteen: {0}.</value>
+  </data>
+  <data name="Step_Label" xml:space="preserve">
+    <value>Stap:</value>
+  </data>
+  <data name="EndAt_Label" xml:space="preserve">
+    <value>Eindigen om:</value>
+  </data>
+  <data name="EndAt_Set" xml:space="preserve">
+    <value>Instellen</value>
+  </data>
+  <data name="Minus_N" xml:space="preserve">
+    <value>−{0} min</value>
+  </data>
+  <data name="Plus_N" xml:space="preserve">
+    <value>+{0} min</value>
+  </data>
+  <data name="Lift_Title" xml:space="preserve">
+    <value>Schema van vandaag</value>
+  </data>
+  <data name="Lift_Allowed" xml:space="preserve">
+    <value>Volgens het schema is er vandaag nog {0} min.</value>
+  </data>
+  <data name="Lift_Blocked" xml:space="preserve">
+    <value>Volgens het schema mag er nu niet gegamed worden.</value>
+  </data>
+  <data name="Schedule_NoMore" xml:space="preserve">
+    <value>Het schema staat vandaag geen extra tijd meer toe.</value>
+  </data>
+  <data name="Lift_Explain" xml:space="preserve">
+    <value>Het schema de rest van vandaag negeren? Het geldt weer om middernacht, of zodra een nieuwe timer die je start afloopt.</value>
+  </data>
+  <data name="Lift_Btn_Today" xml:space="preserve">
+    <value>Vandaag negeren</value>
+  </data>
+  <data name="Lift_Btn_TimerOnly" xml:space="preserve">
+    <value>Alleen de timer stoppen</value>
+  </data>
+  <data name="EndAt_TooFar" xml:space="preserve">
+    <value>Dat is meer dan 12 uur vooruit (een net verstreken tijd telt als morgen). Om eerder te stoppen kies je een tijd vóór het huidige einde — of gebruik Nu beëindigen.</value>
+  </data>
+  <data name="Ev_ScheduleSkipped" xml:space="preserve">
+    <value>Schema voor vandaag opgeheven</value>
+  </data>
+  <data name="Ev_ScheduleRestored" xml:space="preserve">
+    <value>Schema geldt weer</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>Het schema geldt vandaag niet (opgeheven door een ouder). Het geldt weer om middernacht, of zodra een nieuwe timer afloopt.</value>
+  </data>
 </root>

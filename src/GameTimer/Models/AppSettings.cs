@@ -37,6 +37,9 @@ public class AppSettings
     public int LastIntervalHours { get; set; } = 1;
     public int LastIntervalMinutes { get; set; } = 0;
 
+    // Step of the − / + buttons on a running timer (minutes)
+    public int AdjustStepMinutes { get; set; } = 15;
+
     // Sound notifications
     public List<AlertPoint> AlertPoints { get; set; } = new()
     {

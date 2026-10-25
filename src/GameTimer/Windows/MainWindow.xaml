@@ -90,15 +90,39 @@
                         </StackPanel>
                     </ui:Card>
 
-                    <StackPanel Orientation="Horizontal">
-                        <ui:Button x:Name="StartButton" Content="Start" Width="100" Height="34"
-                                Margin="0,0,8,0" Click="Start_Click"
-                                Appearance="Success" FontWeight="Bold"/>
-                        <ui:Button x:Name="StopButton" Content="Stop" Width="100" Height="34"
-                                Margin="0,0,8,0" Click="Stop_Click" IsEnabled="False"/>
-                        <ui:Button x:Name="ResetButton" Content="Reset" Width="100" Height="34"
-                                Click="Reset_Click" IsEnabled="False"/>
+                    <!-- A running timer: − / + by a chosen step, a new end time -->
+                    <StackPanel x:Name="RunningPanel" Visibility="Collapsed" Margin="0,0,0,12">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock x:Name="StepLabel" Text="Step:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="StepCombo" Width="90" VerticalAlignment="Center"
+                                      SelectionChanged="StepCombo_Changed"/>
+                            <ui:Button x:Name="MinusButton" Content="−15 min" Width="100" Height="34"
+                                       Margin="8,0,8,0" Click="Minus_Click"/>
+                            <ui:Button x:Name="PlusButton" Content="+15 min" Width="100" Height="34"
+                                       Click="Plus_Click"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="EndAtLabel" Text="End at:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ui:TextBox x:Name="EndAtHour" Width="64" MaxLength="2" VerticalAlignment="Center"
+                                        PreviewTextInput="TimeInput_PreviewTextInput" GotKeyboardFocus="TimeInput_GotFocus"/>
+                            <TextBlock Text=":" VerticalAlignment="Center" Margin="4,0,4,0" FontWeight="Bold"/>
+                            <ui:TextBox x:Name="EndAtMinute" Width="64" MaxLength="2" VerticalAlignment="Center"
+                                        PreviewTextInput="TimeInput_PreviewTextInput" GotKeyboardFocus="TimeInput_GotFocus"/>
+                            <ui:Button x:Name="EndAtButton" Content="Set" Height="34" Margin="8,0,0,0" Click="EndAt_Click"/>
+                        </StackPanel>
                     </StackPanel>
+
+                    <WrapPanel Orientation="Horizontal">
+                        <ui:Button x:Name="StartButton" Content="Start" Width="100" Height="34"
+                                Margin="0,0,8,8" Click="Start_Click"
+                                Appearance="Success" FontWeight="Bold"/>
+                        <ui:Button x:Name="EndNowButton" Content="End now" Height="34" MinWidth="100"
+                                Margin="0,0,8,8" Click="EndNow_Click" IsEnabled="False" Appearance="Danger"/>
+                        <ui:Button x:Name="StopButton" Content="Lift restrictions" Height="34" MinWidth="100"
+                                Margin="0,0,8,8" Click="Stop_Click" IsEnabled="False"/>
+                        <ui:Button x:Name="ResetButton" Content="Reset" Width="100" Height="34"
+                                Margin="0,0,8,8" Click="Reset_Click" IsEnabled="False"/>
+                    </WrapPanel>
                 </StackPanel>
             </TabItem>
 

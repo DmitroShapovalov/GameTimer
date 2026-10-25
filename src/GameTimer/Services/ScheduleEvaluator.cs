@@ -8,13 +8,17 @@ public enum ScheduleStatus
     Allowed,       // within an allowed window with budget left
     OutsideWindow, // before / after today's allowed hours
     DayDisabled,   // gaming not allowed on this day at all
-    LimitReached   // today's minute budget is used up
+    LimitReached,  // today's minute budget is used up
+    SkippedToday   // enabled, but the parent lifted the restrictions for today (until midnight or a new timer)
 }
 
 /// <summary>Result of evaluating the schedule for a given moment.</summary>
 public readonly record struct ScheduleDecision(ScheduleStatus Status, int AvailableSeconds, int WindowEndMinutes)
 {
     public bool IsBlocked => Status is ScheduleStatus.OutsideWindow or ScheduleStatus.DayDisabled or ScheduleStatus.LimitReached;
+
+    /// <summary>The schedule limits anything right now (not off, not lifted for today).</summary>
+    public bool Restricts => Status is not (ScheduleStatus.Off or ScheduleStatus.SkippedToday);
 }
 
 /// <summary>

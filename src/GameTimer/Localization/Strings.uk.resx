@@ -425,4 +425,64 @@
   <data name="Peer_MakeParent" xml:space="preserve">
     <value>Зробити батьками (не адміном)</value>
   </data>
+  <data name="Lift" xml:space="preserve">
+    <value>Зняти обмеження</value>
+  </data>
+  <data name="LiftToday" xml:space="preserve">
+    <value>Зняти обмеження на сьогодні</value>
+  </data>
+  <data name="EndNow" xml:space="preserve">
+    <value>Завершити зараз</value>
+  </data>
+  <data name="EndNow_Confirm" xml:space="preserve">
+    <value>Завершити таймер зараз? ПК одразу виконає: {0}.</value>
+  </data>
+  <data name="Step_Label" xml:space="preserve">
+    <value>Крок:</value>
+  </data>
+  <data name="EndAt_Label" xml:space="preserve">
+    <value>Закінчити о:</value>
+  </data>
+  <data name="EndAt_Set" xml:space="preserve">
+    <value>Застосувати</value>
+  </data>
+  <data name="Minus_N" xml:space="preserve">
+    <value>−{0} хв</value>
+  </data>
+  <data name="Plus_N" xml:space="preserve">
+    <value>+{0} хв</value>
+  </data>
+  <data name="Lift_Title" xml:space="preserve">
+    <value>Розклад на сьогодні</value>
+  </data>
+  <data name="Lift_Allowed" xml:space="preserve">
+    <value>За розкладом сьогодні лишилося {0} хв.</value>
+  </data>
+  <data name="Lift_Blocked" xml:space="preserve">
+    <value>За розкладом зараз грати не можна.</value>
+  </data>
+  <data name="Schedule_NoMore" xml:space="preserve">
+    <value>Розклад більше не дозволяє часу на сьогодні.</value>
+  </data>
+  <data name="Lift_Explain" xml:space="preserve">
+    <value>Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли закінчиться новий таймер, який ви запустите.</value>
+  </data>
+  <data name="Lift_Btn_Today" xml:space="preserve">
+    <value>Не враховувати сьогодні</value>
+  </data>
+  <data name="Lift_Btn_TimerOnly" xml:space="preserve">
+    <value>Лише вимкнути таймер</value>
+  </data>
+  <data name="EndAt_TooFar" xml:space="preserve">
+    <value>Це більше ніж на 12 годин уперед (щойно минулий час вважається завтрашнім). Щоб закінчити раніше, виберіть час до поточного закінчення — або натисніть «Завершити зараз».</value>
+  </data>
+  <data name="Ev_ScheduleSkipped" xml:space="preserve">
+    <value>Розклад знято на сьогодні</value>
+  </data>
+  <data name="Ev_ScheduleRestored" xml:space="preserve">
+    <value>Розклад знову діє</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>Розклад сьогодні не діє (знято батьками). Знову діятиме опівночі або коли закінчиться новий таймер.</value>
+  </data>
 </root>

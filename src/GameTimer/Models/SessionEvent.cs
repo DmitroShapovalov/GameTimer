@@ -10,7 +10,9 @@ public enum SessionEventType
     Resumed,
     Closed,
     Tampered,
-    Updated
+    Updated,
+    ScheduleSkipped,  // a parent lifted the schedule for today
+    ScheduleRestored  // the lift ended (a timer started during it ran out)
 }
 
 /// <summary>Who caused an event, for the history view.</summary>

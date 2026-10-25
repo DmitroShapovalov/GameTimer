@@ -35,8 +35,6 @@
     <string name="back">Back</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>
-    <string name="plus15">+15 min</string>
-    <string name="minus15">−15 min</string>
     <string name="minutes">Minutes</string>
     <string name="request_refused">The PC refused: %1$s</string>
     <string name="request_gave_up">No answer from the PC</string>
@@ -139,4 +137,21 @@
     <string name="peer_added_text">“%1$s” was added on %2$s. If you don\'t know this device, remove it on the Parents tab.</string>
     <string name="no_screen_lock">This phone has no screen lock, so anyone holding it can change the parents of this PC. Set a PIN or fingerprint in the phone\'s settings.</string>
     <string name="peer_added_text_parent">“%1$s” was added on %2$s. If you don\'t know this device, ask an admin to remove it, or remove it on the PC.</string>
+    <string name="minus_n">−%1$d min</string>
+    <string name="plus_n">+%1$d min</string>
+    <string name="end_at_button">End at…</string>
+    <string name="end_now">End now</string>
+    <string name="lift">Lift restrictions</string>
+    <string name="lift_today">Lift restrictions for today</string>
+    <string name="lift_title">Today\'s schedule</string>
+    <string name="lift_skip_today">Ignore today</string>
+    <string name="lift_only_timer">Only stop the timer</string>
+    <string name="confirm_lift">Stop the timer? The PC won\'t be locked.</string>
+    <string name="sched_skipped">Schedule: off for today</string>
+    <string name="pick_time">Pick a time</string>
+    <string name="err_schedule_limit">The schedule allows no more time today.</string>
+    <string name="ev_sched_skipped">Schedule lifted for today</string>
+    <string name="ev_sched_restored">Schedule applies again</string>
+    <string name="lift_allowed">By the schedule, %1$d min are left today. Ignore the schedule for the rest of today too? It applies again at midnight, or when a new timer you start runs out.</string>
+    <string name="lift_blocked">By the schedule, playing isn\'t allowed right now. Ignore the schedule for the rest of today? It applies again at midnight, or when a new timer you start runs out.</string>
 </resources>

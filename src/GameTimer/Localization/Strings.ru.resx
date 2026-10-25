@@ -425,4 +425,64 @@
   <data name="Peer_MakeParent" xml:space="preserve">
     <value>Сделать родителем (не админом)</value>
   </data>
+  <data name="Lift" xml:space="preserve">
+    <value>Снять ограничения</value>
+  </data>
+  <data name="LiftToday" xml:space="preserve">
+    <value>Снять ограничения на сегодня</value>
+  </data>
+  <data name="EndNow" xml:space="preserve">
+    <value>Завершить сейчас</value>
+  </data>
+  <data name="EndNow_Confirm" xml:space="preserve">
+    <value>Завершить таймер сейчас? ПК сразу выполнит: {0}.</value>
+  </data>
+  <data name="Step_Label" xml:space="preserve">
+    <value>Шаг:</value>
+  </data>
+  <data name="EndAt_Label" xml:space="preserve">
+    <value>Закончить в:</value>
+  </data>
+  <data name="EndAt_Set" xml:space="preserve">
+    <value>Применить</value>
+  </data>
+  <data name="Minus_N" xml:space="preserve">
+    <value>−{0} мин</value>
+  </data>
+  <data name="Plus_N" xml:space="preserve">
+    <value>+{0} мин</value>
+  </data>
+  <data name="Lift_Title" xml:space="preserve">
+    <value>Расписание на сегодня</value>
+  </data>
+  <data name="Lift_Allowed" xml:space="preserve">
+    <value>По расписанию сегодня осталось {0} мин.</value>
+  </data>
+  <data name="Lift_Blocked" xml:space="preserve">
+    <value>По расписанию сейчас играть нельзя.</value>
+  </data>
+  <data name="Schedule_NoMore" xml:space="preserve">
+    <value>Расписание больше не разрешает времени на сегодня.</value>
+  </data>
+  <data name="Lift_Explain" xml:space="preserve">
+    <value>Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда закончится новый таймер, который вы запустите.</value>
+  </data>
+  <data name="Lift_Btn_Today" xml:space="preserve">
+    <value>Не учитывать сегодня</value>
+  </data>
+  <data name="Lift_Btn_TimerOnly" xml:space="preserve">
+    <value>Только выключить таймер</value>
+  </data>
+  <data name="EndAt_TooFar" xml:space="preserve">
+    <value>Это больше чем на 12 часов вперёд (только что прошедшее время считается завтрашним). Чтобы закончить раньше, выберите время до текущего окончания — или нажмите «Завершить сейчас».</value>
+  </data>
+  <data name="Ev_ScheduleSkipped" xml:space="preserve">
+    <value>Расписание снято на сегодня</value>
+  </data>
+  <data name="Ev_ScheduleRestored" xml:space="preserve">
+    <value>Расписание снова действует</value>
+  </data>
+  <data name="Sched_St_Skipped" xml:space="preserve">
+    <value>Расписание сегодня не действует (снято родителем). Снова начнёт действовать в полночь или когда закончится новый таймер.</value>
+  </data>
 </root>
