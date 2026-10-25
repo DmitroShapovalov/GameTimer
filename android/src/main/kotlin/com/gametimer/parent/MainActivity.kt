@@ -2,6 +2,7 @@ package com.gametimer.parent
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -89,6 +91,11 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Opened from a notification: once (not again on rotation, from recents or after process death)
+        if (savedInstanceState == null && (intent.flags and android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) {
+            vm.open(intent.getStringExtra(Notifier.EXTRA_AGENT))
+        }
+        intent.removeExtra(Notifier.EXTRA_AGENT)
         setContent {
             val scheme = if (isSystemInDarkTheme()) darkColorScheme(primary = Color(0xFF4CA3E8)) else lightColorScheme(primary = Color(0xFF0078D4))
             MaterialTheme(colorScheme = scheme) {
@@ -97,7 +104,13 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    // Links stay connected only while the app is visible (no background service in this step)
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        vm.open(intent.getStringExtra(Notifier.EXTRA_AGENT)) // a notification tapped while the app is open
+        intent.removeExtra(Notifier.EXTRA_AGENT)
+        setIntent(intent)
+    }
+
     override fun onStart() {
         super.onStart()
         vm.setForeground(true)
@@ -123,6 +136,10 @@ private fun App(vm: MainViewModel) {
     val message by vm.message.collectAsState()
     LaunchedEffect(message) {
         message?.let { snackbar.showSnackbar(it); vm.messageShown() }
+    }
+    val openAgent by vm.openAgent.collectAsState()
+    LaunchedEffect(openAgent) {
+        openAgent?.let { id -> if (agents.any { it.agentId == id } && pairState == null) route = "pc:$id"; vm.opened() }
     }
     BackHandler(route != "home" || pairState != null) {
         if (pairState != null) vm.clearPairing()
@@ -153,13 +170,15 @@ private fun App(vm: MainViewModel) {
             }
             when {
                 pairState != null -> PairScreen(vm, onDone = { vm.clearPairing(); route = "home" })
+                route == "settings" -> AppSettingsScreen(onBack = { route = "home" })
                 route == "scan" -> ScanScreen(vm, onBack = { route = "home" }, onLink = { link, name -> vm.startPairing(link, name) })
                 route.startsWith("pc:") -> {
                     val agent = agents.firstOrNull { it.agentId == route.removePrefix("pc:") }
                     if (agent == null) LaunchedEffect(route) { route = "home" }
                     else PcScreen(vm, agent, snackbar, onBack = { route = "home" })
                 }
-                else -> HomeScreen(vm, agents, snackbar, onAdd = { route = "scan" }, onOpen = { route = "pc:" + it.agentId })
+                else -> HomeScreen(vm, agents, snackbar, onAdd = { route = "scan" }, onOpen = { route = "pc:" + it.agentId },
+                    onSettings = { route = "settings" })
             }
         }
     }
@@ -168,9 +187,14 @@ private fun App(vm: MainViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreen(vm: MainViewModel, agents: List<PairedAgent>, snackbar: SnackbarHostState,
-                       onAdd: () -> Unit, onOpen: (PairedAgent) -> Unit) {
+                       onAdd: () -> Unit, onOpen: (PairedAgent) -> Unit, onSettings: () -> Unit) {
+    AskForNotifications(agents.isNotEmpty())
     Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.home_title)) }) },
+        topBar = {
+            TopAppBar(title = { Text(stringResource(R.string.home_title)) }, actions = {
+                IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, stringResource(R.string.app_settings)) }
+            })
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(onClick = onAdd, icon = { Icon(Icons.Filled.Add, null) }, text = { Text(stringResource(R.string.add_pc)) })
         },
@@ -347,6 +371,11 @@ private fun PairScreen(vm: MainViewModel, onDone: () -> Unit) {
 @Composable
 private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHostState, onBack: () -> Unit) {
     val link = remember(agent.agentId) { vm.link(agent.agentId) } ?: return
+    // This PC's events show here: no notifications for it while its screen is open
+    androidx.compose.runtime.DisposableEffect(agent.agentId) {
+        vm.setShownAgent(agent.agentId)
+        onDispose { vm.setShownAgent(null) }
+    }
     val status by link.status.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var confirmRemove by remember { mutableStateOf(false) }
@@ -431,4 +460,23 @@ private tailrec fun android.content.Context.findActivity(): FragmentActivity? = 
     is FragmentActivity -> this
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+/**
+ * Android 13+: notifications need a permission. Asked once, when the first PC is paired and background
+ * notifications are on (the default); afterwards only from the settings screen.
+ */
+@Composable
+private fun AskForNotifications(havePcs: Boolean) {
+    if (Build.VERSION.SDK_INT < 33 || !havePcs) return
+    val context = LocalContext.current
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { MonitorService.update(context) }
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("notify", android.content.Context.MODE_PRIVATE)
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (!granted && NotifySettings(context).background && !prefs.getBoolean("asked", false)) {
+            prefs.edit().putBoolean("asked", true).apply()
+            ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 }

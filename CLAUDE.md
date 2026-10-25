@@ -111,8 +111,18 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            Models + AgentApi (typed §7.2 calls; writes send ifRev, conflicts return the current value)
 android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, applicationId com.gametimer.parent):
   HubStore.kt              hub key (AES-GCM wrapped by an Android Keystore key) + paired PCs, in noBackupFilesDir
-  MainViewModel.kt         AgentLink per PC (connected while the app is visible), pairing flow, commands,
-                           app lock state, the "new parent app added" notice (peer list compared per PC)
+  LinkHub.kt               App-wide: the hub key, one AgentLink per PC (connected while the UI is visible or
+                           MonitorService runs), the "new parent app added" queue (peer list compared per PC),
+                           events → Notifier
+  Notifier.kt              NotifySettings (background + 4 categories) and system notifications: history caught
+                           up on every connect back to the last event seen (by the event itself, not its time —
+                           the PC clock may be off), ev.alert, parent added; none for the PC whose screen is
+                           open; this phone's own actions skipped by hub id (history `hub`, agent v1.7.2)
+  MonitorService.kt        connectedDevice foreground service (quiet ongoing notification) keeping the links
+                           open in the background, only on Wi-Fi / Ethernet; BootReceiver restarts it;
+                           MonitorService.update(): on when enabled, a PC paired and notifications allowed
+  AppSettingsScreen.kt     This phone's settings (gear on the home screen): notifications, permission, battery
+  MainViewModel.kt         UI state over LinkHub: identity, pairing flow, commands, app lock, messages
   ReAuth.kt                §12 re-auth with the phone's lock (androidx.biometric: strong biometric or PIN, weak on 9-10):
                            app lock after 14 days, check before admin actions (roles, revoking another parent; 60 s grace)
   NsdLocator.kt            Locator on NsdManager: browse _sysmon._tcp, resolve one at a time, match TXT tags

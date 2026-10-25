@@ -47,6 +47,8 @@ public data class HistoryEvent(
     val type: String,
     val source: String,
     val device: String? = null,
+    /** The hub id of the parent app that did it (agent v1.7.2+); compare with `hello.you.id`. */
+    val hub: String? = null,
     val mode: String? = null,
     val minutes: Int? = null,
     val action: String? = null,
