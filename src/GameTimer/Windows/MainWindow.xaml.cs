@@ -635,10 +635,15 @@ public partial class MainWindow : FluentWindow
             System.Windows.MessageBox.Show(this, Loc.Get("InvalidTimeRange"), Loc.Get("Error"), System.Windows.MessageBoxButton.OK);
             return;
         }
-        // Later than now ends: more time → Windows Hello
+        // Later than now ends: more time → Windows Hello (the 12-hour rule is checked first)
         var now = DateTime.Now;
         var target = now.Date.AddHours(h).AddMinutes(m);
         if (target <= now) target = target.AddDays(1);
+        if (target - now > TimeSpan.FromHours(12) && target - now > _timer.Remaining)
+        {
+            System.Windows.MessageBox.Show(this, Loc.Get("EndAt_TooFar"), Loc.Get("Error"), System.Windows.MessageBoxButton.OK);
+            return;
+        }
         if (target - now > _timer.Remaining && !await RequireAuth()) return;
         var result = _timer.SetEnd(h, m);
         if (result is SetEndResult.InvalidTime or SetEndResult.ScheduleLimit)

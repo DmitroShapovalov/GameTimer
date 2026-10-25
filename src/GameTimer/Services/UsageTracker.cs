@@ -19,6 +19,8 @@ public sealed class UsageTracker
         public int UsedSeconds { get; set; }
         /// <summary>The parent lifted the schedule for this date (rolls over with it at midnight).</summary>
         public bool ScheduleSkipped { get; set; }
+        /// <summary>A timer was started during the lift: the lift ends with it (also if the app is killed).</summary>
+        public bool LiftBoundToTimer { get; set; }
     }
 
     private Record _record;
@@ -47,10 +49,28 @@ public sealed class UsageTracker
     public void SetScheduleSkippedToday(bool skipped)
     {
         RollOver();
-        if (_record.ScheduleSkipped == skipped) return;
+        if (_record.ScheduleSkipped == skipped && (skipped || !_record.LiftBoundToTimer)) return;
         _record.ScheduleSkipped = skipped;
+        if (!skipped) _record.LiftBoundToTimer = false;
         Save();
     }
+
+    /// <summary>True while today's lift ends with the running timer.</summary>
+    public bool LiftBoundToTimer
+    {
+        get { RollOver(); return _record.ScheduleSkipped && _record.LiftBoundToTimer; }
+    }
+
+    public void SetLiftBoundToTimer(bool bound)
+    {
+        RollOver();
+        if (_record.LiftBoundToTimer == bound) return;
+        _record.LiftBoundToTimer = bound;
+        Save();
+    }
+
+    /// <summary>Raised when midnight ended a lift (for the history).</summary>
+    public event Action? LiftEndedAtMidnight;
 
     /// <summary>Adds elapsed game time to today's total and persists.</summary>
     public void Add(int seconds)
@@ -66,7 +86,9 @@ public sealed class UsageTracker
         var today = Today();
         if (_record.Date != today)
         {
+            bool hadLift = _record.ScheduleSkipped;
             _record = new Record { Date = today, UsedSeconds = 0 };
+            if (hadLift) LiftEndedAtMidnight?.Invoke();
             Save();
         }
     }

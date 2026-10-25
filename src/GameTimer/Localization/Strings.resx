@@ -474,7 +474,7 @@
     <value>Only stop the timer</value>
   </data>
   <data name="EndAt_TooFar" xml:space="preserve">
-    <value>That time has just passed. To end earlier, pick a time later than now — or use End now.</value>
+    <value>That's more than 12 hours ahead (a time that has just passed counts as tomorrow). To end earlier, pick a time before the current end — or use End now.</value>
   </data>
   <data name="Ev_ScheduleSkipped" xml:space="preserve">
     <value>Schedule lifted for today</value>

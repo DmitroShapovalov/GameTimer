@@ -94,6 +94,7 @@ public sealed class TimerController
         _store = store;
         _log = log;
         _usage = usage;
+        _usage.LiftEndedAtMidnight += () => Log(SessionEventType.ScheduleRestored, ActionSource.System);
         _dispatcher = Dispatcher.CurrentDispatcher;
         _timer = new TimerService(settings);
         _timer.Tick += OnTick;
@@ -129,6 +130,7 @@ public sealed class TimerController
         if (saved == null)
         {
             DiagnosticLog.Write("resume: no saved timer");
+            if (_usage.LiftBoundToTimer) EndLiftOnExpiry(); // its timer is gone (state file removed)
             return;
         }
 
@@ -171,6 +173,7 @@ public sealed class TimerController
             // Time ran out while the app was not running — enforce the action now
             _store.Clear();
             Log(SessionEventType.Expired, ActionSource.System, action: _settings.Action);
+            EndLiftOnExpiry();
             SetState(TimerState.Expired);
             try { ShutdownService.Execute(_settings.Action); }
             catch (Exception ex) { DiagnosticLog.Write("resume: action failed: " + ex); }
@@ -349,6 +352,7 @@ public sealed class TimerController
         _store.Clear();
         _lastRemainingMs = 0;
         ShutdownService.CancelShutdown();
+        _usage.SetLiftBoundToTimer(false); // stopped on purpose: an active lift goes on until midnight
         Log(SessionEventType.Stopped, source, device);
         SetState(TimerState.Stopped);
         return true;
@@ -364,6 +368,7 @@ public sealed class TimerController
         _store.Clear();
         _lastRemainingMs = 0;
         ShutdownService.CancelShutdown();
+        _usage.SetLiftBoundToTimer(false);
         Mode = null;
         if (had) Log(SessionEventType.Reset, source, device);
         SetState(TimerState.NotStarted);
@@ -403,6 +408,8 @@ public sealed class TimerController
 
     private void Begin(TimerMode mode, TimeSpan duration, ActionSource source, string? device)
     {
+        // A timer started during a lift is the parent's new limit: the lift ends with it
+        if (_usage.ScheduleSkippedToday) _usage.SetLiftBoundToTimer(true);
         Mode = mode;
         _timer.Start(duration);
         _lastRemainingMs = (long)duration.TotalMilliseconds;

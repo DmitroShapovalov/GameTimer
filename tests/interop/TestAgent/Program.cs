@@ -254,6 +254,13 @@ sealed class SimBackend : IAgentBackend
 
     private JsonObject State()
     {
+        if (_clock.IsRunning && Remaining() == 0)
+        {
+            // Ran out (or extended to zero): like the agent's OnExpired, which also ends a lift
+            _clock.Reset();
+            _expired = true;
+            _skipped = false;
+        }
         bool running = _clock.IsRunning;
         int remaining = running ? Remaining() : 0;
         bool scheduleOn = _schedule["enabled"]!.GetValue<bool>();

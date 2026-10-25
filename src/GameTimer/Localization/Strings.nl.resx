@@ -474,7 +474,7 @@
     <value>Alleen de timer stoppen</value>
   </data>
   <data name="EndAt_TooFar" xml:space="preserve">
-    <value>Die tijd is net voorbij. Om eerder te stoppen kies je een tijd na nu — of gebruik Nu beëindigen.</value>
+    <value>Dat is meer dan 12 uur vooruit (een net verstreken tijd telt als morgen). Om eerder te stoppen kies je een tijd vóór het huidige einde — of gebruik Nu beëindigen.</value>
   </data>
   <data name="Ev_ScheduleSkipped" xml:space="preserve">
     <value>Schema voor vandaag opgeheven</value>
