@@ -96,14 +96,18 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         fun lan(caps: android.net.NetworkCapabilities?) = caps != null &&
             (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET))
         onLan = lan(cm.getNetworkCapabilities(cm.activeNetwork))
+        // The default network only (a home Wi-Fi without internet loses that role to mobile data: then the
+        // background watching pauses too — accepted)
+        var current: android.net.Network? = cm.activeNetwork
         try {
             cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
                     val now = lan(caps)
-                    scope.launch { if (now != onLan) { onLan = now; updateActive() } }
+                    scope.launch { current = network; if (now != onLan) { onLan = now; updateActive() } }
                 }
                 override fun onLost(network: android.net.Network) {
-                    scope.launch { if (onLan) { onLan = false; updateActive() } }
+                    // A late "lost" of the previous network must not switch off the new one
+                    scope.launch { if (network == current && onLan) { onLan = false; updateActive() } }
                 }
             })
         } catch (e: RuntimeException) { /* no callback: always try */ }

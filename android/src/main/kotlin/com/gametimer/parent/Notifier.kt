@@ -54,7 +54,7 @@ data class Me(val hubId: String?, val name: String?)
  */
 class Notifier(private val context: Context) {
     private val settings = NotifySettings(context)
-    private val seen = context.getSharedPreferences("notify_seen", Context.MODE_PRIVATE)
+    private val seen = context.getSharedPreferences("notify_seen2", Context.MODE_PRIVATE) // event keys (v2 of this file)
     private val json = Json { ignoreUnknownKeys = true }
 
     init {
@@ -95,12 +95,16 @@ class Notifier(private val context: Context) {
             before = page.next
         }
         if (known == null) { // first connect: remember where history stands, no flood of old events
-            remember(agent.agentId, fresh.reversed().map(::key))
+            val current = known(agent.agentId) ?: mutableListOf()
+            remember(agent.agentId, current + fresh.reversed().map(::key).filter { it !in current })
             return
         }
         if (fresh.isEmpty()) return
-        val ordered = fresh.reversed()
-        remember(agent.agentId, known + ordered.map(::key))
+        // Live events may have arrived (and been shown) while the pages loaded: read the list again
+        val current = known(agent.agentId) ?: mutableListOf()
+        val ordered = fresh.reversed().filter { key(it) !in current }
+        if (ordered.isEmpty()) return
+        remember(agent.agentId, current + ordered.map(::key))
         val pcNow = agentNow?.let(::parseTime) ?: OffsetDateTime.now()
         if (notify) ordered.takeLast(MAX_SHOWN).forEach { show(agent, it, me, pcNow) }
     }

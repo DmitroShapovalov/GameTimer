@@ -526,7 +526,8 @@ public sealed class TimerController
             Type = type,
             Source = source,
             Device = device,
-            Hub = source == ActionSource.Phone ? ActorHubId : null,
+            // Only for the v2 request being handled (a v1 phone request in a nested dispatcher frame has another name)
+            Hub = source == ActionSource.Phone && ActorHubId is { } actor && device == actor.Name ? actor.Id : null,
             Mode = mode,
             Minutes = minutes,
             Action = action
@@ -537,7 +538,7 @@ public sealed class TimerController
     /// The v2 hub whose request is being handled right now (set by the v2 backend around a request, UI
     /// thread), recorded in the history so each phone can tell its own actions apart.
     /// </summary>
-    public string? ActorHubId { get; set; }
+    public (string Id, string Name)? ActorHubId { get; set; }
 
     private void Persist()
     {

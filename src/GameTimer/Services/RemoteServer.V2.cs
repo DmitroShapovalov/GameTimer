@@ -258,7 +258,7 @@ public sealed partial class RemoteServer
                 var (prevOrigin, prevType) = (_origin, _requestType); // restored: safe even under a nested dispatcher frame
                 (_origin, _requestType) = (context.Origin, type);
                 var prevActor = _s._timer.ActorHubId;
-                _s._timer.ActorHubId = context.HubId;
+                _s._timer.ActorHubId = (context.HubId, context.HubName);
                 try { return Handle(type, m, context); }
                 finally { (_origin, _requestType) = (prevOrigin, prevType); _s._timer.ActorHubId = prevActor; }
             });

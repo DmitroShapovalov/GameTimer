@@ -40,6 +40,8 @@ class MonitorService : Service() {
             stopSelf() // not allowed right now (e.g. started from the background on a newer Android)
             return START_NOT_STICKY
         }
+        // A sticky restart (e.g. after notifications were switched off, which kills the process) re-checks the conditions
+        if (!wanted(this)) { stopSelf(); return START_NOT_STICKY }
         val hub = app.hub
         hub.scope.launch {
             try { hub.loadKey() } catch (e: Exception) { stopSelf(); return@launch } // no identity: nothing to watch
@@ -58,14 +60,17 @@ class MonitorService : Service() {
     companion object {
         private const val ONGOING_ID = 1
 
-        /** Starts or stops watching in the background, per the setting and whether any PC is paired. */
-        fun update(context: Context) {
+        // Enabled, a PC paired, and allowed to notify (watching without notifying would only cost battery)
+        fun wanted(context: Context): Boolean {
             val app = context.applicationContext as GameTimerApp
-            // Watching without being allowed to notify would only cost battery
-            val wanted = NotifySettings(context).background && app.store.agents.value.isNotEmpty() &&
+            return NotifySettings(context).background && app.store.agents.value.isNotEmpty() &&
                 androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+        }
+
+        /** Starts or stops watching in the background, per [wanted]. */
+        fun update(context: Context) {
             val intent = Intent(context, MonitorService::class.java)
-            if (wanted) {
+            if (wanted(context)) {
                 try { ContextCompat.startForegroundService(context, intent) } catch (e: RuntimeException) { /* retried on the next app start */ }
             } else {
                 context.stopService(intent)

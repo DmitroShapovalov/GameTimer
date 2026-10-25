@@ -39,7 +39,7 @@ public sealed class SessionEvent
     public string? Device { get; set; }
 
     /// <summary>
-    /// Protocol v2 hub id of the parent app that caused it (minor 1+), so a phone can tell its own actions
+    /// Protocol v2 hub id of the parent app that caused it (agent v1.7.2+), so a phone can tell its own actions
     /// from another phone with the same name. Null for the PC, the system and v1 phones.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]

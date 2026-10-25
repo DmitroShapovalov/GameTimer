@@ -91,7 +91,11 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        vm.open(intent?.getStringExtra(Notifier.EXTRA_AGENT))
+        // Opened from a notification: once (not again on rotation, from recents or after process death)
+        if (savedInstanceState == null && (intent.flags and android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) {
+            vm.open(intent.getStringExtra(Notifier.EXTRA_AGENT))
+        }
+        intent.removeExtra(Notifier.EXTRA_AGENT)
         setContent {
             val scheme = if (isSystemInDarkTheme()) darkColorScheme(primary = Color(0xFF4CA3E8)) else lightColorScheme(primary = Color(0xFF0078D4))
             MaterialTheme(colorScheme = scheme) {
@@ -103,6 +107,8 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         vm.open(intent.getStringExtra(Notifier.EXTRA_AGENT)) // a notification tapped while the app is open
+        intent.removeExtra(Notifier.EXTRA_AGENT)
+        setIntent(intent)
     }
 
     override fun onStart() {
