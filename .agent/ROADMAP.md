@@ -19,10 +19,12 @@
 | v1.5.0 | Daily schedule: per-weekday minute budget and allowed-hours window; automatic mode (starts the day's allowance at launch/unlock, locks when the budget or the window ends, caps manual timers); editable on the PC (Schedule tab, Windows Hello) and the phone; off by default. Also: Dutch & Ukrainian added (UI now EN / RU / NL / UK on PC and phone) |
 | v1.6.0 | Tamper-resistant state files: settings / usage / timer-state DPAPI-encrypted per-user, with `.bak` rollback and a "settings tampered" history event (PC + phone) |
 | v1.6.1 | Clean update / uninstall: Setup asks the app to close, the app asks Windows Hello (timer or schedule active), a running timer continues after the update; uninstall stops the timer so a reinstall can't start "expired"; installer built on every PR |
+| v1.7.0 | Phase A: encrypted protocol v2 (Noise) and the native Android parent app (signed APK in the release): QR pairing with a typed code, live timer, settings, schedule, history, parents and roles, re-auth before admin actions, discovery after an IP change (mDNS, known networks only) |
+| v1.7.1 | Timer controls on phone and PC: lift restrictions (optionally the schedule for today), end now, end at a time, − / + with a chosen step; history of lifts |
 
 ---
 
-## Phase A — Parent app (Android, native) + Windows agent over the LAN — ☐ next
+## Phase A — Parent app (Android, native) + Windows agent over the LAN — ✓ released in v1.7.0
 
 **Goal:** a native Android parent app (Kotlin + Jetpack Compose on the shared Kotlin Multiplatform core, D7) that pairs with and controls the existing Windows app over
 the home network through the new encrypted protocol (`VISION.md` §3, D1, D2). The PWA keeps working
@@ -38,12 +40,12 @@ interop tests in lock-step.
 | A1 | **Protocol spec** `docs/protocol.md`: framing, message envelope + versioning, capability descriptor, commands / events mapped from today's API, pairing v2 | Owner has read and agreed the contract | ✓ agreed (draft 3) |
 | A2 | **Crypto core**: Noise IK + IKpsk1 over libsodium in Kotlin (`shared`) and C# (`GameTimer.Protocol`) | Both pass the official Noise test vectors; a Kotlin ↔ C# handshake + encrypted round-trip passes in CI | ✓ (C# + Kotlin jvm/iOS, vectors, live interop CI) |
 | A3a | **Agent core** in `GameTimer.Protocol` (no web server / UI): handshake + ready rule, sessions and limits, envelope + I-JSON, rid cache, roles / peers, pairing state machine; ids + pairing code in both languages | Tests cover §3–§8 on Linux CI, incl. replays, limits, timeouts, two-phones rule | ✓ (PR #21) |
-| A3 | **Windows agent endpoint**: new `/v2` WebSocket carrying Noise frames next to the v1 API; agent key pair (DPAPI-protected); pairing v2 QR; capability descriptor; commands routed to `TimerController` | A scripted client (`gt-testhub.exe`, C# on the shared core; the Kotlin hub follows in A4) pairs, handshakes and starts / stops / extends the timer on the real PC; `gt-testhub replay-test` passes (a replayed msg 1 + `ready` never reaches `TimerController`) | ✓ (owner check on the PC pending) |
+| A3 | **Windows agent endpoint**: new `/v2` WebSocket carrying Noise frames next to the v1 API; agent key pair (DPAPI-protected); pairing v2 QR; capability descriptor; commands routed to `TimerController` | A scripted client (`gt-testhub.exe`, C# on the shared core; the Kotlin hub follows in A4) pairs, handshakes and starts / stops / extends the timer on the real PC; `gt-testhub replay-test` passes (a replayed msg 1 + `ready` never reaches `TimerController`) | ✓ (checked by the owner on real devices) |
 | A4a | **Hub client in `shared`** (Kotlin, for Android and iOS): QR link, pairing, session, requests, events, reconnect + resend with the same `rid`, local countdown; android target | The Kotlin client pairs with and controls the production C# agent over real WebSockets in CI | ✓ (PR #23) |
-| A4 | **Android app skeleton** (Compose): QR-scan pairing, paired-device list, LAN connect + reconnect, live status screen; EN / RU / NL / UK | On the owner's phone: scan QR → see the live countdown | ✓ (PRs #23, #24; owner check on the phone pending) |
-| A5 | **Feature parity with the PWA**: start / stop / ±15, settings, schedule editor, history, revoke | Everything the PWA can do works from the app | ✓ (owner check on the phone pending) |
-| A6 | **Discovery**: mDNS / DNS-SD announce + browse, so a PC IP change needs no re-pairing | Change the PC's IP → the app reconnects by itself | in review ✎ (C# advertiser, Kotlin locator, Android NsdManager) |
-| A7 | **Acceptance + release**: Windows v1.7.0; parent app as an Android APK (and iOS via TestFlight when the Apple account exists) | Checklist passes on real devices; open items: Android 17 local-network permission when targetSdk moves to 37 | in progress ✎ (§12 re-auth, "parent added" notice, signed release APK in release.yml) |
+| A4 | **Android app skeleton** (Compose): QR-scan pairing, paired-device list, LAN connect + reconnect, live status screen; EN / RU / NL / UK | On the owner's phone: scan QR → see the live countdown | ✓ (checked by the owner on real devices) |
+| A5 | **Feature parity with the PWA**: start / stop / ±15, settings, schedule editor, history, revoke | Everything the PWA can do works from the app | ✓ (checked by the owner on real devices) |
+| A6 | **Discovery**: mDNS / DNS-SD announce + browse, so a PC IP change needs no re-pairing | Change the PC's IP → the app reconnects by itself | ✓ (checked by the owner on real devices) |
+| A7 | **Acceptance + release**: Windows v1.7.0; parent app as an Android APK (and iOS via TestFlight when the Apple account exists) | Checklist passes on real devices; open items: Android 17 local-network permission when targetSdk moves to 37 | ✓ released as v1.7.0 (owner checked on real devices); left for later: Android 17 local-network permission when targetSdk moves to 37 |
 
 Notes:
 - The Windows agent keeps the v1 API so the PWA and existing pairings keep working; v1 can be retired later.
