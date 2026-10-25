@@ -19,10 +19,12 @@
 | v1.5.0 | Daily schedule: per-weekday minute budget and allowed-hours window; automatic mode (starts the day's allowance at launch/unlock, locks when the budget or the window ends, caps manual timers); editable on the PC (Schedule tab, Windows Hello) and the phone; off by default. Also: Dutch & Ukrainian added (UI now EN / RU / NL / UK on PC and phone) |
 | v1.6.0 | Tamper-resistant state files: settings / usage / timer-state DPAPI-encrypted per-user, with `.bak` rollback and a "settings tampered" history event (PC + phone) |
 | v1.6.1 | Clean update / uninstall: Setup asks the app to close, the app asks Windows Hello (timer or schedule active), a running timer continues after the update; uninstall stops the timer so a reinstall can't start "expired"; installer built on every PR |
+| v1.7.0 | Phase A: encrypted protocol v2 (Noise) and the native Android parent app (signed APK in the release): QR pairing with a typed code, live timer, settings, schedule, history, parents and roles, re-auth before admin actions, discovery after an IP change (mDNS, known networks only) |
+| v1.7.1 | Timer controls on phone and PC: lift restrictions (optionally the schedule for today), end now, end at a time, − / + with a chosen step; history of lifts |
 
 ---
 
-## Phase A — Parent app (Android, native) + Windows agent over the LAN — ☐ next
+## Phase A — Parent app (Android, native) + Windows agent over the LAN — ✓ released in v1.7.0
 
 **Goal:** a native Android parent app (Kotlin + Jetpack Compose on the shared Kotlin Multiplatform core, D7) that pairs with and controls the existing Windows app over
 the home network through the new encrypted protocol (`VISION.md` §3, D1, D2). The PWA keeps working
