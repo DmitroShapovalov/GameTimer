@@ -1,0 +1,167 @@
+package com.gametimer.parent
+
+import android.content.Context
+import com.gametimer.protocol.hub.AgentApi
+import com.gametimer.protocol.hub.AgentLink
+import com.gametimer.protocol.hub.ApiResult
+import com.gametimer.protocol.hub.KtorConnector
+import com.gametimer.protocol.hub.LinkStatus
+import com.gametimer.protocol.hub.PairedAgent
+import com.gametimer.protocol.noise.KeyPair
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+
+/** Another parent app was added on a PC (§12: a clear notice, it may be a child's phone). */
+data class PeerAdded(val pcName: String, val phoneName: String, val iAmAdmin: Boolean)
+
+/**
+ * The live links to the paired PCs, for the whole app process: the screens use them while visible, and
+ * [MonitorService] keeps them connected in the background (for notifications). One [AgentLink] per PC,
+ * connected while the UI is visible or the service runs. Main thread only.
+ */
+class LinkHub(private val context: Context, private val store: HubStore) {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val connector = KtorConnector()
+    private val locator = NsdLocator(context)
+    val appName = "GameTimer Parent ${BuildConfig.VERSION_NAME} (android)"
+    private val links = HashMap<String, AgentLink>()
+    private val watchers = HashMap<String, Job>()
+    private val notifier = Notifier(context)
+
+    // ---------------- the hub key ----------------
+
+    private val keyLock = Mutex()
+    @Volatile var hubKey: KeyPair? = null
+        private set
+
+    /** Loads the key once (Keystore + file, off the main thread); throws if it can't be read. */
+    suspend fun loadKey(): KeyPair = keyLock.withLock {
+        hubKey ?: withContext(Dispatchers.IO) { store.loadHubKey() }.also { hubKey = it }
+    }
+
+    // ---------------- connected while visible or monitored ----------------
+
+    private var uiVisible = false
+    private var monitoring = false
+    private var active = false
+    private val activeChanges = Channel<Boolean>(Channel.CONFLATED) // latest wins (rotation = stop + start)
+
+    init {
+        scope.launch { for (want in activeChanges) applyActive(want) }
+    }
+
+    /** Notifications are posted only while no screen shows the PC (the screen shows it itself). */
+    val isUiVisible: Boolean get() = uiVisible
+
+    fun setUiVisible(value: Boolean) {
+        uiVisible = value
+        activeChanges.trySend(uiVisible || monitoring)
+    }
+
+    fun setMonitoring(value: Boolean) {
+        monitoring = value
+        activeChanges.trySend(uiVisible || monitoring)
+    }
+
+    private suspend fun applyActive(value: Boolean) {
+        if (value == active) return
+        active = value
+        if (value) store.agents.value.forEach { link(it.agentId)?.start() } else links.values.toList().forEach { it.stop() }
+    }
+
+    /** The live link to a paired PC; null until the hub key is loaded or for a PC that isn't in the list. */
+    fun link(agentId: String): AgentLink? {
+        links[agentId]?.let { return it }
+        val agent = store.agents.value.firstOrNull { it.agentId == agentId } ?: return null
+        val key = hubKey ?: return null
+        val onMoved: (PairedAgent) -> Unit = { moved ->
+            // The PC answered with its pinned key at a new address (§9): remember it, unless it was removed meanwhile
+            scope.launch(Dispatchers.IO) { store.updateAddress(moved.agentId, moved.host, moved.port) }
+        }
+        return AgentLink(agent, key, connector, appName, scope, locator, onMoved).also {
+            links[agentId] = it
+            watch(agent, it)
+            if (active) it.start()
+        }
+    }
+
+    /** Re-paired or removed: drop the link (and its watcher); a later [link] makes a new one. */
+    suspend fun forget(agentId: String, removed: Boolean) {
+        watchers.remove(agentId)?.cancel()
+        links.remove(agentId)?.stop()
+        if (removed) {
+            seenPeers.edit().remove(agentId).apply()
+            notifier.forget(agentId)
+        }
+    }
+
+    // ---------------- "parent added" and notifications ----------------
+
+    // A queue: notices about several PCs are shown one after another, none is lost
+    private val _peerAdded = MutableStateFlow<List<PeerAdded>>(emptyList())
+    val peerAdded: StateFlow<List<PeerAdded>> = _peerAdded.asStateFlow()
+
+    fun peerAddedShown() {
+        _peerAdded.value = _peerAdded.value.drop(1)
+    }
+
+    private val seenPeers = context.getSharedPreferences("peers_seen", Context.MODE_PRIVATE)
+
+    /**
+     * Per PC: the parent list is compared with the last one this phone saw (on every connect and every
+     * ev.peers), so a phone added while this app was closed is reported too — the first list is only
+     * remembered, this phone itself never reported. Events go to [Notifier] (history caught up on connect).
+     */
+    private fun watch(agent: PairedAgent, link: AgentLink) {
+        watchers.remove(agent.agentId)?.cancel()
+        watchers[agent.agentId] = scope.launch {
+            val api = AgentApi(link)
+            val check = Mutex()
+            var myName: String? = null
+            suspend fun compare() = check.withLock {
+                val list = (api.peers() as? ApiResult.Ok)?.value ?: return@withLock
+                myName = list.firstOrNull { it.current }?.name
+                val known = seenPeers.getStringSet(agent.agentId, null)
+                if (known != null) {
+                    val added = list.filter { !it.current && it.id !in known }.map { it.name }
+                    if (added.isNotEmpty()) {
+                        val iAmAdmin = list.firstOrNull { it.current }?.role == "admin"
+                        val notice = PeerAdded(agent.name, added.joinToString(", "), iAmAdmin)
+                        _peerAdded.value += notice
+                        if (!uiVisible) notifier.peerAdded(agent, notice)
+                    }
+                }
+                seenPeers.edit().putStringSet(agent.agentId, list.map { it.id }.toSet()).apply()
+            }
+            launch {
+                link.status.collect {
+                    if (it is LinkStatus.Online) {
+                        compare()
+                        notifier.catchUp(agent, api, myName, notify = !uiVisible)
+                    }
+                }
+            }
+            link.events.collect { ev ->
+                when (ev.str("t")) {
+                    "ev.peers" -> compare()
+                    "ev.history" -> notifier.liveEvent(agent, ev["event"] as? JsonObject, myName, notify = !uiVisible)
+                    "ev.alert" -> if (!uiVisible) notifier.alert(agent, (ev["minutes"] as? JsonPrimitive)?.content?.toIntOrNull())
+                }
+            }
+        }
+    }
+}
+
+private fun JsonObject.str(name: String): String? = (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.content
