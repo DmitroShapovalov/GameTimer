@@ -21,6 +21,7 @@
 | v1.6.1 | Clean update / uninstall: Setup asks the app to close, the app asks Windows Hello (timer or schedule active), a running timer continues after the update; uninstall stops the timer so a reinstall can't start "expired"; installer built on every PR |
 | v1.7.0 | Phase A: encrypted protocol v2 (Noise) and the native Android parent app (signed APK in the release): QR pairing with a typed code, live timer, settings, schedule, history, parents and roles, re-auth before admin actions, discovery after an IP change (mDNS, known networks only) |
 | v1.7.1 | Timer controls on phone and PC: lift restrictions (optionally the schedule for today), end now, end at a time, − / + with a chosen step; history of lifts |
+| v1.7.2 | Phone notifications while the app is closed (home network): time's up, time almost up, suspicious events, others' actions — each switchable; missed events caught up on reconnect; history records which phone did what |
 
 ---
 
