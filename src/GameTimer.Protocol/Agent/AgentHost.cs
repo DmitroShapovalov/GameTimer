@@ -396,6 +396,33 @@ public sealed partial class AgentHost : IDisposable
 
     internal int RelayPendingCount { get { lock (_lock) return _relayPending.Count; } }
 
+    /// <summary>Relayed streams whose msg 1 named the right key but which aren't confirmed yet, per hub (≤ 2).</summary>
+    private readonly Dictionary<string, int> _relayProven = new();
+
+    /// <summary>
+    /// A relayed stream's msg 1 proved the hub's key: it leaves the evictable pool. A msg 1 can be replayed,
+    /// so at most <see cref="MaxRelayPendingPerHub"/> such streams per hub wait for <c>ready</c> at a time.
+    /// </summary>
+    private bool TryProve(HandshakeTicket ticket)
+    {
+        lock (_lock)
+        {
+            var hub = ticket.RelayHubId!;
+            _relayProven.TryGetValue(hub, out var n);
+            if (n >= MaxRelayPendingPerHub) return false;
+            _relayProven[hub] = n + 1;
+            ticket.MarkProven();
+        }
+        ticket.Dispose(); // the pool slot
+        return true;
+    }
+
+    internal void Unprove(string hub)
+    {
+        lock (_lock)
+            if (_relayProven.TryGetValue(hub, out var n)) { if (n <= 1) _relayProven.Remove(hub); else _relayProven[hub] = n - 1; }
+    }
+
     internal void Release(HandshakeTicket ticket)
     {
         lock (_lock)
@@ -636,8 +663,15 @@ public sealed class HandshakeTicket : IDisposable
         try { _evicted.Cancel(); } catch (ObjectDisposedException) { }
     }
 
-    /// <summary>A relayed stream's msg 1 proved the hub's key: its pool slot is free again (§10.4).</summary>
-    internal void Proven() => Dispose();
+    private int _proven;
+
+    internal void MarkProven() => Volatile.Write(ref _proven, 1);
+
+    /// <summary>The proven-but-unconfirmed count of its hub goes down once (confirmed or ended).</summary>
+    internal void Unprove()
+    {
+        if (Interlocked.Exchange(ref _proven, 0) == 1) _host.Unprove(RelayHubId!);
+    }
 
     public void Dispose()
     {
@@ -648,6 +682,7 @@ public sealed class HandshakeTicket : IDisposable
     internal void DisposeEviction()
     {
         Dispose();
+        Unprove();
         _evicted.Dispose();
     }
 }

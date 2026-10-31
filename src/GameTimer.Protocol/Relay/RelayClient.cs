@@ -173,6 +173,9 @@ public sealed class RelayClient : IAsyncDisposable
         private string _registeredKey = "";
         private long _lastSent, _lastReceived, _lastRegister, _lastCheck;
         private int _dirty = 1;
+        /// <summary>Pongs and closes the receive loop answers with, sent by one task; full → the relay misbehaves.</summary>
+        private readonly Channel<byte[]> _control = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(64) { SingleReader = true });
+        private int _pongQueued;
 
         public Connection(RelayClient client, WebSocket ws)
         {
@@ -196,11 +199,14 @@ public sealed class RelayClient : IAsyncDisposable
                 await RegisterIfChangedAsync(force: true).ConfigureAwait(false);
                 _c.SetStatus(RelayStatus.Connected);
                 var maintain = MaintainAsync(linked.Token);
+                var control = ControlLoopAsync(linked.Token);
                 try { await ReceiveLoopAsync().ConfigureAwait(false); }
                 finally
                 {
                     _dead.Cancel();
+                    _control.Writer.TryComplete();
                     try { await maintain.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                    try { await control.ConfigureAwait(false); } catch (Exception) { }
                 }
             }
             finally
@@ -398,12 +404,25 @@ public sealed class RelayClient : IAsyncDisposable
             finally { _sendLock.Release(); }
         }
 
-        /// <summary>A pong or close from the receive loop: sent without making the loop wait for the socket.</summary>
-        private void SendSoon(byte[] frame) => _ = Task.Run(async () =>
+        /// <summary>
+        /// A pong or close from the receive loop, sent by <see cref="ControlLoopAsync"/> so the loop never waits
+        /// for the socket. One pong waits at a time; more than 64 closes waiting means a relay flooding a
+        /// stuck socket: abort and reconnect.
+        /// </summary>
+        private void SendSoon(byte[] frame)
         {
-            try { await SendAsync(frame, CancellationToken.None).ConfigureAwait(false); }
-            catch (Exception) { /* the socket is gone; the receive loop ends on its own */ }
-        });
+            if (frame[0] == RelayFrames.Pong && Interlocked.Exchange(ref _pongQueued, 1) == 1) return;
+            if (!_control.Writer.TryWrite(frame)) _ws.Abort();
+        }
+
+        private async Task ControlLoopAsync(CancellationToken cancel)
+        {
+            await foreach (var f in _control.Reader.ReadAllAsync(cancel).ConfigureAwait(false))
+            {
+                if (f[0] == RelayFrames.Pong) Volatile.Write(ref _pongQueued, 0);
+                await SendAsync(f, cancel).ConfigureAwait(false);
+            }
+        }
 
         public void Forget(Stream s) => _streams.TryRemove(new KeyValuePair<uint, Stream>(s.Id, s));
     }
@@ -428,7 +447,7 @@ public sealed class RelayClient : IAsyncDisposable
         /// <summary>Queues a message for the session; false when the session doesn't keep up (64 messages / 128 KiB).</summary>
         public bool Deliver(byte[] noise)
         {
-            if (Volatile.Read(ref _remoteClosed) != 0) return true;
+            if (Volatile.Read(ref _remoteClosed) != 0 || Volatile.Read(ref _closed) != 0) return true;
             if (Interlocked.Add(ref _queuedBytes, noise.Length) > InboxBytes || !_in.Writer.TryWrite(noise))
             {
                 Interlocked.Add(ref _queuedBytes, -noise.Length);

@@ -76,7 +76,9 @@ public sealed partial class AgentHost
                 if (known == null || !IsBareMessage(payload, "connect")) { RecordFailure(ip); return; }
                 // §10.4: a relayed stream is only for the hub whose route it was opened with
                 if (relayed && known.Id != ticket.RelayHubId) { RecordFailure(ip); return; }
-                if (relayed) ticket.Proven(); // a real hub: out of the evictable pool
+                // The hub's key: out of the evictable pool. msg 1 can be replayed (by the relay itself), so
+                // proven-but-unconfirmed streams are capped per hub too
+                if (relayed && !TryProve(ticket)) { RecordFailure(ip); return; }
 
                 await transport.SendAsync(hs.WriteMessage(ReadOnlySpan<byte>.Empty), hsCancel.Token).ConfigureAwait(false);
                 (send, recv) = hs.Split();
@@ -101,6 +103,7 @@ public sealed partial class AgentHost
 
         // Confirmed. From here on failures are answered with bye (§3).
         ticket.Dispose();
+        ticket.Unprove();
         var session = new Session(this, transport, send, peer, _time) { Relayed = relayed };
         var registered = Register(session);
         if (registered != null)
@@ -179,6 +182,7 @@ public sealed partial class AgentHost
         lock (_lock)
         {
             if (_disposed) return "shutdown";
+            if (session.Relayed && !RemoteAccess) return "remote_off"; // turned off during this handshake
             var peer = _state.Peers.FirstOrDefault(p => p.Id == session.HubId);
             if (peer == null) return "revoked";
             var mine = _sessions.Where(s => s.HubId == session.HubId).OrderBy(s => s.StartedAt).ToList();

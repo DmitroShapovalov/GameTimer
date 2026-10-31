@@ -270,6 +270,30 @@ public class RelayClientTests
     }
 
     [Fact]
+    public async Task Replayed_msg_1_holds_at_most_two_streams_per_hub()
+    {
+        using var f = new AgentFixture();
+        f.Host.RemoteAccess = true;
+        var (key, _) = await f.PairAsync("A");
+        var hubId = Ids.HubId(key.PublicKey);
+        // The relay saw one real msg 1 and replays it on new streams that never send ready
+        var msg1 = new HandshakeState(NoisePattern.IK, true, AgentHost.Prologue, key, f.Host.AgentPublicKey)
+            .WriteMessage("{\"t\":\"connect\"}"u8);
+        async Task<bool> GetsMsg2()
+        {
+            var (agentEnd, hubEnd) = MemoryTransport.Pair();
+            _ = f.Host.RunAsync(agentEnd, f.Host.TryAdmitRelay(hubId)!, pairing: false, CancellationToken.None);
+            await hubEnd.SendAsync(msg1, default);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            return await hubEnd.ReceiveAsync(cts.Token) != null;
+        }
+        Assert.True(await GetsMsg2());
+        Assert.True(await GetsMsg2());
+        Assert.False(await GetsMsg2()); // the third waits for nothing: refused
+        Assert.Equal(0, f.Host.RelayPendingCount); // and none of them sits in the evictable pool
+    }
+
+    [Fact]
     public async Task The_relay_pool_is_apart_and_evicts_the_oldest()
     {
         using var f = new AgentFixture();
