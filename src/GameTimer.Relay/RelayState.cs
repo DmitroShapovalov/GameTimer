@@ -16,8 +16,11 @@ internal sealed class RelayState
     private int _agentSockets, _hubSockets;
     private long _buffered;
 
-    public RelayState(IOptions<RelayOptions> options, TimeProvider time, ILogger<RelayState> log)
+    public IPushSender Push { get; }
+
+    public RelayState(IOptions<RelayOptions> options, TimeProvider time, ILogger<RelayState> log, IPushSender push)
     {
+        Push = push;
         Options = options.Value;
         Time = time;
         Log = log;

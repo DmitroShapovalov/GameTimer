@@ -28,6 +28,7 @@ public sealed partial class AgentHost
         ["peers.list"] = new("peers", false, true),
         ["peers.revoke"] = new("peers", true, true),
         ["peers.setRole"] = new("peers", true, true),
+        ["push.set"] = new("push", true, true), // §10.6
     };
 
     /// <summary>Serialises rid-carrying requests per hub, so two sessions of one hub can't run one rid twice.</summary>
@@ -182,6 +183,25 @@ public sealed partial class AgentHost
     {
         switch (type)
         {
+            case "push.set":
+            {
+                // §10.6: this hub's own token only; null (or absent) = no wake-ups
+                string? token = null;
+                if (root.TryGetProperty("token", out var t) && t.ValueKind != JsonValueKind.Null)
+                {
+                    if (t.ValueKind != JsonValueKind.String || !IsPushToken(t.GetString())) return Reply.Error("bad_request");
+                    token = t.GetString();
+                }
+                lock (_lock)
+                {
+                    var peer = _state.Peers.FirstOrDefault(p => p.Id == session.HubId);
+                    if (peer == null) return Reply.Error("forbidden");
+                    peer.PushToken = token;
+                }
+                Persist();
+                return Reply.Ok(new JsonObject());
+            }
+
             case "peers.list":
                 return Reply.Ok(new JsonObject { ["peers"] = PeersJson(session.HubId) });
 

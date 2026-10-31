@@ -291,6 +291,7 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 | `peers.list` | `peers` | — | any | — | `peers[]` |
 | `peers.revoke` | `peers` | ✓ | admin (or self) | `peer` (hub id) | `peers[]` |
 | `peers.setRole` | `peers` | ✓ | admin | `peer` (hub id), `role` (`admin` / `parent`) | `peers[]` |
+| `push.set` | `push` | ✓ | any | `token`: this hub's push token (1..4096 printable ASCII), or `null` = none (§10.6) | `{}` |
 
 `peers[]` entries: `id`, `name`, `role`, `pairedAt`, `lastSeen`, `current` (= this is the hub making
 the request).
@@ -473,7 +474,7 @@ big-endian order. A frame's length must match its type exactly.
 | `0x04` | `close` | both | `stream` (u32) + WebSocket close code (u16) (6 bytes) |
 | `0x05` | `ping` | both | 0..8 opaque bytes |
 | `0x06` | `pong` | both | the bytes of the `ping` it answers |
-| `0x07` | — | — | reserved for the push wake-up (step B5) |
+| `0x07` | `wake` | agent → relay | a hub's push token, 1..4096 printable ASCII bytes (§10.6) |
 
 **Malformed or unexpected frames.** A text message, a frame of the wrong length (or longer than
 5 + 65 535 bytes), more than 64 claims (counted before duplicates are removed) or an unknown type from the agent → the relay closes the socket with 1002 (1003 for text).
@@ -597,6 +598,30 @@ pinned at pairing.
   keeps working. Accepted for now; watched through the relay's counts and more machines if needed.
 - The relay doesn't log request paths (they contain routes) and keeps IP addresses in its logs for a
   few days at most. This is stated in the privacy note.
+
+### 10.6 Push wake-ups
+
+Away from home the phone isn't connected all the time; when something happens on the PC, the agent has
+the phone woken through the relay and a push service (Android: Firebase Cloud Messaging). The wake-up
+carries **nothing** but "wake": the phone then connects (through the relay) and catches up the history
+like after any reconnect (§12), so it shows the same notifications it would at home.
+
+- **Token.** A hub that wants wake-ups sends `push.set { token }` (§7.2) in a session; the agent keeps it
+  with that hub only (never shown or sent to other hubs) and forgets it with the hub. `token: null`
+  stops the wake-ups (the phone does that when its background notifications are off).
+- **When.** Only while "Control from anywhere" is on and the agent's relay socket is up: on every
+  `ev.history` and `ev.alert`, for each hub that has a token and **no live session**. At most one
+  wake-up per token every 30 s; events in between give one trailing wake-up.
+- **Relay.** `wake` (§10.2) is passed to the push service as a data message `{ "t": "wake" }`, high
+  priority, 10 minutes to live, one collapse key. At most 20 per agent socket per minute and one per
+  token every 20 s; over that, or without a push account, it is dropped silently. The relay keeps no
+  token after the call and doesn't log it.
+- **Phone.** On a wake-up it connects to its PCs (LAN or relay, §10.3) for at most ~15 s, catches up and
+  lets go. A warning that only exists as `ev.alert` (not in the history) is not caught up this way.
+- **What it costs in privacy.** The push token is a stable id of the phone: the relay sees it at every
+  wake-up (and so can link that phone across days), and the push service (Google) sees when the phone is
+  woken — never by whom or why. Accepted by the owner (2026-10-31) for battery life; stated in the
+  privacy note.
 
 ## 11. Security assumptions and residual risks
 

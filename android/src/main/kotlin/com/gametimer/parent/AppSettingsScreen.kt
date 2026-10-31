@@ -78,6 +78,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
             SwitchRow(stringResource(R.string.ntf_background), stringResource(R.string.ntf_background_hint), background) {
                 background = it
                 settings.background = it
+                (context.applicationContext as GameTimerApp).hub.pushTokenChanged() // the PCs stop / start waking this phone
                 MonitorService.update(context)
                 if (it && !permission && Build.VERSION.SDK_INT >= 33 && !askedBefore(context)) {
                     markAsked(context)

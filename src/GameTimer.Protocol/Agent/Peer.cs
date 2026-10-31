@@ -19,6 +19,11 @@ public sealed class Peer
     public DateTimeOffset? LastSeen { get; set; }
     /// <summary>This hub's own secret <c>ak</c> (§4.4), base64url.</summary>
     public required string Ak { get; init; }
+    /// <summary>
+    /// The hub's push token (FCM registration token, §10.6), set by <c>push.set</c>; used only to wake it
+    /// through the relay while "Control from anywhere" is on. Never shown or sent to other hubs.
+    /// </summary>
+    public string? PushToken { get; set; }
 }
 
 /// <summary>One idempotency entry (§5): rid → (body hash, stored reply without <c>re</c>).</summary>

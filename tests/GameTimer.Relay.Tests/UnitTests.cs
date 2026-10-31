@@ -13,7 +13,7 @@ public class UnitTests
     {
         var o = new RelayOptions();
         tweak?.Invoke(o);
-        return new RelayState(Options.Create(o), TimeProvider.System, NullLogger<RelayState>.Instance);
+        return new RelayState(Options.Create(o), TimeProvider.System, NullLogger<RelayState>.Instance, new FakePush());
     }
 
     /// <summary>A socket that delivers scripted pieces (then throws, like an aborted socket).</summary>
@@ -116,5 +116,74 @@ public class UnitTests
         for (int i = 1; i <= IpLimits.WideFactor; i++) Assert.True(l.TryStart(IpLimits.ClientOf(IPAddress.Parse($"192.0.2.{i}")), agent: true));
         Assert.False(l.TryStart(IpLimits.ClientOf(IPAddress.Parse("192.0.2.200")), agent: true));
         Assert.True(l.TryStart(IpLimits.ClientOf(IPAddress.Parse("192.0.3.1")), agent: true));
+    }
+
+    /// <summary>Plays Google: checks the signed JWT, hands out a token, checks the FCM call.</summary>
+    private sealed class FakeGoogle : HttpMessageHandler
+    {
+        public required System.Security.Cryptography.RSA Key { get; init; }
+        public List<System.Text.Json.Nodes.JsonNode> Messages { get; } = new();
+        public int TokenCalls;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
+        {
+            if (req.RequestUri!.AbsoluteUri == "https://oauth2.example/token")
+            {
+                Interlocked.Increment(ref TokenCalls);
+                var form = System.Web.HttpUtility.ParseQueryString(await req.Content!.ReadAsStringAsync(ct));
+                Assert.Equal("urn:ietf:params:oauth:grant-type:jwt-bearer", form["grant_type"]);
+                var parts = form["assertion"]!.Split('.');
+                static byte[] D(string s) => Convert.FromBase64String(s.Replace('-', '+').Replace('_', '/').PadRight((s.Length + 3) / 4 * 4, '='));
+                Assert.True(Key.VerifyData(System.Text.Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]), D(parts[2]),
+                    System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1));
+                var claims = System.Text.Json.Nodes.JsonNode.Parse(D(parts[1]))!;
+                Assert.Equal("relay@test.iam", claims["iss"]!.GetValue<string>());
+                Assert.Equal("https://www.googleapis.com/auth/firebase.messaging", claims["scope"]!.GetValue<string>());
+                Assert.Equal("https://oauth2.example/token", claims["aud"]!.GetValue<string>());
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("{\"access_token\":\"AT\",\"expires_in\":3600}") };
+            }
+            Assert.Equal("https://fcm.googleapis.com/v1/projects/proj-1/messages:send", req.RequestUri.AbsoluteUri);
+            Assert.Equal("Bearer AT", req.Headers.Authorization!.ToString());
+            var body = System.Text.Json.Nodes.JsonNode.Parse(await req.Content!.ReadAsStringAsync(ct))!;
+            lock (Messages) Messages.Add(body);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("{}") };
+        }
+    }
+
+    [Fact]
+    public async Task Fcm_wake_up_is_a_signed_content_free_data_message()
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var account = new System.Text.Json.Nodes.JsonObject
+        {
+            ["type"] = "service_account", ["project_id"] = "proj-1", ["client_email"] = "relay@test.iam",
+            ["private_key"] = key.ExportPkcs8PrivateKeyPem(), ["token_uri"] = "https://oauth2.example/token",
+        };
+        var options = Options.Create(new RelayOptions { FcmServiceAccountB64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(account.ToJsonString())) });
+        var google = new FakeGoogle { Key = key };
+        using var fcm = new FcmSender(options, NullLogger<FcmSender>.Instance, google);
+        Assert.True(fcm.Configured);
+        await fcm.StartAsync(CancellationToken.None);
+        Assert.True(fcm.TryWake("phone-token-1"));
+        Assert.True(fcm.TryWake("phone-token-2"));
+        for (int i = 0; i < 100 && fcm.Counts.Sent < 2; i++) await Task.Delay(20);
+        await fcm.StopAsync(CancellationToken.None);
+        Assert.Equal((2L, 0L), fcm.Counts);
+        Assert.Equal(1, google.TokenCalls); // the access token is reused
+        var m = google.Messages.Select(x => x["message"]!).OrderBy(x => x["token"]!.GetValue<string>()).ToList();
+        Assert.Equal("phone-token-1", m[0]["token"]!.GetValue<string>());
+        Assert.Equal("{\"t\":\"wake\"}", m[0]["data"]!.ToJsonString());
+        Assert.Equal("HIGH", m[0]["android"]!["priority"]!.GetValue<string>());
+        Assert.Null(m[0]["notification"]); // no visible content through Google
+    }
+
+    [Fact]
+    public void Without_an_account_wake_ups_are_dropped()
+    {
+        using var fcm = new FcmSender(Options.Create(new RelayOptions()), NullLogger<FcmSender>.Instance);
+        Assert.False(fcm.Configured);
+        Assert.False(fcm.TryWake("x"));
+        using var bad = new FcmSender(Options.Create(new RelayOptions { FcmServiceAccountB64 = "bm90IGpzb24=" }), NullLogger<FcmSender>.Instance);
+        Assert.False(bad.Configured);
     }
 }

@@ -108,7 +108,7 @@ public sealed partial class AgentHost : IDisposable
     {
         get
         {
-            var caps = new List<string>(_backend.Capabilities.Where(c => c != "peers")) { "peers" };
+            var caps = new List<string>(_backend.Capabilities.Where(c => c != "peers" && c != "push")) { "peers", "push" };
             return caps;
         }
     }
@@ -307,6 +307,7 @@ public sealed partial class AgentHost : IDisposable
     /// </summary>
     public void Publish(string type, JsonObject body, RequestOrigin? causedBy = null)
     {
+        if (type is "ev.history" or "ev.alert") RaiseWake();
         if (!type.StartsWith("ev.", StringComparison.Ordinal)) throw new ArgumentException("events start with ev.", nameof(type));
         var message = new JsonObject { ["t"] = type };
         foreach (var (k, v) in body) message[k] = v?.DeepClone();
@@ -318,6 +319,32 @@ public sealed partial class AgentHost : IDisposable
     }
 
     private readonly object _publishLock = new();
+
+    public const int MaxPushToken = 4096;
+
+    /// <summary>A push token as §10.6 allows it: 1..4096 printable ASCII characters.</summary>
+    public static bool IsPushToken(string? token) =>
+        token is { Length: > 0 and <= MaxPushToken } && token.All(c => c is >= '!' and <= '~');
+
+    /// <summary>
+    /// Something a parent may want to hear about happened (§10.6): the push tokens of the hubs that have one
+    /// and no live session right now, while "Control from anywhere" is on. The relay client wakes them
+    /// (rate-limited); the phones then connect and catch up. Any thread.
+    /// </summary>
+    public event Action<IReadOnlyList<string>>? WakeNeeded;
+
+    private void RaiseWake()
+    {
+        if (!RemoteAccess || WakeNeeded is not { } handlers) return;
+        List<string> tokens;
+        lock (_lock)
+        {
+            var live = _sessions.Select(s => s.HubId).ToHashSet();
+            tokens = _state.Peers.Where(p => p.PushToken != null && !live.Contains(p.Id)).Select(p => p.PushToken!).ToList();
+        }
+        if (tokens.Count == 0) return;
+        try { handlers(tokens); } catch (Exception) { /* the relay client's business */ }
+    }
 
     /// <summary>Says <c>bye shutdown</c> to every session (app exit or update).</summary>
     public async Task ShutdownAsync()
@@ -395,6 +422,8 @@ public sealed partial class AgentHost : IDisposable
     }
 
     internal int RelayPendingCount { get { lock (_lock) return _relayPending.Count; } }
+
+    internal int LiveSessionCount { get { lock (_lock) return _sessions.Count; } }
 
     /// <summary>Relayed streams whose msg 1 named the right key but which aren't confirmed yet, per hub (≤ 2).</summary>
     private readonly Dictionary<string, int> _relayProven = new();

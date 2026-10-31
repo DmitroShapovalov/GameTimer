@@ -11,6 +11,7 @@ internal enum FrameType : byte
     Close = 0x04,
     Ping = 0x05,
     Pong = 0x06,
+    Wake = 0x07,
 }
 
 /// <summary>Builds agent-socket frames: a type byte, then big-endian fields (§10.2).</summary>
@@ -22,6 +23,7 @@ internal static class Frames
     public const int StreamHeader = 5;
     public const int MaxFrame = StreamHeader + MaxNoise;
     public const int MaxPingData = 8;
+    public const int MaxPushToken = 4096;
 
     public static byte[] Open(uint stream, ReadOnlySpan<byte> route)
     {

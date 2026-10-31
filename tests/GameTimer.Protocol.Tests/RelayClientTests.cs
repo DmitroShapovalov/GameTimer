@@ -29,6 +29,7 @@ public class RelayClientTests
         public required TestServer Server { get; init; }
         public required AgentFixture Agent { get; init; }
         public required RelayClient Client { get; init; }
+        public required RecordingPush Push { get; init; }
 
         public async ValueTask DisposeAsync()
         {
@@ -62,6 +63,8 @@ public class RelayClientTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         RelayApp.ConfigureServices(builder);
+        var push = new RecordingPush();
+        builder.Services.AddSingleton<IPushSender>(push);
         builder.Services.PostConfigure<RelayOptions>(o => o.ClientIpHeader = IpHeader);
         var app = builder.Build();
         RelayApp.Map(app);
@@ -75,7 +78,7 @@ public class RelayClientTests
             c.ConfigureRequest = r => r.Headers[IpHeader] = "10.0.0.1";
             return await c.ConnectAsync(uri, ct);
         });
-        return new Rig { App = app, Server = server, Agent = agent, Client = client };
+        return new Rig { App = app, Server = server, Agent = agent, Client = client, Push = push };
     }
 
     private static byte[] Ak(JsonElement pairResult) => Encodings.Base64Url.TryDecode(pairResult.GetProperty("ak").GetString())!;
@@ -267,6 +270,49 @@ public class RelayClientTests
         await hub.SendJsonAsync(new JsonObject { ["t"] = "state.get", ["id"] = 1 });
         Assert.Equal("result", (await hub.ReceiveJsonAsync())!.Value.GetProperty("t").GetString());
         ws!.Abort();
+    }
+
+    public sealed class RecordingPush : IPushSender
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _q = new();
+        public bool TryWake(string pushToken) { _q.Enqueue(pushToken); return true; }
+        public IReadOnlyList<string> Tokens => _q.ToList();
+    }
+
+    [Fact]
+    public async Task Push_set_stores_the_token_and_events_wake_hubs_without_a_session()
+    {
+        await using var rig = await StartAsync();
+        var (keyA, _) = await rig.Agent.PairAsync("A");
+        var (keyB, _) = await rig.Agent.PairAsync("B");
+        rig.Client.Start();
+        for (int i = 0; i < 100 && rig.Client.Status != RelayStatus.Connected; i++) await Task.Delay(20);
+
+        var (a, helloA) = await TestHub.ConnectAsync(rig.Agent.Host, keyA);
+        Assert.Contains("push", helloA.GetProperty("capabilities").EnumerateArray().Select(c => c.GetString()));
+        Assert.Equal("result", (await a.RequestAsync("push.set", new JsonObject { ["token"] = "token-A" }, withRid: true)).GetProperty("t").GetString());
+        Assert.Equal("bad_request", (await a.RequestAsync("push.set", new JsonObject { ["token"] = "has space" }, withRid: true)).GetProperty("code").GetString());
+        Assert.Equal("bad_request", (await a.RequestAsync("push.set", new JsonObject { ["token"] = 5 }, withRid: true)).GetProperty("code").GetString());
+        var (b, _) = await TestHub.ConnectAsync(rig.Agent.Host, keyB);
+        await b.RequestAsync("push.set", new JsonObject { ["token"] = "token-B" }, withRid: true);
+        Assert.Equal("token-A", rig.Agent.Store.State!.Peers.Single(p => p.Name == "A").PushToken); // persisted
+
+        // A is connected (it sees the event itself), B is not any more: only B is woken
+        await b.End.CloseAsync();
+        for (int i = 0; i < 100 && rig.Agent.Host.LiveSessionCount > 1; i++) await Task.Delay(20);
+        rig.Agent.Host.Publish("ev.history", new JsonObject { ["event"] = new JsonObject() });
+        for (int i = 0; i < 100 && rig.Push.Tokens.Count == 0; i++) await Task.Delay(20);
+        Assert.Equal(new[] { "token-B" }, rig.Push.Tokens);
+        // A second event right away: no second wake-up yet (one per 30 s, the rest trails)
+        rig.Agent.Host.Publish("ev.alert", new JsonObject { ["minutes"] = 5 });
+        await Task.Delay(300);
+        Assert.Single(rig.Push.Tokens);
+        // Ordinary events wake nobody, and nothing at all while remote access is off
+        rig.Agent.Host.Publish("ev.tick", new JsonObject());
+        rig.Agent.Host.RemoteAccess = false;
+        await b.End.CloseAsync();
+        await a.RequestAsync("push.set", new JsonObject { ["token"] = null }, withRid: true);
+        Assert.Null(rig.Agent.Store.State!.Peers.Single(p => p.Name == "A").PushToken);
     }
 
     [Fact]

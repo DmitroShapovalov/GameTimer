@@ -122,10 +122,37 @@ internal sealed class AgentSession
             case FrameType.Pong:
                 if (f.Length > 1 + Frames.MaxPingData) Close(1002);
                 break;
+            case FrameType.Wake:
+                if (f.Length < 2 || f.Length > 1 + Frames.MaxPushToken || !f.AsSpan(1).ToArray().All(b => b is >= (byte)'!' and <= (byte)'~'))
+                {
+                    Close(1002);
+                    break;
+                }
+                Wake(System.Text.Encoding.ASCII.GetString(f, 1, f.Length - 1));
+                break;
             default:
                 Close(1002); // open, unknown or reserved types never come from an agent
                 break;
         }
+    }
+
+    private readonly Queue<long> _wakeTimes = new();
+    private readonly Dictionary<string, long> _wakeLast = new(StringComparer.Ordinal);
+
+    /// <summary>§10.6: rate-limited per socket and per token; over the limits a wake-up is just dropped.</summary>
+    private void Wake(string token)
+    {
+        var now = _s.Time.GetTimestamp();
+        while (_wakeTimes.Count > 0 && _s.Time.GetElapsedTime(_wakeTimes.Peek(), now) >= TimeSpan.FromMinutes(1)) _wakeTimes.Dequeue();
+        if (_wakeTimes.Count >= _s.Options.WakesPerAgentPerMinute) return;
+        if (_wakeLast.TryGetValue(token, out var last) && _s.Time.GetElapsedTime(last, now) < _s.Options.WakeSameTokenEvery) return;
+        if (_wakeLast.Count >= 64)
+            foreach (var old in _wakeLast.Where(kv => _s.Time.GetElapsedTime(kv.Value, now) >= _s.Options.WakeSameTokenEvery).Select(kv => kv.Key).ToList())
+                _wakeLast.Remove(old);
+        if (_wakeLast.Count >= 64) return;
+        _wakeTimes.Enqueue(now);
+        _wakeLast[token] = now;
+        _s.Push.TryWake(token);
     }
 
     private void Register(byte[] f)

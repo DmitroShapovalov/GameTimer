@@ -22,7 +22,7 @@ public class SessionTests
         Assert.Equal("admin", hello.GetProperty("you").GetProperty("role").GetString());
         Assert.Equal(pairResult.GetProperty("ak").GetString(), hello.GetProperty("ak").GetString());
         var caps = hello.GetProperty("capabilities").EnumerateArray().Select(c => c.GetString()).ToList();
-        Assert.Equal(new[] { "timer", "settings", "peers" }, caps);
+        Assert.Equal(new[] { "timer", "settings", "peers", "push" }, caps);
         Assert.Equal("notStarted", hello.GetProperty("state").GetProperty("timer").GetProperty("state").GetString());
         Assert.NotNull(f.Host.Peers[0].LastSeen);
     }

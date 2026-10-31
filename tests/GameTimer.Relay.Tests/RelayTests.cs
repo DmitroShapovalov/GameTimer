@@ -424,6 +424,50 @@ public class RelayTests
         Assert.Equal(0, f.State.Buffered);
     }
 
+    private static byte[] WakeFrame(string token) => new byte[] { 0x07 }.Concat(System.Text.Encoding.ASCII.GetBytes(token)).ToArray();
+
+    [Fact]
+    public async Task Wake_ups_go_to_the_push_sender_rate_limited()
+    {
+        await using var f = await StartAsync(o => { o.WakesPerAgentPerMinute = 3; o.WakeSameTokenEvery = TimeSpan.FromMilliseconds(500); });
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1);
+        var id = Guid.NewGuid().ToString("N");
+        await SendAsync(agent, WakeFrame("tokA-" + id));
+        await SendAsync(agent, WakeFrame("tokA-" + id)); // the same token too soon: dropped
+        await SendAsync(agent, WakeFrame("tokB-" + id));
+        await Task.Delay(600);
+        await SendAsync(agent, WakeFrame("tokA-" + id)); // later: passes
+        await SendAsync(agent, WakeFrame("tokC-" + id)); // 4th in a minute: over the socket's limit
+        await SendAsync(agent, new byte[] { 0x05 });     // a ping round trip: everything above was handled
+        await NextFrameAsync(agent, 0x06);
+        var mine = Push.Tokens.Where(t => t.EndsWith(id, StringComparison.Ordinal)).ToList();
+        Assert.Equal(new[] { "tokA-" + id, "tokB-" + id, "tokA-" + id }, mine);
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0x07 })]                 // empty
+    [InlineData(new byte[] { 0x07, 0x41, 0x20 })]     // a space
+    [InlineData(new byte[] { 0x07, 0x41, 0xC3, 0xA9 })] // not ASCII
+    public async Task Malformed_wake_frames_are_1002(byte[] frame)
+    {
+        await using var f = await StartAsync();
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1);
+        await SendAsync(agent, frame);
+        Assert.Equal(1002, await ClosedWithAsync(agent));
+    }
+
+    [Fact]
+    public async Task A_too_long_push_token_is_1002()
+    {
+        await using var f = await StartAsync();
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1);
+        await SendAsync(agent, WakeFrame(new string('a', Frames.MaxPushToken + 1)));
+        Assert.Equal(1002, await ClosedWithAsync(agent));
+    }
+
     [Fact]
     public async Task Health_check()
     {

@@ -12,6 +12,9 @@ public static class RelayApp
         builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(8));
         builder.Services.Configure<RelayOptions>(builder.Configuration.GetSection("Relay"));
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<FcmSender>();
+        builder.Services.AddSingleton<IPushSender>(sp => sp.GetRequiredService<FcmSender>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<FcmSender>());
         builder.Services.AddSingleton<RelayState>();
         builder.Services.AddHostedService<Sweeper>();
     }
