@@ -285,32 +285,55 @@ public class RelayClientTests
         await using var rig = await StartAsync();
         var (keyA, _) = await rig.Agent.PairAsync("A");
         var (keyB, _) = await rig.Agent.PairAsync("B");
+        var (keyC, _) = await rig.Agent.PairAsync("C");
         rig.Client.Start();
         for (int i = 0; i < 100 && rig.Client.Status != RelayStatus.Connected; i++) await Task.Delay(20);
+        static JsonObject Hist(string type, string source = "phone", string? hub = null) =>
+            new() { ["event"] = new JsonObject { ["type"] = type, ["source"] = source, ["hub"] = hub } };
 
         var (a, helloA) = await TestHub.ConnectAsync(rig.Agent.Host, keyA);
         Assert.Contains("push", helloA.GetProperty("capabilities").EnumerateArray().Select(c => c.GetString()));
         Assert.Equal("result", (await a.RequestAsync("push.set", new JsonObject { ["token"] = "token-A" }, withRid: true)).GetProperty("t").GetString());
         Assert.Equal("bad_request", (await a.RequestAsync("push.set", new JsonObject { ["token"] = "has space" }, withRid: true)).GetProperty("code").GetString());
         Assert.Equal("bad_request", (await a.RequestAsync("push.set", new JsonObject { ["token"] = 5 }, withRid: true)).GetProperty("code").GetString());
+        Assert.Equal("bad_request", (await a.RequestAsync("push.set", new JsonObject { ["token"] = "t", ["events"] = new JsonArray("a-b") }, withRid: true)).GetProperty("code").GetString());
+        // B wants only "time's up"; C everything
         var (b, _) = await TestHub.ConnectAsync(rig.Agent.Host, keyB);
-        await b.RequestAsync("push.set", new JsonObject { ["token"] = "token-B" }, withRid: true);
+        await b.RequestAsync("push.set", new JsonObject { ["token"] = "token-B", ["events"] = new JsonArray("expired") }, withRid: true);
+        var (c, _) = await TestHub.ConnectAsync(rig.Agent.Host, keyC);
+        await c.RequestAsync("push.set", new JsonObject { ["token"] = "token-C" }, withRid: true);
         Assert.Equal("token-A", rig.Agent.Store.State!.Peers.Single(p => p.Name == "A").PushToken); // persisted
+        var peers = await a.RequestAsync("peers.list");
+        Assert.DoesNotContain("token-", peers.GetRawText()); // never shown to other hubs
 
-        // A is connected (it sees the event itself), B is not any more: only B is woken
+        // A stays connected (it sees the events itself); B and C go away
         await b.End.CloseAsync();
+        await c.End.CloseAsync();
         for (int i = 0; i < 100 && rig.Agent.Host.LiveSessionCount > 1; i++) await Task.Delay(20);
-        rig.Agent.Host.Publish("ev.history", new JsonObject { ["event"] = new JsonObject() });
-        for (int i = 0; i < 100 && rig.Push.Tokens.Count == 0; i++) await Task.Delay(20);
-        Assert.Equal(new[] { "token-B" }, rig.Push.Tokens);
-        // A second event right away: no second wake-up yet (one per 30 s, the rest trails)
-        rig.Agent.Host.Publish("ev.alert", new JsonObject { ["minutes"] = 5 });
-        await Task.Delay(300);
-        Assert.Single(rig.Push.Tokens);
-        // Ordinary events wake nobody, and nothing at all while remote access is off
-        rig.Agent.Host.Publish("ev.tick", new JsonObject());
+
+        async Task<List<string>> WokenBy(Action publish)
+        {
+            int before = rig.Push.Tokens.Count;
+            publish();
+            await Task.Delay(400);
+            return rig.Push.Tokens.Skip(before).ToList();
+        }
+        // Someone stopped the timer: C (all kinds) — not B (only expired), not A (online)
+        Assert.Equal(new[] { "token-C" }, await WokenBy(() => rig.Agent.Host.Publish("ev.history", Hist("stopped"))));
+        // Automatic events (source system) wake nobody, alerts neither (§10.6)
+        Assert.Empty(await WokenBy(() => rig.Agent.Host.Publish("ev.history", Hist("started", "system"))));
+        Assert.Empty(await WokenBy(() => rig.Agent.Host.Publish("ev.alert", new JsonObject { ["minutes"] = 5 })));
+        // Time's up: B now; C not yet (30 s since its last wake-up; a trailing one would follow)
+        Assert.Equal(new[] { "token-B" }, await WokenBy(() => rig.Agent.Host.Publish("ev.history", Hist("expired", "system"))));
+        // Nothing at all while remote access is off
         rig.Agent.Host.RemoteAccess = false;
-        await b.End.CloseAsync();
+        Assert.Empty(await WokenBy(() => rig.Agent.Host.Publish("ev.history", Hist("closed", "system"))));
+        rig.Agent.Host.RemoteAccess = true;
+        // The hub that caused an event isn't woken for it
+        var hubC = rig.Agent.Host.Peers.Single(p => p.Name == "C").Id;
+        await Task.Delay(100);
+        Assert.Empty((await WokenBy(() => rig.Agent.Host.Publish("ev.history", Hist("extended", hub: hubC)))).Where(t => t == "token-C"));
+
         await a.RequestAsync("push.set", new JsonObject { ["token"] = null }, withRid: true);
         Assert.Null(rig.Agent.Store.State!.Peers.Single(p => p.Name == "A").PushToken);
     }

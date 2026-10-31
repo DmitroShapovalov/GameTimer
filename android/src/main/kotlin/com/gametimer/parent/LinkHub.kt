@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -99,7 +100,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         } else {
             scope.launch {
                 kotlinx.coroutines.delay(5_000)
-                if (!uiVisible) {
+                if (!uiVisible && !waking) {
                     relayAllowed = false
                     links.values.forEach { it.relayPolicyChanged() }
                 }
@@ -163,10 +164,22 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         }
     }
 
-    private val pushSent = context.getSharedPreferences("push_sent", Context.MODE_PRIVATE)
-
     /** This phone's push token, or none when background notifications are off (the PCs then wake nobody). */
     private fun wantedPushToken(): String? = if (NotifySettings(context).background) Push.token(context) else null
+
+    /**
+     * The history types worth a wake-up (§10.6): those of the notification categories that are on, so the PCs
+     * never wake this phone for something it won't show. "Time almost up" exists only live (not in the
+     * history) and isn't among them.
+     */
+    private fun wantedPushEvents(): List<String> {
+        val s = NotifySettings(context)
+        return buildList {
+            if (s.isOn(NotifySettings.Category.TimeUp)) add("expired")
+            if (s.isOn(NotifySettings.Category.Suspicious)) addAll(listOf("closed", "tampered", "peerAdded"))
+            if (s.isOn(NotifySettings.Category.Others)) addAll(listOf("started", "stopped", "reset", "extended", "scheduleSkipped"))
+        }
+    }
 
     /** The token or the notification setting changed: tell the PCs that are online now (the others on connect). */
     fun pushTokenChanged() {
@@ -177,14 +190,22 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         }
     }
 
-    /** §10.6 push.set, only when the PC supports it and the value differs from what it has. */
+    /**
+     * §10.6 push.set on every session with a PC that supports it (cheap, and the PC's copy can't drift: a
+     * restored PC, a lost state). No token, or no category on → null: the PC wakes nobody.
+     */
     private suspend fun syncPushToken(agentId: String, link: AgentLink, hello: JsonObject) {
         val caps = (hello["capabilities"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: return
         if ("push" !in caps) return
-        val wanted = wantedPushToken()
-        if (pushSent.contains(agentId) && pushSent.getString(agentId, null) == wanted) return
-        val body = buildJsonObject { if (wanted != null) put("token", wanted) else put("token", JsonNull) }
-        if (link.send("push.set", body) is com.gametimer.protocol.hub.RequestOutcome.Ok) pushSent.edit().putString(agentId, wanted).apply()
+        val events = wantedPushEvents()
+        val token = wantedPushToken()?.takeIf { events.isNotEmpty() }
+        val body = buildJsonObject {
+            if (token != null) {
+                put("token", token)
+                put("events", JsonArray(events.map { JsonPrimitive(it) }))
+            } else put("token", JsonNull)
+        }
+        link.send("push.set", body)
     }
 
     private fun watchNetwork() {
@@ -240,8 +261,12 @@ class LinkHub(private val context: Context, private val store: HubStore) {
     /** Re-paired or removed: drop the link (and its watcher); a later [link] makes a new one. */
     suspend fun forget(agentId: String, removed: Boolean) {
         watchers.remove(agentId)?.cancel()
-        links.remove(agentId)?.stop()
-        pushSent.edit().remove(agentId).apply() // re-paired: the PC has no token for the new pairing yet
+        val link = links.remove(agentId)
+        if (removed && link != null && link.status.value is LinkStatus.Online) {
+            // Removed on this phone only: tell the PC to stop waking it (best effort, briefly)
+            withTimeoutOrNull(3_000) { link.send("push.set", buildJsonObject { put("token", JsonNull) }, resendWindow = 3.seconds) }
+        }
+        link?.stop()
         if (removed) {
             seenPeers.edit().remove(agentId).apply()
             notifier.forget(agentId)

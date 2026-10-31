@@ -192,11 +192,25 @@ public sealed partial class AgentHost
                     if (t.ValueKind != JsonValueKind.String || !IsPushToken(t.GetString())) return Reply.Error("bad_request");
                     token = t.GetString();
                 }
+                // Optional: only these kinds wake this hub (the ones its user wants to be told about)
+                List<string>? events = null;
+                if (root.TryGetProperty("events", out var ev) && ev.ValueKind != JsonValueKind.Null)
+                {
+                    if (ev.ValueKind != JsonValueKind.Array || ev.GetArrayLength() > 16) return Reply.Error("bad_request");
+                    events = new List<string>();
+                    foreach (var e in ev.EnumerateArray())
+                    {
+                        if (e.ValueKind != JsonValueKind.String || e.GetString() is not { Length: > 0 and <= 32 } name
+                            || !name.All(char.IsAsciiLetter)) return Reply.Error("bad_request");
+                        events.Add(name);
+                    }
+                }
                 lock (_lock)
                 {
                     var peer = _state.Peers.FirstOrDefault(p => p.Id == session.HubId);
                     if (peer == null) return Reply.Error("forbidden");
                     peer.PushToken = token;
+                    peer.PushEvents = token == null ? null : events;
                 }
                 Persist();
                 return Reply.Ok(new JsonObject());

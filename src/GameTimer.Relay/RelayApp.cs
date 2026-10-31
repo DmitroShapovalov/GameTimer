@@ -42,7 +42,7 @@ public static class RelayApp
             try
             {
                 using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
-                await new AgentSession(s, ws, client.Key).RunAsync();
+                await new AgentSession(s, ws, client).RunAsync();
             }
             finally { s.ReleaseSocket(agent: true); }
         }

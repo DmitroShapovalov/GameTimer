@@ -445,6 +445,34 @@ public class RelayTests
         Assert.Equal(new[] { "tokA-" + id, "tokB-" + id, "tokA-" + id }, mine);
     }
 
+    [Fact]
+    public async Task Wake_ups_only_from_a_socket_that_registered_claims()
+    {
+        await using var f = await StartAsync();
+        var agent = await f.AgentAsync();
+        var id = Guid.NewGuid().ToString("N");
+        await SendAsync(agent, Register());              // registered, but nothing
+        await SendAsync(agent, WakeFrame("tokZ-" + id));
+        await SendAsync(agent, new byte[] { 0x05 });
+        await NextFrameAsync(agent, 0x06);
+        Assert.DoesNotContain(Push.Tokens, t => t.EndsWith(id, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task One_token_is_woken_once_per_interval_across_sockets()
+    {
+        await using var f = await StartAsync();
+        var a = await f.AgentAsync("10.0.1.1");
+        await f.RegisterAsync(a, 1);
+        var b = await f.AgentAsync("10.0.2.1");
+        await f.RegisterAsync(b, 2);
+        var id = Guid.NewGuid().ToString("N");
+        await SendAsync(a, WakeFrame("tokS-" + id));
+        await SendAsync(b, WakeFrame("tokS-" + id)); // another socket, same token, too soon
+        foreach (var s in new[] { a, b }) { await SendAsync(s, new byte[] { 0x05 }); await NextFrameAsync(s, 0x06); }
+        Assert.Single(Push.Tokens, t => t.EndsWith(id, StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(new byte[] { 0x07 })]                 // empty
     [InlineData(new byte[] { 0x07, 0x41, 0x20 })]     // a space

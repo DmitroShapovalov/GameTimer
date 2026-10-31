@@ -47,14 +47,37 @@ internal sealed class FcmSender : IPushSender, IHostedService, IDisposable
     internal FcmSender(IOptions<RelayOptions> options, ILogger<FcmSender> log, HttpMessageHandler? handler)
     {
         _log = log;
-        _http = handler != null ? new HttpClient(handler) : new HttpClient();
+        _http = handler != null ? new HttpClient(handler)
+            : new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) });
         _http.Timeout = TimeSpan.FromSeconds(15);
         _account = Parse(options.Value.FcmServiceAccountB64, log);
     }
 
     public bool Configured => _account != null;
 
-    public bool TryWake(string pushToken) => _account != null && _queue.Writer.TryWrite(pushToken);
+    public bool TryWake(string pushToken) =>
+        _account != null && !IsDead(pushToken) && _queue.Writer.TryWrite(pushToken);
+
+    // Tokens FCM said don't exist (any more): never sent again (by hash; bounded, forgotten when full)
+    private readonly HashSet<string> _dead = new(StringComparer.Ordinal);
+    private const int MaxDead = 50_000;
+
+    private static string Hash(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.ASCII.GetBytes(token)), 0, 16);
+
+    private bool IsDead(string token)
+    {
+        lock (_dead) return _dead.Contains(Hash(token));
+    }
+
+    private void MarkDead(string token)
+    {
+        lock (_dead)
+        {
+            if (_dead.Count >= MaxDead) _dead.Clear();
+            _dead.Add(Hash(token));
+        }
+    }
 
     private static Account? Parse(string? b64, ILogger log)
     {
@@ -123,7 +146,7 @@ internal sealed class FcmSender : IPushSender, IHostedService, IDisposable
 
     public (long Sent, long Failed) Counts => (Interlocked.Read(ref _sent), Interlocked.Read(ref _failed));
 
-    private async Task SendAsync(string token, CancellationToken cancel)
+    private async Task SendAsync(string token, CancellationToken cancel, bool retry = true)
     {
         var access = await AccessTokenAsync(cancel);
         var body = new JsonObject
@@ -142,7 +165,20 @@ internal sealed class FcmSender : IPushSender, IHostedService, IDisposable
         };
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", access);
         using var resp = await _http.SendAsync(req, cancel);
-        if (!resp.IsSuccessStatusCode) throw new HttpRequestException($"FCM answered {(int)resp.StatusCode}");
+        if (resp.IsSuccessStatusCode) return;
+        var status = (int)resp.StatusCode;
+        if (status == 401 && retry)
+        {
+            // The access token was revoked (e.g. a rotated key): get a new one, once
+            await _tokenLock.WaitAsync(cancel);
+            try { if (_accessToken == access) _accessToken = null; }
+            finally { _tokenLock.Release(); }
+            await SendAsync(token, cancel, retry: false);
+            return;
+        }
+        // 404 UNREGISTERED / 400 INVALID_ARGUMENT: the token is gone or wasn't one; don't try it again
+        if (status is 404 or 400) MarkDead(token);
+        throw new HttpRequestException($"FCM answered {status}");
     }
 
     /// <summary>OAuth 2.0 for a service account: a signed JWT (RS256) exchanged for an hour-long access token.</summary>

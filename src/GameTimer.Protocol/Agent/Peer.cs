@@ -24,6 +24,8 @@ public sealed class Peer
     /// through the relay while "Control from anywhere" is on. Never shown or sent to other hubs.
     /// </summary>
     public string? PushToken { get; set; }
+    /// <summary>What may wake this hub (§10.6): history event types and <c>peerAdded</c>; null = all of them.</summary>
+    public List<string>? PushEvents { get; set; }
 }
 
 /// <summary>One idempotency entry (§5): rid → (body hash, stored reply without <c>re</c>).</summary>

@@ -291,7 +291,7 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 | `peers.list` | `peers` | — | any | — | `peers[]` |
 | `peers.revoke` | `peers` | ✓ | admin (or self) | `peer` (hub id) | `peers[]` |
 | `peers.setRole` | `peers` | ✓ | admin | `peer` (hub id), `role` (`admin` / `parent`) | `peers[]` |
-| `push.set` | `push` | ✓ | any | `token`: this hub's push token (1..4096 printable ASCII), or `null` = none (§10.6) | `{}` |
+| `push.set` | `push` | ✓ | any | `token`: this hub's push token (1..4096 printable ASCII), or `null` = none; optional `events`: what may wake it (≤ 16 history types or `peerAdded`; absent = all) (§10.6) | `{}` |
 
 `peers[]` entries: `id`, `name`, `role`, `pairedAt`, `lastSeen`, `current` (= this is the hub making
 the request).
@@ -606,22 +606,31 @@ the phone woken through the relay and a push service (Android: Firebase Cloud Me
 carries **nothing** but "wake": the phone then connects (through the relay) and catches up the history
 like after any reconnect (§12), so it shows the same notifications it would at home.
 
-- **Token.** A hub that wants wake-ups sends `push.set { token }` (§7.2) in a session; the agent keeps it
-  with that hub only (never shown or sent to other hubs) and forgets it with the hub. `token: null`
-  stops the wake-ups (the phone does that when its background notifications are off).
-- **When.** Only while "Control from anywhere" is on and the agent's relay socket is up: on every
-  `ev.history` and `ev.alert`, for each hub that has a token and **no live session**. At most one
-  wake-up per token every 30 s; events in between give one trailing wake-up.
-- **Relay.** `wake` (§10.2) is passed to the push service as a data message `{ "t": "wake" }`, high
-  priority, 10 minutes to live, one collapse key. At most 20 per agent socket per minute and one per
-  token every 20 s; over that, or without a push account, it is dropped silently. The relay keeps no
-  token after the call and doesn't log it.
-- **Phone.** On a wake-up it connects to its PCs (LAN or relay, §10.3) for at most ~15 s, catches up and
-  lets go. A warning that only exists as `ev.alert` (not in the history) is not caught up this way.
+- **Token.** A hub that wants wake-ups sends `push.set { token, events }` (§7.2) in every session; the
+  agent keeps it with that hub only (never shown or sent to other hubs) and forgets it with the hub.
+  `events` lists what the phone would show (its notification categories that are on), so it is never
+  woken for nothing. `token: null` stops the wake-ups (background notifications off, or the PC removed
+  on the phone).
+- **When.** Only while "Control from anywhere" is on and the agent's relay socket is up: on an
+  `ev.history` whose type the hub asked for — automatic ones (source `system`) only for `expired`,
+  `closed`, `tampered` — and on a new parent app (`peerAdded`); for each such hub with a token and **no
+  live session**, never the hub that caused the event. `ev.alert` wakes nobody (it isn't in the
+  history, so a woken phone couldn't show it). At most one wake-up per token every 30 s; events in
+  between give one trailing wake-up, dropped if the hub connected meanwhile.
+- **Relay.** `wake` (§10.2) is accepted only from a socket that registered claims, and passed to the
+  push service as a data message `{ "t": "wake" }`, high priority, 10 minutes to live, one collapse key.
+  At most 20 per agent socket and 30 per IP (4× per /24 or /48) per minute, and one per token every
+  20 s across the relay; over that, or without a push account, it is dropped silently. Tokens the push
+  service rejects as unknown are not tried again. The relay keeps no token after the call (only short-
+  lived hashes for the limits) and doesn't log it.
+- **Phone.** On a wake-up it runs a short foreground service: connects to its PCs (LAN or relay,
+  §10.3) for at most ~15 s, catches up and lets go.
 - **What it costs in privacy.** The push token is a stable id of the phone: the relay sees it at every
-  wake-up (and so can link that phone across days), and the push service (Google) sees when the phone is
-  woken — never by whom or why. Accepted by the owner (2026-10-31) for battery life; stated in the
-  privacy note.
+  wake-up together with the PC's socket, and then the same phone dialling in (from its mobile IP), so it
+  can link a family's PC and phones across days and roughly locate the phone. The push service (Google)
+  sees when the phone is woken — in effect when something happens on the PC — never what, by whom or
+  for which PC; its SDK keeps an installation id and delivery logs. Accepted by the owner (2026-10-31)
+  for battery life; stated in the privacy note.
 
 ## 11. Security assumptions and residual risks
 

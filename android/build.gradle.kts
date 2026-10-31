@@ -17,9 +17,9 @@ val firebase: Map<String, String> = run {
     fun Any?.list() = this as List<Any?>
     val root = groovy.json.JsonSlurper().parseText(text).obj()
     val info = root["project_info"].obj()
-    val client = root["client"].list().map { it.obj() }.first {
+    val client = root["client"].list().map { it.obj() }.firstOrNull {
         it["client_info"].obj()["android_client_info"].obj()["package_name"] == "com.gametimer.parent"
-    }
+    } ?: error("google-services.json has no Android app com.gametimer.parent")
     mapOf(
         "projectId" to info["project_id"].toString(),
         "senderId" to info["project_number"].toString(),

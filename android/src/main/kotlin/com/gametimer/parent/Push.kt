@@ -65,7 +65,45 @@ class PushService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         if (message.data["t"] != "wake") return
-        // A high-priority message gives the app some seconds: connect, catch up, notify, done
-        runBlocking { app.hub.wake() }
+        // A high-priority message may start a foreground service: it keeps the process and the network
+        // for the ~15 s of connect + catch up, beyond the short window of the message itself
+        try {
+            androidx.core.content.ContextCompat.startForegroundService(this, android.content.Intent(this, WakeService::class.java))
+        } catch (e: RuntimeException) {
+            runBlocking { app.hub.wake() } // not allowed (e.g. a deprioritised message): do what fits in the window
+        }
+    }
+}
+
+/** Runs one wake-up (connect, catch up, notify) as a short, silent foreground service, then stops. */
+class WakeService : android.app.Service() {
+    private val app get() = application as GameTimerApp
+    private var running = 0
+
+    override fun onBind(intent: android.content.Intent?): android.os.IBinder? = null
+
+    override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
+        val notification = androidx.core.app.NotificationCompat.Builder(this, Notifier.CHANNEL_MONITOR)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(getString(R.string.wake_title))
+            .setSilent(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN)
+            .build()
+        val type = if (android.os.Build.VERSION.SDK_INT >= 29) android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
+        try {
+            androidx.core.app.ServiceCompat.startForeground(this, WAKE_ID, notification, type)
+        } catch (e: RuntimeException) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        running++
+        app.hub.scope.launch {
+            try { app.hub.wake() } finally { if (--running == 0) stopSelf() }
+        }
+        return START_NOT_STICKY
+    }
+
+    private companion object {
+        const val WAKE_ID = 2
     }
 }

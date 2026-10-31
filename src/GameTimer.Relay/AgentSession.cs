@@ -28,11 +28,15 @@ internal sealed class AgentSession
 
     public string IpKey { get; }
 
-    public AgentSession(RelayState state, WebSocket ws, string ipKey)
+    private readonly IpLimits.Client _client;
+    private bool _hasClaims;
+
+    public AgentSession(RelayState state, WebSocket ws, IpLimits.Client client)
     {
         _s = state;
         _ws = ws;
-        IpKey = ipKey;
+        _client = client;
+        IpKey = client.Key;
         _connected = _lastReceived = _lastSent = state.Time.GetTimestamp();
     }
 
@@ -139,9 +143,13 @@ internal sealed class AgentSession
     private readonly Queue<long> _wakeTimes = new();
     private readonly Dictionary<string, long> _wakeLast = new(StringComparer.Ordinal);
 
-    /// <summary>§10.6: rate-limited per socket and per token; over the limits a wake-up is just dropped.</summary>
+    /// <summary>
+    /// §10.6: only from a socket that registered claims; rate-limited per socket, per IP (and /24, /48) and
+    /// per token across the whole relay. Over a limit a wake-up is just dropped.
+    /// </summary>
     private void Wake(string token)
     {
+        if (!_hasClaims) return;
         var now = _s.Time.GetTimestamp();
         while (_wakeTimes.Count > 0 && _s.Time.GetElapsedTime(_wakeTimes.Peek(), now) >= TimeSpan.FromMinutes(1)) _wakeTimes.Dequeue();
         if (_wakeTimes.Count >= _s.Options.WakesPerAgentPerMinute) return;
@@ -150,6 +158,7 @@ internal sealed class AgentSession
             foreach (var old in _wakeLast.Where(kv => _s.Time.GetElapsedTime(kv.Value, now) >= _s.Options.WakeSameTokenEvery).Select(kv => kv.Key).ToList())
                 _wakeLast.Remove(old);
         if (_wakeLast.Count >= 64) return;
+        if (!_s.Limits.TryWake(_client) || !_s.TryWakeToken(token)) return;
         _wakeTimes.Enqueue(now);
         _wakeLast[token] = now;
         _s.Push.TryWake(token);
@@ -171,6 +180,7 @@ internal sealed class AgentSession
             var route = RouteToken.Route(f.AsSpan(off, Frames.ClaimSize));
             routes[Base32.Encode(route)] = route;
         }
+        _hasClaims = routes.Count > 0;
         var result = _s.Registry.Register(this, routes, _s.Options.MaxClaims);
         if (result == false) Close(1013); // over the claim cap; null: this socket is closing, nothing to do
     }

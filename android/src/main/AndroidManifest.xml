@@ -43,6 +43,10 @@
         <!-- Push wake-ups away from home (protocol §10.6): Firebase is set up by hand (Push.kt); no
              automatic token, no analytics -->
         <service
+            android:name=".WakeService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+        <service
             android:name=".PushService"
             android:exported="false">
             <intent-filter>

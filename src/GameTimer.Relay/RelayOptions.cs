@@ -31,6 +31,7 @@ public sealed class RelayOptions
     /// </summary>
     public string? FcmServiceAccountB64 { get; set; }
     public int WakesPerAgentPerMinute { get; set; } = 20;
+    public int WakesPerIpPerMinute { get; set; } = 30;
     public TimeSpan WakeSameTokenEvery { get; set; } = TimeSpan.FromSeconds(20);
 
     public TimeSpan IdleStream { get; set; } = TimeSpan.FromSeconds(120);

@@ -220,7 +220,9 @@ public sealed class RelayClient : IAsyncDisposable
                     else if (!w.Pending && age > TimeSpan.FromMinutes(10)) _wakes.Remove(t);
                 }
             }
-            foreach (var t in due) SendSoon(RelayFrames.WakeFrame(t));
+            // Outside the lock (the host takes its own): a hub that connected meanwhile has caught up already
+            foreach (var t in due)
+                if (_c._host.StillToWake(t)) SendSoon(RelayFrames.WakeFrame(t));
         }
 
         public Connection(RelayClient client, WebSocket ws)

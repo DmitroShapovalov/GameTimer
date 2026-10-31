@@ -124,6 +124,8 @@ public class UnitTests
         public required System.Security.Cryptography.RSA Key { get; init; }
         public List<System.Text.Json.Nodes.JsonNode> Messages { get; } = new();
         public int TokenCalls;
+        public int Unauthorized; // answer 401 this many times first
+        public string? Unregistered; // answer 404 for this token
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
         {
@@ -144,7 +146,9 @@ public class UnitTests
             }
             Assert.Equal("https://fcm.googleapis.com/v1/projects/proj-1/messages:send", req.RequestUri.AbsoluteUri);
             Assert.Equal("Bearer AT", req.Headers.Authorization!.ToString());
+            if (Interlocked.Decrement(ref Unauthorized) >= 0) return new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized);
             var body = System.Text.Json.Nodes.JsonNode.Parse(await req.Content!.ReadAsStringAsync(ct))!;
+            if (body["message"]!["token"]!.GetValue<string>() == Unregistered) return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
             lock (Messages) Messages.Add(body);
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("{}") };
         }
@@ -175,6 +179,28 @@ public class UnitTests
         Assert.Equal("{\"t\":\"wake\"}", m[0]["data"]!.ToJsonString());
         Assert.Equal("HIGH", m[0]["android"]!["priority"]!.GetValue<string>());
         Assert.Null(m[0]["notification"]); // no visible content through Google
+    }
+
+    [Fact]
+    public async Task A_401_gets_a_new_access_token_and_a_404_token_is_never_tried_again()
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var account = new System.Text.Json.Nodes.JsonObject
+        {
+            ["project_id"] = "proj-1", ["client_email"] = "relay@test.iam",
+            ["private_key"] = key.ExportPkcs8PrivateKeyPem(), ["token_uri"] = "https://oauth2.example/token",
+        };
+        var options = Options.Create(new RelayOptions { FcmServiceAccountB64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(account.ToJsonString())) });
+        var google = new FakeGoogle { Key = key, Unauthorized = 1, Unregistered = "gone" };
+        using var fcm = new FcmSender(options, NullLogger<FcmSender>.Instance, google);
+        await fcm.StartAsync(CancellationToken.None);
+        Assert.True(fcm.TryWake("ok"));
+        for (int i = 0; i < 100 && fcm.Counts.Sent < 1; i++) await Task.Delay(20);
+        Assert.Equal(2, google.TokenCalls); // refreshed after the 401
+        Assert.True(fcm.TryWake("gone"));
+        for (int i = 0; i < 100 && fcm.Counts.Failed < 1; i++) await Task.Delay(20);
+        Assert.False(fcm.TryWake("gone")); // FCM said it doesn't exist
+        await fcm.StopAsync(CancellationToken.None);
     }
 
     [Fact]
