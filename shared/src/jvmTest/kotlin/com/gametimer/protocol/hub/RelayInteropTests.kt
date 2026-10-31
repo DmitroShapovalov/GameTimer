@@ -205,6 +205,31 @@ class RelayInteropTests {
     }
 
     @Test
+    fun leavingTheScreenEndsTheRelayedSessionAndComingBackDialsAtOnce(): Unit = runBlocking {
+        val (key, paired) = pairHub()
+        relayOn()
+        val allowedFlag = java.util.concurrent.atomic.AtomicBoolean(true)
+        val dialled = CopyOnWriteArrayList<String>()
+        val counting = RelayConnector { url -> dialled += url; connector.connect(url) }
+        val l = AgentLink(paired.copy(remoteAccess = true, host = "127.0.0.1", port = deadPort()), key, connector, "test", scope,
+            relay = RelayPath(relayUrl, counting, onLocalNetwork = { false }, allowed = { allowedFlag.get() })).also { it.start() }
+        assertTrue(l.awaitOnline().viaRelay)
+        allowedFlag.set(false)
+        l.relayPolicyChanged()
+        withTimeout(10.seconds) { l.status.first { it is LinkStatus.Offline } } // closed; the LAN is dead
+        val before = dialled.size
+        kotlinx.coroutines.delay(4_000)
+        assertEquals(before, dialled.size) // not allowed: no relay
+        assertFalse(l.status.value is LinkStatus.Stopped) // the link itself keeps running
+        allowedFlag.set(true)
+        val started = System.nanoTime()
+        l.relayPolicyChanged()
+        assertTrue(l.awaitOnline().viaRelay)
+        assertTrue(System.nanoTime() - started < 8_000_000_000) // at once, not after the 30 s back-off
+        l.stop()
+    }
+
+    @Test
     fun aRouteNobodyHoldsIsReportedAsNotFound(): Unit = runBlocking {
         // The real relay's 404 through Ktor/OkHttp becomes RelayRouteNotFound (only that moves to the next route)
         assertFailsWith<RelayRouteNotFound> { connector.connect("$relayUrl/v2/hub/AAAAAAAAAAAAAAAAAAAAAAAAAA") }

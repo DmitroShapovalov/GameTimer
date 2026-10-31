@@ -8,6 +8,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 
 /** One WebSocket to an agent (protocol §3): one binary message = one Noise message. */
@@ -86,6 +87,10 @@ private class KtorFrameSocket(private val session: DefaultClientWebSocketSession
     }
 
     override suspend fun close() {
-        try { session.close(CloseReason(CloseReason.Codes.NORMAL, "")) } catch (e: Exception) { /* already gone */ }
+        // Bounded: a stuck outgoing buffer must not hold up stopping the link (callers run this NonCancellable)
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(1_000) { session.close(CloseReason(CloseReason.Codes.NORMAL, "")) }
+                ?: session.cancel()
+        } catch (e: Exception) { /* already gone */ }
     }
 }

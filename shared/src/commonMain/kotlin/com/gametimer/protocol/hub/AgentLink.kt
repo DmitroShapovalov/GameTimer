@@ -148,6 +148,8 @@ public class AgentLink(
     private val onMoved: (PairedAgent) -> Unit = {},
 ) {
     @Volatile private var relayRetryAtNanos: Long = 0
+    @Volatile private var sessionViaRelay = false
+    private val retryNow = Channel<Unit>(Channel.CONFLATED)
     @Volatile private var relayBackoff: Duration = RELAY_BACKOFF
     @Volatile private var agent: PairedAgent = agent
     private var lastLocateNanos: Long? = null
@@ -287,6 +289,23 @@ public class AgentLink(
     private fun relayAllowed(): Boolean =
         relay != null && agent.remoteAccess && relay.allowed() && elapsedRealtimeNanos() >= relayRetryAtNanos
 
+    /**
+     * [RelayPath.allowed] may have changed (Android: the app left or came back to the screen). Not allowed
+     * any more: a session through the relay is closed (the link reconnects on the LAN; unanswered requests
+     * are resent with their rid). Allowed again while not online: the relay is tried at once.
+     */
+    public fun relayPolicyChanged() {
+        val path = relay ?: return
+        if (!path.allowed()) {
+            val s = session
+            if (s != null && sessionViaRelay) scope.launch { s.close() }
+        } else if (_status.value !is LinkStatus.Online) {
+            relayRetryAtNanos = 0
+            relayBackoff = RELAY_BACKOFF
+            retryNow.trySend(Unit)
+        }
+    }
+
     private fun relayFailed() {
         relayRetryAtNanos = elapsedRealtimeNanos() + relayBackoff.inWholeNanoseconds
         relayBackoff = (relayBackoff * 2).coerceAtMost(MAX_RELAY_BACKOFF)
@@ -353,12 +372,18 @@ public class AgentLink(
             }
             try {
                 val won = winner ?: throw pickError(lanError, relayError)
+                if (won.viaRelay && !path.allowed()) throw RelayUnreachableException() // left the screen meanwhile
                 val session = try {
                     won.pending!!.confirm(appName, parent)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    if (won.viaRelay) { relayFailed(); throw RelayUnreachableException(e) }
+                    if (won.viaRelay) {
+                        relayFailed()
+                        // A bye inside Noise comes from the PC itself (e.g. revoked); anything else is the relay path
+                        if (e is SessionClosedException && e.byeCode != null) throw e
+                        throw RelayUnreachableException(e)
+                    }
                     throw e
                 }
                 if (won.viaRelay) { relayBackoff = RELAY_BACKOFF; relayRetryAtNanos = 0 } // a confirmed relay session
@@ -451,6 +476,7 @@ public class AgentLink(
                     try { onMoved(target) } catch (e: Exception) { /* storing is the app's business */ }
                 }
                 session = s
+                sessionViaRelay = viaRelay
                 try {
                     remoteAccessFrom(s.hello, missingIsOff = true) // before any later ev.settings is applied
                     coroutineScope {
@@ -500,7 +526,7 @@ public class AgentLink(
             }
             // Back-off grows unless the session had been up for a while (busy / protocol_error loops don't spin)
             if (uptime >= 30.seconds) backoff = 1.seconds
-            delay(backoff)
+            withTimeoutOrNull(backoff) { retryNow.receive() } // or at once when the relay became allowed
             backoff = (backoff * 2).coerceAtMost(30.seconds)
         }
     }
