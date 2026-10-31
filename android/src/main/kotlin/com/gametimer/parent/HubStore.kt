@@ -84,6 +84,15 @@ class HubStore(context: Context) {
      * The PC was found at a new address (discovery, §9). Only an address change of a PC still in the
      * list: a PC removed meanwhile is not brought back. Blocking file write: call off the main thread.
      */
+    /** The PC's "Control from anywhere" changed (protocol §10). Blocking file write: call off the main thread. */
+    @Synchronized
+    fun updateRemoteAccess(agentId: String, on: Boolean) {
+        val list = _agents.value
+        val old = list.firstOrNull { it.agentId == agentId } ?: return
+        if (old.remoteAccess == on) return
+        write(list.map { if (it.agentId == agentId) it.copy(remoteAccess = on) else it })
+    }
+
     @Synchronized
     fun updateAddress(agentId: String, host: String, port: Int) {
         val list = _agents.value

@@ -7,6 +7,7 @@ import com.gametimer.protocol.hub.ApiResult
 import com.gametimer.protocol.hub.KtorConnector
 import com.gametimer.protocol.hub.LinkStatus
 import com.gametimer.protocol.hub.PairedAgent
+import com.gametimer.protocol.hub.RelayPath
 import com.gametimer.protocol.noise.KeyPair
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +62,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
 
     private var uiVisible = false
     private var monitoring = false
-    private var onLan = true
+    @Volatile private var onLan = true
     private var active = false
     private val activeChanges = Channel<Boolean>(Channel.CONFLATED) // latest wins (rotation = stop + start)
 
@@ -128,7 +129,13 @@ class LinkHub(private val context: Context, private val store: HubStore) {
             // The PC answered with its pinned key at a new address (§9): remember it, unless it was removed meanwhile
             scope.launch(Dispatchers.IO) { store.updateAddress(moved.agentId, moved.host, moved.port) }
         }
-        return AgentLink(agent, key, connector, appName, scope, locator, onMoved).also {
+        // Away from home (protocol §10): LAN first, the relay after ~2 s or at once off Wi-Fi, while the PC
+        // has "Control from anywhere" on (learned from its hello and stored with the PC)
+        val relay = RelayPath(RelayPath.DEFAULT_URL, connector, onLocalNetwork = { onLan })
+        val onRemoteAccess: (Boolean) -> Unit = { on ->
+            scope.launch(Dispatchers.IO) { store.updateRemoteAccess(agentId, on) }
+        }
+        return AgentLink(agent, key, connector, appName, scope, locator, relay, onRemoteAccess, onMoved).also {
             links[agentId] = it
             watch(agent, it)
             if (active) it.start()

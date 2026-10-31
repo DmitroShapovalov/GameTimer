@@ -25,13 +25,20 @@ public fun interface Connector {
     public suspend fun connect(host: String, port: Int, path: String): FrameSocket
 }
 
+/** Opens a [FrameSocket] by URL: the relay's `wss://<relay>/v2/hub/<route>` (§10.3). Throws when refused (404 = PC offline). */
+public fun interface RelayConnector {
+    public suspend fun connect(url: String): FrameSocket
+}
+
 /**
  * WebSocket connector on Ktor (OkHttp on Android / JVM, Darwin on iOS). Sends no Origin header:
  * the agent refuses browsers (§3).
  */
-public class KtorConnector(private val client: HttpClient = defaultClient()) : Connector {
+public class KtorConnector(private val client: HttpClient = defaultClient()) : Connector, RelayConnector {
     override suspend fun connect(host: String, port: Int, path: String): FrameSocket =
         KtorFrameSocket(client.webSocketSession(method = HttpMethod.Get, host = host, port = port, path = path))
+
+    override suspend fun connect(url: String): FrameSocket = KtorFrameSocket(client.webSocketSession(url))
 
     public companion object {
         public fun defaultClient(): HttpClient = HttpClient {

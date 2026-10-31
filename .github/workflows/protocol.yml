@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - 'src/GameTimer.Protocol/**'
+      - 'src/GameTimer.Relay/**'
       - 'shared/**'
       - 'tests/**'
       - 'tools/**'
@@ -24,6 +25,7 @@ on:
     branches: [master]
     paths:
       - 'src/GameTimer.Protocol/**'
+      - 'src/GameTimer.Relay/**'
       - 'shared/**'
       - 'tests/**'
       - 'tools/**'
@@ -68,13 +70,14 @@ jobs:
       - name: C# vectors + behaviour tests
         run: dotnet test tests/GameTimer.Protocol.Tests/GameTimer.Protocol.Tests.csproj -c Release
 
-      - name: Build the C# interop peer and test agent
+      - name: Build the C# interop peer, test agent and relay
         run: |
           dotnet build tests/interop/NoisePeer/NoisePeer.csproj -c Release -o "$RUNNER_TEMP/peer"
           dotnet build tests/interop/TestAgent/TestAgent.csproj -c Release -o "$RUNNER_TEMP/agent"
+          dotnet build src/GameTimer.Relay/GameTimer.Relay.csproj -c Release -o "$RUNNER_TEMP/relay"
 
       - name: Kotlin vectors + behaviour + live interop tests (Noise peer, hub client vs C# agent)
-        run: ./gradlew :shared:jvmTest :shared:compileAndroidMain -PcsharpPeer="$RUNNER_TEMP/peer/NoisePeer.dll" -PcsharpAgent="$RUNNER_TEMP/agent/TestAgent.dll"
+        run: ./gradlew :shared:jvmTest :shared:compileAndroidMain -PcsharpPeer="$RUNNER_TEMP/peer/NoisePeer.dll" -PcsharpAgent="$RUNNER_TEMP/agent/TestAgent.dll" -PcsharpRelay="$RUNNER_TEMP/relay/GameTimer.Relay.dll"
 
       - name: Publish gt-testhub (scripted parent app for testing on a real PC)
         run: dotnet publish tools/GameTimer.TestHub/GameTimer.TestHub.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "$RUNNER_TEMP/testhub"
