@@ -5,6 +5,7 @@
     <string name="home_empty">Nog geen pc\'s. Open op de pc Instellingen → Telefoon verbinden en scan de QR-code.</string>
     <string name="add_pc">Pc toevoegen</string>
     <string name="status_online">Online</string>
+    <string name="status_online_relay">Online via internet</string>
     <string name="status_connecting">Verbinden…</string>
     <string name="status_offline">Offline</string>
     <string name="status_refused">Deze telefoon is niet meer aan de pc gekoppeld</string>

@@ -20,6 +20,11 @@ public data class PairedAgent(
     val ak: String,
     /** This hub's role there, as of pairing or the last hello. */
     val role: String,
+    /**
+     * "Control from anywhere" was on as of the last hello / settings from this PC (§10.2): only then does
+     * the hub dial the relay (§10.3). False for an agent without relay support.
+     */
+    val remoteAccess: Boolean = false,
 ) {
     public fun agentKeyBytes(): ByteArray = Base64Url.tryDecode(agentKey) ?: error("bad agent key")
 

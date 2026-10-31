@@ -5,6 +5,7 @@
     <string name="home_empty">Пока нет компьютеров. На ПК откройте Настройки → Подключить телефон и отсканируйте QR-код.</string>
     <string name="add_pc">Добавить ПК</string>
     <string name="status_online">В сети</string>
+    <string name="status_online_relay">В сети через интернет</string>
     <string name="status_connecting">Подключение…</string>
     <string name="status_offline">Не в сети</string>
     <string name="status_refused">Этот телефон больше не подключён к ПК</string>

@@ -177,15 +177,39 @@ public class HubSession private constructor(
             parent: Job? = null,
             host: String = agent.host,
             port: Int = agent.port,
-        ): HubSession {
+        ): HubSession = handshake(connector.connect(host, port, "/v2"), agent, hubKey).confirm(appName, parent)
+
+        /**
+         * The first half of [open] on an already opened [socket] (LAN or relay, §10.3): msg 1 → msg 2 against
+         * the pinned key. Nothing is confirmed yet: the hub sends `ready` only on the path it picks
+         * ([PendingSession.confirm]) and closes the other ([PendingSession.abandon]). Closes [socket] on failure.
+         */
+        public suspend fun handshake(socket: FrameSocket, agent: PairedAgent, hubKey: KeyPair): PendingSession {
             val agentKey = agent.agentKeyBytes()
-            val socket = connector.connect(host, port, "/v2")
             try {
                 val hs = HandshakeState(NoisePattern.IK, true, PROLOGUE, hubKey, agentKey)
                 socket.send(hs.writeMessage(encodeJson(buildJsonObject { put("t", "connect") })))
                 val msg2 = withTimeoutOrNull(10.seconds) { socket.receive() } ?: throw SessionClosedException("not_accepted")
                 try { hs.readMessage(msg2) } catch (e: NoiseException) { throw HubProtocolException("the PC's key doesn't match") }
                 val (send, recv) = hs.split()
+                return PendingSession(socket, send, recv, agentKey)
+            } catch (e: Throwable) {
+                withContext(NonCancellable) { socket.close() }
+                throw e
+            }
+        }
+    }
+
+    /** A handshake that reached msg 2 (the PC's pinned key answered) but isn't confirmed yet (§4.3, §10.3). */
+    public class PendingSession internal constructor(
+        private val socket: FrameSocket,
+        private val send: CipherState,
+        private val recv: CipherState,
+        private val agentKey: ByteArray,
+    ) {
+        /** Sends `ready` and waits for `hello`: the session. Closes the socket on failure. */
+        public suspend fun confirm(appName: String, parent: Job?): HubSession {
+            try {
                 // §4.3: the first transport message must be ready, sent at once
                 socket.sendJson(send, buildJsonObject {
                     put("t", "ready"); put("protocol", PROTOCOL_MAJOR); put("minor", PROTOCOL_MINOR); put("app", appName)
@@ -204,6 +228,11 @@ public class HubSession private constructor(
                 withContext(NonCancellable) { socket.close() }
                 throw e
             }
+        }
+
+        /** The other path won: close without `ready` (an unconfirmed handshake, not a failure, §10.3). */
+        public suspend fun abandon() {
+            withContext(NonCancellable) { socket.close() }
         }
     }
 }

@@ -87,5 +87,10 @@ tasks.withType<Test>().configureEach {
         systemProperty("csharpAgent", agent)
         inputs.dir(file(agent).parentFile).withPropertyName("csharpAgentDir").withPathSensitivity(PathSensitivity.RELATIVE)
     }
+    // … and through the real relay (§10): -PcsharpRelay=<path to GameTimer.Relay.dll>
+    providers.gradleProperty("csharpRelay").orNull?.let { relay ->
+        systemProperty("csharpRelay", relay)
+        inputs.dir(file(relay).parentFile).withPropertyName("csharpRelayDir").withPathSensitivity(PathSensitivity.RELATIVE)
+    }
     testLogging { events("passed", "failed", "skipped") }
 }

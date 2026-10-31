@@ -92,6 +92,15 @@ class HubStore(context: Context) {
         write(list.map { if (it.agentId == agentId) it.copy(host = host, port = port) else it })
     }
 
+    /** The PC's "Control from anywhere" changed (protocol §10). Blocking file write: call off the main thread. */
+    @Synchronized
+    fun updateRemoteAccess(agentId: String, on: Boolean) {
+        val list = _agents.value
+        val old = list.firstOrNull { it.agentId == agentId } ?: return
+        if (old.remoteAccess == on) return
+        write(list.map { if (it.agentId == agentId) it.copy(remoteAccess = on) else it })
+    }
+
     /** Blocking file write: call off the main thread. */
     @Synchronized
     fun remove(agentId: String) = write(_agents.value.filter { it.agentId != agentId })

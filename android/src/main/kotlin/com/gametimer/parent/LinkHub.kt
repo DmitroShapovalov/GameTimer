@@ -7,6 +7,7 @@ import com.gametimer.protocol.hub.ApiResult
 import com.gametimer.protocol.hub.KtorConnector
 import com.gametimer.protocol.hub.LinkStatus
 import com.gametimer.protocol.hub.PairedAgent
+import com.gametimer.protocol.hub.RelayPath
 import com.gametimer.protocol.noise.KeyPair
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +62,9 @@ class LinkHub(private val context: Context, private val store: HubStore) {
 
     private var uiVisible = false
     private var monitoring = false
-    private var onLan = true
+    @Volatile private var onLan = true
+    /** The relay may be used: on screen, or less than 5 s since it left (a rotation). */
+    @Volatile private var relayAllowed = false
     private var active = false
     private val activeChanges = Channel<Boolean>(Channel.CONFLATED) // latest wins (rotation = stop + start)
 
@@ -77,8 +80,30 @@ class LinkHub(private val context: Context, private val store: HubStore) {
 
     fun setUiVisible(value: Boolean) {
         uiVisible = value
+        if (value) relayAllowed = true
         updateActive()
+        // In the background only the home network is used (notifications away from home come with B5):
+        // a session through the relay ends a few seconds after the app left the screen (not on a rotation);
+        // back on screen, links that aren't online try the relay at once
+        relayPolicyJob?.cancel()
+        relayPolicyJob = if (value) {
+            links.values.forEach { it.relayPolicyChanged() }
+            null
+        } else {
+            scope.launch {
+                kotlinx.coroutines.delay(5_000)
+                if (!uiVisible) {
+                    relayAllowed = false
+                    links.values.forEach { it.relayPolicyChanged() }
+                }
+            }
+        }
     }
+
+    private var relayPolicyJob: Job? = null
+
+    /** Store writes one at a time, in order (an old value must never overwrite a newer one). */
+    private val storeWriter = Dispatchers.IO.limitedParallelism(1)
 
     fun setMonitoring(value: Boolean) {
         monitoring = value
@@ -126,9 +151,15 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         val key = hubKey ?: return null
         val onMoved: (PairedAgent) -> Unit = { moved ->
             // The PC answered with its pinned key at a new address (§9): remember it, unless it was removed meanwhile
-            scope.launch(Dispatchers.IO) { store.updateAddress(moved.agentId, moved.host, moved.port) }
+            scope.launch(storeWriter) { store.updateAddress(moved.agentId, moved.host, moved.port) }
         }
-        return AgentLink(agent, key, connector, appName, scope, locator, onMoved).also {
+        // Away from home (protocol §10): LAN first, the relay after ~2 s or at once off Wi-Fi, while the PC
+        // has "Control from anywhere" on (learned from its hello and stored with the PC)
+        val relay = RelayPath(RelayPath.DEFAULT_URL, connector, onLocalNetwork = { onLan }, allowed = { relayAllowed })
+        val onRemoteAccess: (Boolean) -> Unit = { on ->
+            scope.launch(storeWriter) { store.updateRemoteAccess(agentId, on) }
+        }
+        return AgentLink(agent, key, connector, appName, scope, locator, relay, onRemoteAccess, onMoved).also {
             links[agentId] = it
             watch(agent, it)
             if (active) it.start()

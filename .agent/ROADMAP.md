@@ -69,8 +69,8 @@ peer-to-peer WebRTC (needs a TURN relay anyway), UnifiedPush (too complex to set
 |---|---|---|---|
 | B1 | **Spec + route tokens**: §10 normative (agent framing, hub endpoint, limits, keepalive, what the relay sees); route claims / routes in C# and Kotlin with Python vectors | Both pass the vectors in CI | ✓ (PR #33) |
 | B2 | **Relay service** `src/GameTimer.Relay` (ASP.NET Core, no storage): agent + hub endpoints, in-memory token registry, stream joining, all limits; deployed to Fly.io | Tests cover joining, unknown tokens, limits, idle close; a test relay runs on Fly.io | ✓ (PR #34; live at gametimer-relay.fly.dev, checked end to end) |
-| B3 | **PC side**: `RelayClient` + `RelayFrameTransport` into `AgentHost`; admission limits per token; "Control from anywhere" setting (Windows Hello), `remoteAccess` in settings | `gt-testhub` controls the real PC through the test relay | in review |
-| B4 | **Phone side**: relay connector in `shared` (LAN first, relay after ~2 s or off Wi-Fi), "via internet" status in the app | CI interop test runs Kotlin ↔ C# through a real relay process; the owner's phone controls the PC over mobile data | ☐ |
+| B3 | **PC side**: `RelayClient` + `RelayFrameTransport` into `AgentHost`; admission limits per token; "Control from anywhere" setting (Windows Hello), `remoteAccess` in settings | `gt-testhub` controls the real PC through the test relay | ✓ (PR #35) |
+| B4 | **Phone side**: relay connector in `shared` (LAN first, relay after ~2 s or off Wi-Fi), "via internet" status in the app | CI interop test runs Kotlin ↔ C# through a real relay process; the owner's phone controls the PC over mobile data | in review |
 | B5 | **Notifications away from home** via FCM: wake-up frame, relay sends the push, the phone connects and catches up history | "Time's up" arrives within a minute on mobile data | ☐ |
 | B6 | **Acceptance + release**: privacy note, README, production relay, real-device checklist | v1.8.0 tagged | ☐ |
 

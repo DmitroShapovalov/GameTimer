@@ -120,12 +120,17 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            noise/ (mirrors the C# classes 1:1, libsodium via ionspin), encodings/, identity/,
                            hub/ = the parent-app side: PairingLink (QR), pair(), HubSession (IK + ready + hello,
                            requests, events, ping), AgentLink (reconnect, latest state, resend with the same rid,
-                           Locator search by discovery tag after a failed connect), DiscoveryTxt,
+                           Locator search by discovery tag after a failed connect; with a RelayPath, §10.3: LAN
+                           first, the relay after 2 s / at once off Wi-Fi / as soon as the LAN failed, only while
+                           PairedAgent.remoteAccess (from hello / ev.settings, off on bye remote_off); the first
+                           handshake to finish gets ready (HubSession.handshake → PendingSession.confirm), the
+                           other is abandoned; LinkStatus.Online.viaRelay), DiscoveryTxt,
                            KtorConnector (WebSocket: OkHttp on Android/JVM, Darwin on iOS),
                            Models + AgentApi (typed §7.2 calls; writes send ifRev, conflicts return the current value)
 android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, applicationId com.gametimer.parent):
   HubStore.kt              hub key (AES-GCM wrapped by an Android Keystore key) + paired PCs, in noBackupFilesDir
-  LinkHub.kt               App-wide: the hub key, one AgentLink per PC (connected while the UI is visible or
+  LinkHub.kt               App-wide: the hub key, one AgentLink per PC (with the relay path, RelayPath.DEFAULT_URL;
+                           remoteAccess stored per PC by HubStore.updateRemoteAccess) (connected while the UI is visible or
                            MonitorService runs), the "new parent app added" queue (peer list compared per PC),
                            events → Notifier
   Notifier.kt              NotifySettings (background + 4 categories) and system notifications: history caught

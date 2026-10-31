@@ -245,7 +245,7 @@ private fun StatusDot(status: LinkStatus) {
 @Composable
 private fun statusText(status: LinkStatus): String = stringResource(
     when (status) {
-        is LinkStatus.Online -> R.string.status_online
+        is LinkStatus.Online -> if (status.viaRelay) R.string.status_online_relay else R.string.status_online
         LinkStatus.Connecting -> R.string.status_connecting
         is LinkStatus.Offline -> when (status.reason) {
             OfflineReason.Refused -> R.string.status_refused

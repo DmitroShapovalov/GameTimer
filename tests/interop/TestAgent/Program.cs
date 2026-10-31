@@ -3,11 +3,13 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using GameTimer.Protocol.Agent;
+using GameTimer.Protocol.Relay;
 
 // A scriptable agent for the Kotlin hub tests: the production AgentHost behind a real WebSocket, wired
 // like the Windows app's RemoteServer.V2. Output lines: "PORT <n>", "LINK <url>", "ASK <name>",
 // "ABORTED <reason>", "PAIRED <hub id>", "OK". Input lines: "pair", "code <digits>", "cancel",
-// "revoke <hub id>", "alert <minutes>", "quit".
+// "revoke <hub id>", "alert <minutes>", "relay <ws://host:port>" (Control from anywhere on, RelayClient
+// connected → "RELAY Connected"), "relayoff" (bye remote_off to relayed sessions, client stopped), "quit".
 // With --emulator: listens on all interfaces and adds test-only HTTP control endpoints for the Android
 // instrumented test in CI (the emulator reaches the host as 10.0.2.2): GET /control/pair → link,
 // GET /control/code?c=<digits> → the "owner" types that code.
@@ -39,6 +41,7 @@ port = new Uri(app.Urls.First().Replace("0.0.0.0", "127.0.0.1").Replace("[::]", 
 Out("PORT " + port);
 if (emulator) { await Task.Delay(Timeout.Infinite); return 0; } // no stdin in CI
 
+RelayClient? relay = null;
 string? line;
 while ((line = Console.ReadLine()) != null)
 {
@@ -53,7 +56,20 @@ while ((line = Console.ReadLine()) != null)
         case "cancel": ui.Answer(null); break;
         case "revoke": Out(host.RevokeByOwner(parts[1]) ? "OK" : "NOTFOUND"); break;
         case "alert": host.Publish("ev.alert", new JsonObject { ["minutes"] = int.Parse(parts[1]) }); Out("OK"); break;
-        case "quit": await host.ShutdownAsync(); await app.StopAsync(); return 0;
+        case "relay":
+            host.RemoteAccess = true;
+            relay = new RelayClient(host, new Uri(parts[1].TrimEnd('/') + "/v2/agent"));
+            relay.StatusChanged += s => Out("RELAY " + s);
+            relay.Start();
+            break;
+        case "relayoff":
+            host.RemoteAccess = false;
+            await host.EndRelaySessionsAsync();
+            if (relay != null) await relay.StopAsync();
+            relay = null;
+            Out("OK");
+            break;
+        case "quit": await host.ShutdownAsync(); if (relay != null) await relay.StopAsync(); await app.StopAsync(); return 0;
     }
 }
 return 0;
