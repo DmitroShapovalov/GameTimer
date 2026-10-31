@@ -62,6 +62,15 @@ public class AppSettings
     public int RemotePort { get; set; } = 5123;
 
     /// <summary>
+    /// "Control from anywhere" (protocol §10): the PC is also reachable through the relay. Off by default,
+    /// turned on by the owner behind Windows Hello; only works while phone control is on.
+    /// </summary>
+    public bool RemoteAccess { get; set; } = false;
+
+    /// <summary>The relay's agent endpoint (wss://…/v2/agent); empty = the built-in one. Not in the UI.</summary>
+    public string? RelayUrl { get; set; }
+
+    /// <summary>
     /// Protocol v2 agent id last seen at startup (protected settings.json). If remote-v2.json is lost or
     /// replaced, the id changes: logged as tampering, because every parent app then has to pair again.
     /// </summary>

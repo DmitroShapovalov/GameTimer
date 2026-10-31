@@ -485,4 +485,19 @@
   <data name="Sched_St_Skipped" xml:space="preserve">
     <value>Розклад сьогодні не діє (знято батьками). Знову діятиме опівночі або коли закінчиться новий таймер.</value>
   </data>
+  <data name="RemoteAccess_Toggle" xml:space="preserve">
+    <value>Керування поза домом (через інтернет)</value>
+  </data>
+  <data name="RemoteAccess_Hint" xml:space="preserve">
+    <value>Телефони батьків зможуть керувати цим ПК і поза домом, через relay-сервер GameTimer. Усе залишається наскрізно зашифрованим: сервер не може нічого прочитати чи змінити.</value>
+  </data>
+  <data name="RemoteAccess_Connected" xml:space="preserve">
+    <value>Підключено: цей ПК доступний звідусіль</value>
+  </data>
+  <data name="RemoteAccess_Connecting" xml:space="preserve">
+    <value>Підключення до relay…</value>
+  </data>
+  <data name="RemoteAccess_Waiting" xml:space="preserve">
+    <value>Працює, коли ввімкнено керування з телефона й прив’язано застосунок батьків.</value>
+  </data>
 </root>

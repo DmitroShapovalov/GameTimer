@@ -485,4 +485,19 @@
   <data name="Sched_St_Skipped" xml:space="preserve">
     <value>The schedule is off for today (lifted by a parent). It applies again at midnight, or when a new timer runs out.</value>
   </data>
+  <data name="RemoteAccess_Toggle" xml:space="preserve">
+    <value>Control from anywhere (through the internet)</value>
+  </data>
+  <data name="RemoteAccess_Hint" xml:space="preserve">
+    <value>Parents' phones can also reach this PC away from home, through the GameTimer relay. Everything stays end-to-end encrypted: the relay can't read or change it.</value>
+  </data>
+  <data name="RemoteAccess_Connected" xml:space="preserve">
+    <value>Connected: this PC can be reached from anywhere</value>
+  </data>
+  <data name="RemoteAccess_Connecting" xml:space="preserve">
+    <value>Connecting to the relay…</value>
+  </data>
+  <data name="RemoteAccess_Waiting" xml:space="preserve">
+    <value>Works while phone control is on and a parent app is paired.</value>
+  </data>
 </root>

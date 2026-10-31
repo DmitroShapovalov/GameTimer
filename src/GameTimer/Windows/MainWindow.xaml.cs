@@ -75,6 +75,7 @@ public partial class MainWindow : FluentWindow
         _pairingUi = pairingUi;
         _pairingUi.AskForCode = AskPairingCodeAsync;
         _remote.Agent.PeersChanged += () => Dispatcher.BeginInvoke(RefreshDevicesList);
+        _remote.RelayStatusChanged += () => Dispatcher.BeginInvoke(UpdateRemoteStatus);
         _settingsService.SettingsChanged += OnSettingsChanged;
 
         LoadSettingsToUI();
@@ -159,6 +160,7 @@ public partial class MainWindow : FluentWindow
         ActionLogoff.Content = Loc.Get("Action_Logoff");
         PhoneControlLabel.Text = Loc.Get("PhoneControl");
         RemoteToggle.Content = Loc.Get("Remote_Toggle");
+        RemoteAccessToggle.Content = Loc.Get("RemoteAccess_Toggle");
         ConnectPhoneButton.Content = Loc.Get("ConnectPhone");
         TamperLabel.Text = Loc.Get("Tamper_Label");
         TamperToggle.Content = Loc.Get("Tamper_Toggle");
@@ -264,6 +266,7 @@ public partial class MainWindow : FluentWindow
 
         // Settings tab - phone control
         RemoteToggle.IsChecked = _settings.RemoteEnabled;
+        RemoteAccessToggle.IsChecked = _settings.RemoteAccess;
 
         // Schedule tab
         BuildScheduleRows();
@@ -1130,6 +1133,34 @@ public partial class MainWindow : FluentWindow
         }
     }
 
+    // "Control from anywhere" (protocol §10): Windows Hello both ways — on opens the PC to the internet
+    // (through the relay), off would let the child cut a parent who is away from home
+    private async void RemoteAccessToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading || _isRemoteBusy) return;
+
+        bool enable = RemoteAccessToggle.IsChecked == true;
+        if (enable == _settings.RemoteAccess) return;
+
+        _isRemoteBusy = true; // reverting IsChecked below re-enters this handler
+        RemoteAccessToggle.IsEnabled = false;
+        try
+        {
+            if (!await RequireAuth())
+            {
+                RemoteAccessToggle.IsChecked = _settings.RemoteAccess;
+                return;
+            }
+            await _remote.SetRemoteAccessAsync(enable);
+        }
+        finally
+        {
+            _isRemoteBusy = false;
+            RemoteAccessToggle.IsEnabled = true;
+            UpdateRemoteStatus();
+        }
+    }
+
     private async Task StartRemoteOnLaunchAsync()
     {
         // On failure (e.g. port busy) the setting stays on, so the next launch tries again
@@ -1246,6 +1277,14 @@ public partial class MainWindow : FluentWindow
             RemoteStatusText.Text = string.Format(Loc.Get("Remote_StartFailed"), _settings.RemotePort, _remote.LastError);
         else
             RemoteStatusText.Text = Loc.Get("Remote_Off");
+
+        RemoteAccessText.Text = !_settings.RemoteAccess ? Loc.Get("RemoteAccess_Hint")
+            : _remote.RelayStatus switch
+            {
+                GameTimer.Protocol.Relay.RelayStatus.Connected => Loc.Get("RemoteAccess_Connected"),
+                GameTimer.Protocol.Relay.RelayStatus.Connecting => Loc.Get("RemoteAccess_Connecting"),
+                _ => Loc.Get("RemoteAccess_Waiting"),
+            };
     }
 
     #endregion

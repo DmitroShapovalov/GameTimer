@@ -327,6 +327,12 @@
                         <ui:Button x:Name="ConnectPhoneButton" Content="Connect phone" Click="ConnectPhone_Click"
                                    IsEnabled="False"/>
 
+                        <ui:ToggleSwitch x:Name="RemoteAccessToggle" Content="Control from anywhere (through the internet)"
+                                         Margin="0,16,0,0"
+                                         Checked="RemoteAccessToggle_Changed" Unchecked="RemoteAccessToggle_Changed"/>
+                        <TextBlock x:Name="RemoteAccessText" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,8"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+
                         <TextBlock x:Name="PairedDevicesLabel" Text="Paired phones" Style="{StaticResource SectionLabel}"/>
                         <TextBlock x:Name="NoDevicesText" Text="No phones connected yet" FontSize="12"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>

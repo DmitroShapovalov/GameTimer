@@ -190,6 +190,7 @@ public sealed partial class RemoteServer
             Port = port;
             StartDiscovery(port);
             LastError = null;
+            _ = UpdateRelayAsync();
             return true;
         }
         catch (Exception ex)
@@ -207,9 +208,11 @@ public sealed partial class RemoteServer
         if (app == null) return;
 
         try { await StopDiscoveryAsync(); } catch { /* best effort: the goodbye */ }
+        var relay = _relay;
         try { await Agent.ShutdownAsync(); } catch { /* best effort: bye shutdown to the parent apps */ }
         Agent.CancelPairing();
         _app = null;
+        if (relay != null) await UpdateRelayAsync(); // after the bye: relayed sessions got it too
         Port = null;
         _pairing.Cancel();
         UnsubscribeEvents();

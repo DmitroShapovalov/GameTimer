@@ -51,12 +51,17 @@ public sealed partial class AgentHost
         Peer peer;
         int hubMinor;
 
+        bool relayed = ticket.RelayHubId != null;
         using (var timeout = new CancellationTokenSource(HandshakeTimeout, _time))
-        using (var hsCancel = CancellationTokenSource.CreateLinkedTokenSource(cancel, timeout.Token))
+        using (var hsCancel = CancellationTokenSource.CreateLinkedTokenSource(cancel, timeout.Token, ticket.Evicted))
         {
             try
             {
-                var msg1 = await transport.ReceiveAsync(hsCancel.Token).ConfigureAwait(false);
+                byte[]? msg1;
+                // §10.4: a relayed stream brings msg 1 at once, or gives its slot back early
+                using (var msg1Timeout = new CancellationTokenSource(relayed ? RelayFirstMessageTimeout : HandshakeTimeout, _time))
+                using (var msg1Cancel = CancellationTokenSource.CreateLinkedTokenSource(hsCancel.Token, msg1Timeout.Token))
+                    msg1 = await transport.ReceiveAsync(msg1Cancel.Token).ConfigureAwait(false);
                 if (msg1 == null) return;
 
                 var hs = new HandshakeState(NoisePattern.IK, initiator: false, Prologue, _key);
@@ -69,6 +74,8 @@ public sealed partial class AgentHost
                 // is always refused here, so on /v2 it only counts; it gates /v2/pair.
                 var known = FindPeerByKey(hs.RemoteStaticPublicKey!);
                 if (known == null || !IsBareMessage(payload, "connect")) { RecordFailure(ip); return; }
+                // §10.4: a relayed stream is only for the hub whose route it was opened with
+                if (relayed && known.Id != ticket.RelayHubId) { RecordFailure(ip); return; }
 
                 await transport.SendAsync(hs.WriteMessage(ReadOnlySpan<byte>.Empty), hsCancel.Token).ConfigureAwait(false);
                 (send, recv) = hs.Split();
@@ -93,7 +100,7 @@ public sealed partial class AgentHost
 
         // Confirmed. From here on failures are answered with bye (§3).
         ticket.Dispose();
-        var session = new Session(this, transport, send, peer, _time);
+        var session = new Session(this, transport, send, peer, _time) { Relayed = relayed };
         var registered = Register(session);
         if (registered != null)
         {
@@ -114,7 +121,7 @@ public sealed partial class AgentHost
                 return;
             }
             session.SendHello(hello);
-            RaiseSessionStarted(ip);
+            if (!relayed) RaiseSessionStarted(ip); // a relayed session says nothing about this network (§9)
             await ReceiveLoopAsync(session, transport, recv, cancel).ConfigureAwait(false);
         }
         finally
@@ -154,6 +161,7 @@ public sealed partial class AgentHost
             ["agent"] = AgentJson(),
             ["you"] = new JsonObject { ["id"] = session.HubId, ["role"] = RoleName(session.Role) },
             ["capabilities"] = caps,
+            ["remoteAccess"] = RemoteAccess, // §6 / §10.2: the hub dials the relay only while this is on
             ["ak"] = ak,
             ["state"] = await _backend.GetStateAsync().ConfigureAwait(false),
         };
@@ -291,6 +299,8 @@ public sealed partial class AgentHost
 
         public string HubId { get; }
         public string HubName { get; }
+        /// <summary>The session came through the relay (§10): ended when "Control from anywhere" is turned off.</summary>
+        public bool Relayed { get; init; }
         private volatile PeerRole _role;
         public PeerRole Role { get => _role; set => _role = value; }
         public DateTimeOffset StartedAt { get; }
