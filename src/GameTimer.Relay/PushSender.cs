@@ -176,8 +176,8 @@ internal sealed class FcmSender : IPushSender, IHostedService, IDisposable
             await SendAsync(token, cancel, retry: false);
             return;
         }
-        // 404 UNREGISTERED / 400 INVALID_ARGUMENT: the token is gone or wasn't one; don't try it again
-        if (status is 404 or 400) MarkDead(token);
+        // 404 UNREGISTERED: the token is gone; don't try it again (a 400 may be our own message's fault)
+        if (status == 404) MarkDead(token);
         throw new HttpRequestException($"FCM answered {status}");
     }
 

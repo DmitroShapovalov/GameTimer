@@ -459,6 +459,26 @@ public class RelayTests
     }
 
     [Fact]
+    public async Task A_young_socket_or_a_busy_ip_wakes_nobody()
+    {
+        await using var f = await StartAsync(o => { o.WakeAfterConnected = TimeSpan.FromHours(1); });
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1);
+        var id = Guid.NewGuid().ToString("N");
+        await SendAsync(agent, WakeFrame("tokY-" + id)); // connected just now: an agent that churns sockets
+        await SendAsync(agent, new byte[] { 0x05 });
+        await NextFrameAsync(agent, 0x06);
+        Assert.DoesNotContain(Push.Tokens, t => t.EndsWith(id, StringComparison.Ordinal));
+
+        await using var g = await StartAsync(o => { o.WakesPerIpPerMinute = 2; o.AgentSocketsPerIp = 10; });
+        var sockets = new[] { await g.AgentAsync("10.9.0.1"), await g.AgentAsync("10.9.0.1") };
+        for (int i = 0; i < 2; i++) await g.RegisterAsync(sockets[i], i + 1);
+        for (int i = 0; i < 4; i++) await SendAsync(sockets[i % 2], WakeFrame($"tokI{i}-" + id));
+        foreach (var s in sockets) { await SendAsync(s, new byte[] { 0x05 }); await NextFrameAsync(s, 0x06); }
+        Assert.Equal(2, Push.Tokens.Count(t => t.EndsWith(id, StringComparison.Ordinal) && t.StartsWith("tokI", StringComparison.Ordinal))); // per IP, across sockets
+    }
+
+    [Fact]
     public async Task One_token_is_woken_once_per_interval_across_sockets()
     {
         await using var f = await StartAsync();

@@ -367,11 +367,21 @@ public sealed partial class AgentHost : IDisposable
         }
     }
 
+    /// <summary>Now by this host's clock (the time a held-back wake-up's event happened, for <see cref="StillToWake"/>).</summary>
+    public DateTimeOffset Now => _time.GetUtcNow();
+
     /// <summary>
-    /// For a wake-up that was held back (one per 30 s): is this token still one to wake — its hub still has
-    /// no live session? A hub that connected meanwhile has caught up already (§10.6).
+    /// For a wake-up that was held back (one per 30 s): is this token still one to wake — its hub has no live
+    /// session and none started since <paramref name="lastEventAt"/>? A hub that connected after the event
+    /// has caught it up already (§10.6).
     /// </summary>
-    public bool StillToWake(string pushToken) => RemoteAccess && PushTokensToWake(null, null).Contains(pushToken);
+    public bool StillToWake(string pushToken, DateTimeOffset lastEventAt)
+    {
+        if (!RemoteAccess || !PushTokensToWake(null, null).Contains(pushToken)) return false;
+        lock (_lock)
+            return _state.Peers.FirstOrDefault(p => p.PushToken == pushToken) is { } peer
+                   && (peer.LastSeen == null || peer.LastSeen < lastEventAt);
+    }
 
     /// <summary>Says <c>bye shutdown</c> to every session (app exit or update).</summary>
     public async Task ShutdownAsync()

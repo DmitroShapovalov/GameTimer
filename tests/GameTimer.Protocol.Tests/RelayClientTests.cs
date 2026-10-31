@@ -65,7 +65,7 @@ public class RelayClientTests
         RelayApp.ConfigureServices(builder);
         var push = new RecordingPush();
         builder.Services.AddSingleton<IPushSender>(push);
-        builder.Services.PostConfigure<RelayOptions>(o => o.ClientIpHeader = IpHeader);
+        builder.Services.PostConfigure<RelayOptions>(o => { o.ClientIpHeader = IpHeader; o.WakeAfterConnected = TimeSpan.Zero; o.WakeSameTokenEvery = TimeSpan.FromMilliseconds(100); });
         var app = builder.Build();
         RelayApp.Map(app);
         await app.StartAsync();
@@ -336,6 +336,57 @@ public class RelayClientTests
 
         await a.RequestAsync("push.set", new JsonObject { ["token"] = null }, withRid: true);
         Assert.Null(rig.Agent.Store.State!.Peers.Single(p => p.Name == "A").PushToken);
+    }
+
+    [Fact]
+    public async Task A_held_back_wake_up_is_sent_only_if_the_hub_did_not_connect_since()
+    {
+        var saved = RelayClient.WakeEvery;
+        RelayClient.WakeEvery = TimeSpan.FromSeconds(1.5);
+        try
+        {
+            await using var rig = await StartAsync();
+            var (keyB, _) = await rig.Agent.PairAsync("B");
+            rig.Client.Start();
+            for (int i = 0; i < 100 && rig.Client.Status != RelayStatus.Connected; i++) await Task.Delay(20);
+            var (b, _) = await TestHub.ConnectAsync(rig.Agent.Host, keyB);
+            await b.RequestAsync("push.set", new JsonObject { ["token"] = "token-B" }, withRid: true);
+            await b.End.CloseAsync();
+            for (int i = 0; i < 100 && rig.Agent.Host.LiveSessionCount > 0; i++) await Task.Delay(20);
+            JsonObject Stopped() => new() { ["event"] = new JsonObject { ["type"] = "stopped", ["source"] = "pc" } };
+
+            rig.Agent.Host.Publish("ev.history", Stopped()); // wakes at once
+            rig.Agent.Host.Publish("ev.history", Stopped()); // held back
+            await Task.Delay(200);
+            Assert.Single(rig.Push.Tokens);
+            // The phone connects (caught up both) and goes again before the window ends: no trailing wake-up
+            var (b2, _) = await TestHub.ConnectAsync(rig.Agent.Host, keyB);
+            await b2.End.CloseAsync();
+            await Task.Delay(2_500);
+            Assert.Single(rig.Push.Tokens);
+            // Another event held back with no session since: the trailing wake-up goes out
+            rig.Agent.Host.Publish("ev.history", Stopped()); // window over: at once
+            rig.Agent.Host.Publish("ev.history", Stopped()); // held back
+            for (int i = 0; i < 200 && rig.Push.Tokens.Count < 3; i++) await Task.Delay(20);
+            Assert.Equal(3, rig.Push.Tokens.Count);
+        }
+        finally { RelayClient.WakeEvery = saved; }
+    }
+
+    [Fact]
+    public async Task A_new_parent_app_wakes_the_others()
+    {
+        await using var rig = await StartAsync();
+        var (keyB, _) = await rig.Agent.PairAsync("B");
+        rig.Client.Start();
+        for (int i = 0; i < 100 && rig.Client.Status != RelayStatus.Connected; i++) await Task.Delay(20);
+        var (b, _) = await TestHub.ConnectAsync(rig.Agent.Host, keyB);
+        await b.RequestAsync("push.set", new JsonObject { ["token"] = "token-B", ["events"] = new JsonArray("peerAdded") }, withRid: true);
+        await b.End.CloseAsync();
+        for (int i = 0; i < 100 && rig.Agent.Host.LiveSessionCount > 0; i++) await Task.Delay(20);
+        await rig.Agent.PairAsync("Child's phone?");
+        for (int i = 0; i < 100 && rig.Push.Tokens.Count == 0; i++) await Task.Delay(20);
+        Assert.Equal(new[] { "token-B" }, rig.Push.Tokens);
     }
 
     [Fact]

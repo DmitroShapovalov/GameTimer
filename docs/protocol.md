@@ -616,11 +616,14 @@ like after any reconnect (§12), so it shows the same notifications it would at 
   `closed`, `tampered` — and on a new parent app (`peerAdded`); for each such hub with a token and **no
   live session**, never the hub that caused the event. `ev.alert` wakes nobody (it isn't in the
   history, so a woken phone couldn't show it). At most one wake-up per token every 30 s; events in
-  between give one trailing wake-up, dropped if the hub connected meanwhile.
-- **Relay.** `wake` (§10.2) is accepted only from a socket that registered claims, and passed to the
+  between give one trailing wake-up, dropped if the hub connected after the last of them. A hub
+  whose session is just closing when an event happens counts as connected (it catches up on its next
+  connect).
+- **Relay.** `wake` (§10.2) is accepted only from a socket that registered claims and has been
+  connected for at least a minute (agents stay connected; abusers churn sockets), and passed to the
   push service as a data message `{ "t": "wake" }`, high priority, 10 minutes to live, one collapse key.
-  At most 20 per agent socket and 30 per IP (4× per /24 or /48) per minute, and one per token every
-  20 s across the relay; over that, or without a push account, it is dropped silently. Tokens the push
+  At most 20 per agent socket, 30 per IP (4× per /24 or /48) and 600 in total per minute, and one per
+  token every 20 s across the relay; over that, or without a push account, it is dropped silently. Tokens the push
   service rejects as unknown are not tried again. The relay keeps no token after the call (only short-
   lived hashes for the limits) and doesn't log it.
 - **Phone.** On a wake-up it runs a short foreground service: connects to its PCs (LAN or relay,

@@ -28,7 +28,7 @@ public sealed class RelayClient : IAsyncDisposable
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan StableAfter = TimeSpan.FromSeconds(60);
     /// <summary>§10.6: one wake-up per phone in this time; events in between are sent as one trailing wake-up.</summary>
-    internal static readonly TimeSpan WakeEvery = TimeSpan.FromSeconds(30);
+    internal static TimeSpan WakeEvery { get; set; } = TimeSpan.FromSeconds(30); // settable for tests
     /// <summary>A send the relay doesn't take in this time means a stuck socket: it is aborted and reconnected.</summary>
     internal static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(10);
     /// <summary>Streams on one relay socket, counted here whatever the relay sends (§10.4): 4 waiting + 16 sessions.</summary>
@@ -183,7 +183,7 @@ public sealed class RelayClient : IAsyncDisposable
         /// <summary>Pongs and closes the receive loop answers with, sent by one task; full → the relay misbehaves.</summary>
         private readonly Channel<byte[]> _control = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(64) { SingleReader = true });
         private int _pongQueued;
-        private readonly Dictionary<string, (long Last, bool Pending)> _wakes = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (long Last, bool Pending, DateTimeOffset EventAt)> _wakes = new(StringComparer.Ordinal);
 
         /// <summary>
         /// §10.6: a wake-up per token at most every <see cref="WakeEvery"/>; one that comes too soon is sent
@@ -192,6 +192,7 @@ public sealed class RelayClient : IAsyncDisposable
         public void Wake(IReadOnlyList<string> tokens)
         {
             var now = Time.GetTimestamp();
+            var eventAt = _c._host.Now;
             var due = new List<string>();
             lock (_wakes)
             {
@@ -199,10 +200,10 @@ public sealed class RelayClient : IAsyncDisposable
                 {
                     if (!_wakes.TryGetValue(t, out var w) || Time.GetElapsedTime(w.Last, now) >= WakeEvery)
                     {
-                        _wakes[t] = (now, false);
+                        _wakes[t] = (now, false, eventAt);
                         due.Add(t);
                     }
-                    else _wakes[t] = (w.Last, true);
+                    else _wakes[t] = (w.Last, true, eventAt);
                 }
             }
             foreach (var t in due) SendSoon(RelayFrames.WakeFrame(t));
@@ -210,19 +211,23 @@ public sealed class RelayClient : IAsyncDisposable
 
         private void SendPendingWakes(long now)
         {
-            var due = new List<string>();
+            var due = new List<(string Token, DateTimeOffset EventAt)>();
             lock (_wakes)
             {
                 foreach (var (t, w) in _wakes.ToList())
                 {
                     var age = Time.GetElapsedTime(w.Last, now);
-                    if (w.Pending && age >= WakeEvery) { _wakes[t] = (now, false); due.Add(t); }
+                    if (w.Pending && age >= WakeEvery) { _wakes[t] = (w.Last, false, w.EventAt); due.Add((t, w.EventAt)); }
                     else if (!w.Pending && age > TimeSpan.FromMinutes(10)) _wakes.Remove(t);
                 }
             }
             // Outside the lock (the host takes its own): a hub that connected meanwhile has caught up already
-            foreach (var t in due)
-                if (_c._host.StillToWake(t)) SendSoon(RelayFrames.WakeFrame(t));
+            foreach (var (t, at) in due)
+            {
+                if (!_c._host.StillToWake(t, at)) continue; // nothing new for it: the window stays as it was
+                lock (_wakes) _wakes[t] = (now, false, at);
+                SendSoon(RelayFrames.WakeFrame(t));
+            }
         }
 
         public Connection(RelayClient client, WebSocket ws)

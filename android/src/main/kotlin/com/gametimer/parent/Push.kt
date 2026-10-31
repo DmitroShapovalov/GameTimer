@@ -79,6 +79,7 @@ class PushService : FirebaseMessagingService() {
 class WakeService : android.app.Service() {
     private val app get() = application as GameTimerApp
     private var running = 0
+    private var lastStartId = 0
 
     override fun onBind(intent: android.content.Intent?): android.os.IBinder? = null
 
@@ -97,8 +98,11 @@ class WakeService : android.app.Service() {
             return START_NOT_STICKY
         }
         running++
+        lastStartId = startId
         app.hub.scope.launch {
-            try { app.hub.wake() } finally { if (--running == 0) stopSelf() }
+            // stopSelfResult(the latest start): a start that arrived meanwhile keeps the service (and its
+            // foreground promise) alive
+            try { app.hub.wake() } finally { if (--running == 0) stopSelfResult(lastStartId) }
         }
         return START_NOT_STICKY
     }

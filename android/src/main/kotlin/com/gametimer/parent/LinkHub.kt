@@ -174,11 +174,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
      */
     private fun wantedPushEvents(): List<String> {
         val s = NotifySettings(context)
-        return buildList {
-            if (s.isOn(NotifySettings.Category.TimeUp)) add("expired")
-            if (s.isOn(NotifySettings.Category.Suspicious)) addAll(listOf("closed", "tampered", "peerAdded"))
-            if (s.isOn(NotifySettings.Category.Others)) addAll(listOf("started", "stopped", "reset", "extended", "scheduleSkipped"))
-        }
+        return NotifySettings.Category.entries.filter { s.isOn(it) }.flatMap { it.wakeEvents }
     }
 
     /** The token or the notification setting changed: tell the PCs that are online now (the others on connect). */

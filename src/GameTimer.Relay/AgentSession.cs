@@ -151,6 +151,7 @@ internal sealed class AgentSession
     {
         if (!_hasClaims) return;
         var now = _s.Time.GetTimestamp();
+        if (_s.Time.GetElapsedTime(_connected, now) < _s.Options.WakeAfterConnected) return;
         while (_wakeTimes.Count > 0 && _s.Time.GetElapsedTime(_wakeTimes.Peek(), now) >= TimeSpan.FromMinutes(1)) _wakeTimes.Dequeue();
         if (_wakeTimes.Count >= _s.Options.WakesPerAgentPerMinute) return;
         if (_wakeLast.TryGetValue(token, out var last) && _s.Time.GetElapsedTime(last, now) < _s.Options.WakeSameTokenEvery) return;
@@ -158,10 +159,14 @@ internal sealed class AgentSession
             foreach (var old in _wakeLast.Where(kv => _s.Time.GetElapsedTime(kv.Value, now) >= _s.Options.WakeSameTokenEvery).Select(kv => kv.Key).ToList())
                 _wakeLast.Remove(old);
         if (_wakeLast.Count >= 64) return;
-        if (!_s.Limits.TryWake(_client) || !_s.TryWakeToken(token)) return;
+        if (!_s.Limits.TryWake(_client) || !_s.TryWakeTotal() || !_s.TryWakeToken(token)) return;
+        if (!_s.Push.TryWake(token))
+        {
+            _s.ForgetWakeToken(token); // not sent (queue full, dead token): the token isn't used up
+            return;
+        }
         _wakeTimes.Enqueue(now);
         _wakeLast[token] = now;
-        _s.Push.TryWake(token);
     }
 
     private void Register(byte[] f)

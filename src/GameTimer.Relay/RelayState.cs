@@ -70,9 +70,32 @@ internal sealed class RelayState
     private readonly Dictionary<string, long> _tokenWakes = new(StringComparer.Ordinal);
     private const int MaxTokenWakes = 20_000;
 
+    private static string TokenKey(string token) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(token)), 0, 16);
+
+    public void ForgetWakeToken(string token)
+    {
+        lock (_tokenWakes) _tokenWakes.Remove(TokenKey(token));
+    }
+
+    private readonly Queue<long> _wakeTotal = new();
+
+    /// <summary>§10.6: all wake-ups through the relay per minute.</summary>
+    public bool TryWakeTotal()
+    {
+        var now = Time.GetTimestamp();
+        lock (_wakeTotal)
+        {
+            while (_wakeTotal.Count > 0 && Time.GetElapsedTime(_wakeTotal.Peek(), now) >= TimeSpan.FromMinutes(1)) _wakeTotal.Dequeue();
+            if (_wakeTotal.Count >= Options.WakesPerMinute) return false;
+            _wakeTotal.Enqueue(now);
+            return true;
+        }
+    }
+
     public bool TryWakeToken(string token)
     {
-        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(token)), 0, 16);
+        var key = TokenKey(token);
         var now = Time.GetTimestamp();
         lock (_tokenWakes)
         {

@@ -37,6 +37,7 @@ internal sealed class RelayFixture : IAsyncDisposable
             o.ClientIpHeader = IpHeader;
             o.Sweep = TimeSpan.FromMilliseconds(50);
             o.CloseEchoWait = TimeSpan.FromSeconds(2);
+            o.WakeAfterConnected = TimeSpan.Zero;
             tweak?.Invoke(o);
         });
         var app = builder.Build();
