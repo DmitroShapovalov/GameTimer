@@ -1,5 +1,5 @@
 {
- "_about": "Protocol v2 encodings and derivations (docs/protocol.md \u00a74.4, \u00a74.5, \u00a78.2), computed independently with Python hashlib/base64 by gen_protocol_vectors.py.",
+ "_about": "Protocol v2 encodings and derivations (docs/protocol.md \u00a74.4, \u00a74.5, \u00a78.2, \u00a79, \u00a710), computed independently with Python hashlib/base64 by gen_protocol_vectors.py.",
  "ids": [
   {
    "publicKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
@@ -51,6 +51,32 @@
    "ak": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
    "date": "2027-01-01",
    "tag": "2Y7KFYQMVJHIY"
+  }
+ ],
+ "routeTokens": [
+  {
+   "ak": "0000000000000000000000000000000000000000000000000000000000000000",
+   "date": "2026-10-24",
+   "bytes": "d1420452f5b34e187be8f80031a2d706",
+   "token": "2FBAIUXVWNHBQ67I7AADDIWXAY"
+  },
+  {
+   "ak": "0000000000000000000000000000000000000000000000000000000000000000",
+   "date": "2027-01-01",
+   "bytes": "f494d8b616ce4a103b03e3bf11d0f24f",
+   "token": "6SKNRNQWZZFBAOYD4O7RDUHSJ4"
+  },
+  {
+   "ak": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "date": "2026-10-24",
+   "bytes": "c6f1366afff7dae0f502e408f17b59d6",
+   "token": "Y3YTM2X767NOB5IC4QEPC62Z2Y"
+  },
+  {
+   "ak": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "date": "2027-01-01",
+   "bytes": "d2b63b633931e857b834a15acec6fa07",
+   "token": "2K3DWYZZGHUFPOBUUFNM5RX2A4"
   }
  ],
  "base32": [

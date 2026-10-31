@@ -53,6 +53,27 @@ Notes:
 - The owner validates behaviour on real devices; code is checked by CI (test vectors, Kotlin ↔ C# interop) and independent reviewer agents; every PR has a plain-language description.
 - No iOS work in Phase A: the iOS app (SwiftUI on the same `shared` core) follows once an Apple developer account and a macOS CI runner are set up.
 
+## Phase B — Control from anywhere (relay) — in progress
+
+**Goal:** the parent controls the PC and gets notifications from anywhere (mobile data, work Wi-Fi), with the same app
+and the same pairing, no setup for the family. Design doc (EN + RU): https://claude.ai/artifact/W6DgQoWdDWSbp6Smjtq6bu ;
+the normative part is `docs/protocol.md` §10.
+
+Decisions (owner, 2026-10-31): hosting on **Fly.io** (`*.fly.dev`, no own domain for now); "Control from anywhere" is
+**off by default** on the PC (turned on behind Windows Hello); notifications away from home via **Firebase push (FCM)**
+(Firebase project `gametimer-9c086`; `google-services.json` and the relay's service-account key are kept outside the
+repo in `D:\Projects\_claude\`, injected by CI / Fly secrets). Rejected: Tailscale / VPN (too much setup for families),
+peer-to-peer WebRTC (needs a TURN relay anyway), UnifiedPush (too complex to set up).
+
+| # | Step | Done when | Status |
+|---|---|---|---|
+| B1 | **Spec + route tokens**: §10 normative (agent framing, hub endpoint, limits, keepalive, what the relay sees); route tokens in C# and Kotlin with Python vectors | Both pass the vectors in CI | in review |
+| B2 | **Relay service** `src/GameTimer.Relay` (ASP.NET Core, no storage): agent + hub endpoints, in-memory token registry, stream joining, all limits; deployed to Fly.io | Tests cover joining, unknown tokens, limits, idle close; a test relay runs on Fly.io | ☐ |
+| B3 | **PC side**: `RelayClient` + `RelayFrameTransport` into `AgentHost`; admission limits per token; "Control from anywhere" setting (Windows Hello), `remoteAccess` in settings | `gt-testhub` controls the real PC through the test relay | ☐ |
+| B4 | **Phone side**: relay connector in `shared` (LAN first, relay after ~2 s or off Wi-Fi), "via internet" status in the app | CI interop test runs Kotlin ↔ C# through a real relay process; the owner's phone controls the PC over mobile data | ☐ |
+| B5 | **Notifications away from home** via FCM: wake-up frame, relay sends the push, the phone connects and catches up history | "Time's up" arrives within a minute on mobile data | ☐ |
+| B6 | **Acceptance + release**: privacy note, README, production relay, real-device checklist | v1.8.0 tagged | ☐ |
+
 ## Phase 1 — Phone remote over home Wi-Fi (released in v1.2.0)
 
 **Goal:** the parent sees the timer and controls it from a phone on the same Wi-Fi. No cloud, no app store: the PC app serves a mobile web UI (PWA) itself.
@@ -167,7 +188,7 @@ certificate can't be issued for a LAN IP.
 - The removed code (TailscaleInfo, QR address choice, wss CSP) is kept as git tree `794ffcd` (`git read-tree` /
   `git checkout 794ffcd -- <path>`) in case it is wanted again.
 
-### 2b. Cloud relay (the real solution for everyone) — ☐ separate project, not started
+### 2b. Cloud relay (the real solution for everyone) — superseded by Phase B above
 One public HTTPS origin (e.g. `https://gametimer.<domain>`) hosts the phone PWA; each PC keeps an outbound
 WebSocket to a relay; the phone talks to its PC through the relay. One URL for all installations, installable,
 works anywhere, no router / firewall / VPN setup.

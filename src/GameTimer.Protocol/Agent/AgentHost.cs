@@ -141,6 +141,31 @@ public sealed partial class AgentHost : IDisposable
         }
     }
 
+    /// <summary>At most this many route tokens on one relay socket (§10.4).</summary>
+    public const int MaxRouteTokens = 64;
+
+    /// <summary>
+    /// The relay route tokens (§10.1) to register around <paramref name="utcToday"/>: yesterday's, today's
+    /// and tomorrow's for each paired hub, newest hub first, so that the phone's date and a PC clock that is
+    /// somewhat off still meet. At most <see cref="MaxRouteTokens"/> (all three of a hub or none of them).
+    /// They change when <see cref="PeersChanged"/> fires and at the UTC date change.
+    /// </summary>
+    public IReadOnlyList<byte[]> RouteTokens(DateOnly utcToday)
+    {
+        lock (_lock)
+        {
+            var tokens = new List<byte[]>();
+            for (int i = _state.Peers.Count - 1; i >= 0 && tokens.Count + 3 <= MaxRouteTokens; i--)
+            {
+                var ak = Base64Url.TryDecode(_state.Peers[i].Ak);
+                if (ak is not { Length: 32 }) continue;
+                for (int d = -1; d <= 1; d++) tokens.Add(RouteToken.DeriveBytes(ak, utcToday.AddDays(d)));
+                CryptographicOperations.ZeroMemory(ak);
+            }
+            return tokens;
+        }
+    }
+
     public const int MaxKnownNetworks = 16;
 
     /// <summary>
@@ -193,7 +218,7 @@ public sealed partial class AgentHost : IDisposable
         return added;
     }
 
-    /// <summary>Today's UTC date by this host's clock (for <see cref="DiscoveryTags"/>).</summary>
+    /// <summary>Today's UTC date by this host's clock (for <see cref="DiscoveryTags"/> and <see cref="RouteTokens"/>).</summary>
     public DateOnly UtcToday => DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
 
     /// <summary>

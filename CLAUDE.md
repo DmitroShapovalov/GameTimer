@@ -94,7 +94,8 @@ docs/ws-selftest.ps1       PowerShell 5.1/7: end-to-end check of pairing, API an
 
 src/GameTimer.Protocol/    Protocol v2 core in C# (net8.0, no WPF), no web server or UI inside:
   Noise/                   IK + IKpsk1 on libsodium (Sodium.Core)
-  Encodings/, Identity/    base32 / base64url, agent and hub ids, the 6-digit pairing code
+  Encodings/, Identity/    base32 / base64url, agent and hub ids, the 6-digit pairing code, discovery tags,
+                           relay route tokens (§10.1)
   Messages/StrictJson.cs   I-JSON parsing (duplicate names, 2^53 integers) → ProtocolViolation
   Agent/AgentHost*.cs      The agent side: admission + limits, /v2 handshake and the ready rule, hello,
                            requests (capabilities, roles, rid cache, §5 ordering via an explicit RequestOrigin),

@@ -291,6 +291,10 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 `peers[]` entries: `id`, `name`, `role`, `pairedAt`, `lastSeen`, `current` (= this is the hub making
 the request).
 
+`settings` from an agent with relay support (Phase B) also carries `remoteAccess` (bool): whether
+"Control from anywhere" (§10.2) is on. It is **read-only**: only the PC owner changes it, on the PC;
+`settings.put` with `remoteAccess` → `bad_request`. Hubs treat a missing field as `false`.
+
 Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `invalid_minutes`,
 `invalid_threshold`, `invalid_alerts`, `invalid_color`, `invalid_language`, `invalid_schedule`) plus
 `bad_request`, `unknown_command`, `unsupported`, `forbidden`, `conflict`, `busy`, `last_admin`, and
@@ -410,17 +414,133 @@ The agent announces `_sysmon._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<tag
   network by a stable id. An observer can count how many hubs are paired; accepted.
 - Discovery only *finds* the PC; trust always comes from the pinned key.
 
-## 10. Relay readiness (Phase B — design sketch, not normative yet)
+## 10. Relay (Phase B)
 
-- The agent dials **out** to the relay over one WebSocket and multiplexes several hubs on it. The
-  relay framing will wrap each Noise message unchanged: `{ type, route token / stream id } + opaque
-  Noise message`. So "one WebSocket message = one Noise message" holds per *stream*, not per socket.
-- **Routing tokens rotate** and are derived from each hub's `ak` with their own label
-  (`"GameTimer route v2"`), like the discovery tag — the relay never sees a stable agent id.
-- Rate limits and the failed-handshake counter apply **per stream / token**, not per IP (every hub has
-  the relay's IP).
-- What the relay still sees (stated in the privacy promise): IP addresses, timing, message sizes, and
-  which tokens talk to each other within a rotation period. Never content, keys or ids.
+A phone that can't reach the PC on the LAN reaches it through a **relay**: the PC keeps one outbound
+WebSocket to the relay, the phone opens a WebSocket to the relay, and the relay joins the two and
+copies bytes it can't read. Everything inside — Noise (§4), `ready`, `hello`, requests, events (§5–§7)
+— is exactly what travels on the LAN. The relay is **not trusted**: trust still comes only from the
+keys pinned at pairing.
+
+```
+  hub ── wss://<relay>/v2/hub/<token> ──► relay ◄── wss://<relay>/v2/agent ── agent
+         one socket = one Noise stream             one socket, many streams (§10.2)
+```
+
+The relay address is built into the app (default `wss://gametimer-relay.fly.dev`); it is a setting,
+so it can move later. Pairing never goes through the relay: `/v2/pair` stays LAN-only (§8.2), since
+the QR is shown on the PC anyway.
+
+### 10.1 Route tokens
+
+Each paired hub has one route token per UTC day, derived from its own `ak` (§4.4) with its own label:
+
+`route = BLAKE2b(outlen = 32, key = ak, input = "GameTimer route v2" ‖ UTC date "YYYY-MM-DD")[0..16)`
+
+- 16 bytes on the agent's socket; **26 base32 characters** (§4.5) in the hub's URL.
+- Only that hub and the agent can compute it; it changes every day, so the relay can't follow a phone
+  or a PC from one day to the next by its token.
+- The agent registers **yesterday's, today's and tomorrow's** token of every paired hub (newest hub
+  first, whole hubs only, at most 64 tokens = 21 hubs). The hub dials with **today's** by its own clock;
+  clocks up to a day apart still meet.
+- Test vectors: `routeTokens` in `tests/vectors/protocol-vectors.json` (independent Python generator).
+
+### 10.2 Agent socket: `wss://<relay>/v2/agent`
+
+One WebSocket per agent. Every message is **binary**; a text message is a protocol error (the relay
+closes the socket with 1003). Each message is one frame: a 1-byte type, then fields in big-endian
+order.
+
+| Type | Name | Direction | Body |
+|---|---|---|---|
+| `0x01` | `register` | agent → relay | 0..64 route tokens, 16 bytes each (body length a multiple of 16). Replaces the agent's whole set. |
+| `0x02` | `open` | relay → agent | `stream` (u32) + the 16-byte token the hub dialled |
+| `0x03` | `data` | both | `stream` (u32) + one Noise message (1..65 535 bytes), unchanged |
+| `0x04` | `close` | both | `stream` (u32) + WebSocket close code (u16) |
+| `0x05` | `ping` | both | 0..8 opaque bytes |
+| `0x06` | `pong` | both | the bytes of the `ping` it answers |
+| `0x07` | — | — | reserved for the push wake-up (step B5) |
+
+**Streams.** The relay picks the stream id: non-zero, unique on that socket, never reused while the
+socket lives. A `data` or `close` for a stream that is unknown or already closed is ignored (it
+crossed a `close` in flight). The agent closes a stream at once if the `open` token isn't one it
+registered.
+
+**Register.** The agent sends `register` right after connecting and again whenever its set changes
+(a hub paired or revoked, the UTC date changed). A token another agent socket already holds moves to
+the newest registration; streams already open stay where they are. A malformed frame (wrong length,
+more than 64 tokens) or an unknown type from the agent → the relay closes the socket with 1002. The
+agent ignores frame types it doesn't know (room for later additions).
+
+**Close codes.** A `close` from the agent becomes the close of the hub's WebSocket with the same code
+when that is a code an endpoint may send (1000, 1001, 1008, 1011, 3000–4999), otherwise 1000. The
+hub's close reaches the agent the same way; a hub socket that just drops is reported as 1001. When the
+agent socket goes away, the relay closes every hub socket of it with 1001.
+
+**Keepalive.** Either side sends `ping` after 30 s without sending anything and closes the socket
+after 90 s without receiving anything. The agent reconnects after a drop with back-off (1 s, doubling
+to 5 min, with jitter) and registers again.
+
+**When the agent connects.** Only while "Control from anywhere" is on (off by default; turned on by
+the PC owner behind Windows Hello) and at least one hub is paired. It is reported to hubs as the
+read-only field `remoteAccess` in `settings` (§7.2), so the parent can see it.
+
+### 10.3 Hub socket: `wss://<relay>/v2/hub/<token>`
+
+No framing: one WebSocket = one stream, and **one binary message = one Noise message**, exactly as on
+`/v2` in the LAN (§3). The relay answers the upgrade with:
+
+| Answer | When |
+|---|---|
+| 101 (joined) | an agent socket has registered `<token>`; the relay sends it `open` |
+| 404 | the token is malformed or not registered — **the same answer as "PC offline"**, nothing more |
+| 403 | the request carries an `Origin` header (browsers are refused, as in §3) |
+| 429 | per-IP limits (§10.4) |
+| 503 | that agent socket already carries its maximum of streams |
+
+A text message from the hub → the relay closes with 1003. The hub's encrypted `ping` every 30 s (§3)
+keeps the stream alive.
+
+**Hub behaviour.** The hub tries the stored LAN address first. If no session is confirmed within
+**~2 s**, or the phone isn't on Wi-Fi / Ethernet, it also dials the relay; the first path whose IK
+handshake with the pinned key completes wins, and the other is closed. On the next reconnect it
+tries the LAN again first.
+
+### 10.4 Limits
+
+**Relay** (it has no state on disk and no database; everything is in memory):
+
+| Limit | Value |
+|---|---|
+| New sockets per IP | 5 / s |
+| Open sockets per IP | 8 hub sockets, 2 agent sockets |
+| Unknown-token dials (404) per IP | 30 / min, then 429 |
+| Streams per agent socket | 16 (the agent's own session limit, §3) |
+| Tokens per agent socket | 64 |
+| Frame size | 5 + 65 535 bytes |
+| Idle stream (no `data` either way) | closed after 120 s with 1001 |
+| Buffered bytes per stream and direction | 256 KiB; beyond that the stream is closed with 1013 |
+
+**Agent.** A relay stream gets the same handshake, `ready` rule, session and `rid` handling as a LAN
+socket on `/v2` (it is one more `IFrameTransport`). The per-IP limits of §3 (pending handshakes,
+failed handshakes) count **per route token** for relay streams, since every relayed hub has the
+relay's IP. The handshake still decides who the hub is: the token only says which hub it *claims* to
+be.
+
+### 10.5 What the relay sees
+
+A fully compromised relay can delay, drop or count messages; it can't read the timer, change a
+setting, pair a phone or impersonate the PC — every byte between hub and agent is Noise with keys
+pinned at pairing.
+
+- It sees IP addresses, connection times, message sizes and timing, and which tokens arrive on one
+  agent socket on a given day (so: "some GameTimer PC at IP X has N phones and they use it at these
+  times"). Never content, keys, names or a stable id across days.
+- Someone who learns a route token can dial that PC for that day but can't finish a handshake
+  without the hub's private key; by registering it themselves they can make that hub's relay path
+  fail for the day (denial of service only; the LAN keeps working).
+- The relay doesn't log request paths (they contain tokens), and keeps IP addresses in its logs for
+  a few days at most. This is stated in the privacy note.
 
 ## 11. Security assumptions and residual risks
 
@@ -432,7 +552,7 @@ The agent announces `_sysmon._tcp` over mDNS with TXT `v=2` and `tags=<tag>,<tag
   Windows Hello would verify the child — that needs an in-app parent PIN and/or the agent as a
   Windows service.
 - **Lost or stolen parent phone.** It can be revoked from the PC or by an admin. App-side re-auth: §12.
-- **Metadata.** See §10. The network sees that a phone and the PC talk, when, and how much.
+- **Metadata.** See §10.5. The network sees that a phone and the PC talk, when, and how much.
 - **Admin rights.** A child with administrator rights on the PC can defeat any local protection.
 
 ## 12. Hub behaviour (non-normative)
