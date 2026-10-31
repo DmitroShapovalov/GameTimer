@@ -12,6 +12,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -185,7 +186,7 @@ class RelayInteropTests {
         assertEquals(listOf(false), learned) // bye remote_off
         assertFalse(l.current.remoteAccess)
         val before = dialled.size
-        kotlinx.coroutines.delay(3_000) // reconnect attempts go to the LAN only now
+        kotlinx.coroutines.delay(6_000) // several LAN reconnect attempts: none goes to the relay now
         assertEquals(before, dialled.size)
         l.stop()
     }
@@ -201,5 +202,11 @@ class RelayInteropTests {
         withTimeout(20.seconds) { l.status.first { it is LinkStatus.Offline } }
         assertTrue(dialled.isEmpty()) // remoteAccess unknown (false) for this PC: LAN only (§10.3)
         l.stop()
+    }
+
+    @Test
+    fun aRouteNobodyHoldsIsReportedAsNotFound(): Unit = runBlocking {
+        // The real relay's 404 through Ktor/OkHttp becomes RelayRouteNotFound (only that moves to the next route)
+        assertFailsWith<RelayRouteNotFound> { connector.connect("$relayUrl/v2/hub/AAAAAAAAAAAAAAAAAAAAAAAAAA") }
     }
 }

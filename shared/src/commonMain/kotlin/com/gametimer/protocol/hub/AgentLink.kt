@@ -10,6 +10,9 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -106,6 +109,8 @@ public class RelayPath(
     public val url: String,
     public val connector: RelayConnector,
     public val onLocalNetwork: () -> Boolean = { true },
+    /** Whether the relay may be dialled at all right now (Android: only while the app is on screen until B5). */
+    public val allowed: () -> Boolean = { true },
 ) {
     public companion object {
         public const val DEFAULT_URL: String = "wss://gametimer-relay.fly.dev"
@@ -165,6 +170,8 @@ public class AgentLink(
 
     public fun start() {
         if (job?.isActive == true) return
+        relayRetryAtNanos = 0 // the app was just opened: try the relay at once, whatever happened before
+        relayBackoff = RELAY_BACKOFF
         _status.value = LinkStatus.Connecting
         job = scope.launch { runLoop() }
     }
@@ -217,6 +224,7 @@ public class AgentLink(
                 if (code == "internal" && changesState) { delay(1.seconds); continue }
                 return RequestOutcome.Refused(code, reply)
             }
+            if (type == "settings.get" || type == "settings.put") remoteAccessFrom(reply["settings"] as? JsonObject, missingIsOff = true)
             // The session updated its state before completing the reply; let [state] catch up, so a caller
             // reading it right after send() sees the effect of its own request
             val latest = current.state.value
@@ -277,7 +285,12 @@ public class AgentLink(
     // ---------------- the relay (§10.3) ----------------
 
     private fun relayAllowed(): Boolean =
-        relay != null && agent.remoteAccess && elapsedRealtimeNanos() >= relayRetryAtNanos
+        relay != null && agent.remoteAccess && relay.allowed() && elapsedRealtimeNanos() >= relayRetryAtNanos
+
+    private fun relayFailed() {
+        relayRetryAtNanos = elapsedRealtimeNanos() + relayBackoff.inWholeNanoseconds
+        relayBackoff = (relayBackoff * 2).coerceAtMost(MAX_RELAY_BACKOFF)
+    }
 
     private fun remoteAccessFrom(o: JsonObject?, missingIsOff: Boolean = false) {
         val v = (o?.get("remoteAccess") as? JsonPrimitive)?.booleanOrNull ?: if (missingIsOff) false else return
@@ -295,11 +308,13 @@ public class AgentLink(
 
     /**
      * §10.3: LAN first, the relay after [RELAY_AFTER] (at once off Wi-Fi, or as soon as the LAN failed);
-     * the first handshake that completes gets `ready`, the other is closed without it.
+     * the first handshake that completes gets `ready` (confirmed before the other path is stopped, so the
+     * agent's 5 s limit isn't spent waiting), the other is closed without it.
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun openRacing(target: PairedAgent, parent: Job?): Pair<HubSession, Boolean> {
         val path = relay!!
-        val won: Attempt = coroutineScope {
+        return coroutineScope {
             val results = Channel<Attempt>(Channel.UNLIMITED)
             fun attempt(viaRelay: Boolean) = launch {
                 val a = try {
@@ -319,8 +334,14 @@ public class AgentLink(
             var winner: Attempt? = null
             var lanError: Exception? = null
             var relayError: Exception? = null
-            while (running > 0 && winner == null) {
-                val next = if (relayJob == null) withTimeoutOrNull(RELAY_AFTER) { results.receive() } else results.receive()
+            while (running > 0) {
+                // select: an element is either delivered or stays in the channel (no loss at the timeout)
+                val next = if (relayJob == null) {
+                    select<Attempt?> {
+                        results.onReceive { it }
+                        onTimeout(RELAY_AFTER) { null }
+                    }
+                } else results.receive()
                 if (next == null) { relayJob = attempt(viaRelay = true); running++; continue }
                 running--
                 if (next.pending != null) { winner = next; break }
@@ -330,51 +351,66 @@ public class AgentLink(
                     if (relayJob == null) { relayJob = attempt(viaRelay = true); running++ } // no need to wait any longer
                 }
             }
-            lan.cancel(); relayJob?.cancel()
-            lan.join(); relayJob?.join()
-            results.close()
-            while (true) {
-                val late = results.tryReceive().getOrNull() ?: break
-                if (late !== winner) late.pending?.abandon()
+            try {
+                val won = winner ?: throw pickError(lanError, relayError)
+                val session = try {
+                    won.pending!!.confirm(appName, parent)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (won.viaRelay) { relayFailed(); throw RelayUnreachableException(e) }
+                    throw e
+                }
+                if (won.viaRelay) { relayBackoff = RELAY_BACKOFF; relayRetryAtNanos = 0 } // a confirmed relay session
+                session to won.viaRelay
+            } finally {
+                lan.cancel(); relayJob?.cancel()
+                withContext(NonCancellable) {
+                    lan.join(); relayJob?.join()
+                    results.close()
+                    while (true) {
+                        val late = results.tryReceive().getOrNull() ?: break
+                        if (late !== winner) late.pending?.abandon()
+                    }
+                }
             }
-            winner ?: throw pickError(lanError, relayError)
         }
-        return won.pending!!.confirm(appName, parent) to won.viaRelay
-    }
-
-    /** What the status should say when both paths failed: the PC's own answer beats "unreachable". */
-    private fun pickError(lan: Exception?, relay: Exception?): Exception {
-        val all = listOfNotNull(lan, relay)
-        return all.firstOrNull { it is HubProtocolException }
-            ?: all.firstOrNull { it is SessionClosedException }
-            ?: lan ?: relay ?: IllegalStateException("no path")
     }
 
     /**
-     * Dials today's route, then tomorrow's and yesterday's (a PC clock about a day off, §10.3) while the relay
-     * answers 404, and runs the handshake on the first that joins. When all are refused, the relay waits
-     * ([RELAY_BACKOFF], doubling); a joined route resets that.
+     * What the status should say when no path worked. Only the LAN's own answers (not paired any more, a
+     * different key) count: anything the untrusted relay path says is just "unreachable".
+     */
+    private fun pickError(lan: Exception?, relay: Exception?): Exception =
+        lan?.takeIf { it is HubProtocolException || it is SessionClosedException }
+            ?: lan ?: relay?.let { RelayUnreachableException(it) } ?: IllegalStateException("no path")
+
+    /**
+     * Dials today's route, then tomorrow's and yesterday's (a PC clock about a day off, §10.3) — but only
+     * past a 404 ([RelayRouteNotFound]); any other failure (no network, 429, 503) stops at once. Then the
+     * handshake on the route that joined. Every failure makes the relay wait ([RELAY_BACKOFF], doubling);
+     * only a confirmed session resets that.
      */
     private suspend fun relayHandshake(path: RelayPath, target: PairedAgent): HubSession.PendingSession {
         val ak = Base64Url.tryDecode(target.ak) ?: throw IllegalStateException("no ak")
         val routes = try { RouteToken.forNow(ak, currentEpochMillis()) } finally { ak.fill(0) }
-        var last: Exception? = null
-        for (route in routes) {
-            val socket = try {
-                path.connector.connect(path.url.trimEnd('/') + "/v2/hub/" + route)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                last = e
-                continue
+        try {
+            for ((i, route) in routes.withIndex()) {
+                val socket = try {
+                    path.connector.connect(path.url.trimEnd('/') + "/v2/hub/" + route)
+                } catch (e: RelayRouteNotFound) {
+                    if (i == routes.lastIndex) throw e
+                    continue
+                }
+                return HubSession.handshake(socket, target, hubKey)
             }
-            relayBackoff = RELAY_BACKOFF
-            relayRetryAtNanos = 0
-            return HubSession.handshake(socket, target, hubKey)
+            throw IllegalStateException("no route")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            relayFailed()
+            throw e
         }
-        relayRetryAtNanos = elapsedRealtimeNanos() + relayBackoff.inWholeNanoseconds
-        relayBackoff = (relayBackoff * 2).coerceAtMost(MAX_RELAY_BACKOFF)
-        throw last ?: IllegalStateException("relay unreachable")
     }
 
     private suspend fun waitForChange(from: LinkStatus, timeout: Duration) {
@@ -416,16 +452,16 @@ public class AgentLink(
                 }
                 session = s
                 try {
+                    remoteAccessFrom(s.hello, missingIsOff = true) // before any later ev.settings is applied
                     coroutineScope {
                         // State and events follow the session's own ordered stream
                         launch { s.state.collect { st -> if (st != null) _state.value = st } }
                         launch {
                             for (ev in s.events) {
-                                if (ev.string("t") == "ev.settings") remoteAccessFrom(ev["settings"] as? JsonObject)
+                                if (ev.string("t") == "ev.settings") remoteAccessFrom(ev["settings"] as? JsonObject, missingIsOff = true)
                                 _events.emit(ev)
                             }
                         }
-                        remoteAccessFrom(s.hello, missingIsOff = true)
                         _status.value = LinkStatus.Online(s.hello, viaRelay)
                         bye = s.closed.await()
                         coroutineContext[Job]!!.cancelChildren()

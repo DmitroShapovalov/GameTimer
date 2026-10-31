@@ -63,6 +63,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
     private var uiVisible = false
     private var monitoring = false
     @Volatile private var onLan = true
+    @Volatile private var uiVisibleNow = false
     private var active = false
     private val activeChanges = Channel<Boolean>(Channel.CONFLATED) // latest wins (rotation = stop + start)
 
@@ -78,8 +79,17 @@ class LinkHub(private val context: Context, private val store: HubStore) {
 
     fun setUiVisible(value: Boolean) {
         uiVisible = value
+        uiVisibleNow = value
         updateActive()
+        // In the background only the home network is used (notifications away from home come with B5):
+        // a session that runs through the relay ends when the app leaves the screen
+        if (!value) links.values.filter { (it.status.value as? LinkStatus.Online)?.viaRelay == true }.forEach { l ->
+            scope.launch { l.stop(); if (active) l.start() }
+        }
     }
+
+    /** Store writes one at a time, in order (an old value must never overwrite a newer one). */
+    private val storeWriter = Dispatchers.IO.limitedParallelism(1)
 
     fun setMonitoring(value: Boolean) {
         monitoring = value
@@ -127,13 +137,13 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         val key = hubKey ?: return null
         val onMoved: (PairedAgent) -> Unit = { moved ->
             // The PC answered with its pinned key at a new address (§9): remember it, unless it was removed meanwhile
-            scope.launch(Dispatchers.IO) { store.updateAddress(moved.agentId, moved.host, moved.port) }
+            scope.launch(storeWriter) { store.updateAddress(moved.agentId, moved.host, moved.port) }
         }
         // Away from home (protocol §10): LAN first, the relay after ~2 s or at once off Wi-Fi, while the PC
         // has "Control from anywhere" on (learned from its hello and stored with the PC)
-        val relay = RelayPath(RelayPath.DEFAULT_URL, connector, onLocalNetwork = { onLan })
+        val relay = RelayPath(RelayPath.DEFAULT_URL, connector, onLocalNetwork = { onLan }, allowed = { uiVisibleNow })
         val onRemoteAccess: (Boolean) -> Unit = { on ->
-            scope.launch(Dispatchers.IO) { store.updateRemoteAccess(agentId, on) }
+            scope.launch(storeWriter) { store.updateRemoteAccess(agentId, on) }
         }
         return AgentLink(agent, key, connector, appName, scope, locator, relay, onRemoteAccess, onMoved).also {
             links[agentId] = it

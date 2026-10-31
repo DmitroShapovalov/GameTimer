@@ -25,10 +25,19 @@ public fun interface Connector {
     public suspend fun connect(host: String, port: Int, path: String): FrameSocket
 }
 
-/** Opens a [FrameSocket] by URL: the relay's `wss://<relay>/v2/hub/<route>` (§10.3). Throws when refused (404 = PC offline). */
+/**
+ * Opens a [FrameSocket] by URL: the relay's `wss://<relay>/v2/hub/<route>` (§10.3). Throws
+ * [RelayRouteNotFound] when the relay answers 404 (unknown route = PC offline), anything else otherwise.
+ */
 public fun interface RelayConnector {
     public suspend fun connect(url: String): FrameSocket
 }
+
+/** The relay answered 404: no PC holds that route (offline, or the route is for another day). */
+public class RelayRouteNotFound(cause: Throwable? = null) : Exception("route not found", cause)
+
+/** The relay path failed; never a statement about the PC itself (the relay isn't trusted, §10.5). */
+public class RelayUnreachableException(cause: Throwable? = null) : Exception("relay unreachable", cause)
 
 /**
  * WebSocket connector on Ktor (OkHttp on Android / JVM, Darwin on iOS). Sends no Origin header:
@@ -38,7 +47,16 @@ public class KtorConnector(private val client: HttpClient = defaultClient()) : C
     override suspend fun connect(host: String, port: Int, path: String): FrameSocket =
         KtorFrameSocket(client.webSocketSession(method = HttpMethod.Get, host = host, port = port, path = path))
 
-    override suspend fun connect(url: String): FrameSocket = KtorFrameSocket(client.webSocketSession(url))
+    override suspend fun connect(url: String): FrameSocket =
+        try {
+            KtorFrameSocket(client.webSocketSession(url))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The engines report a refused upgrade as "… expected status code 101 but was 404"
+            if (generateSequence<Throwable>(e) { it.cause }.any { NOT_FOUND.containsMatchIn(it.message ?: "") }) throw RelayRouteNotFound(e)
+            throw e
+        }
 
     public companion object {
         public fun defaultClient(): HttpClient = HttpClient {
@@ -46,6 +64,7 @@ public class KtorConnector(private val client: HttpClient = defaultClient()) : C
         }
 
         internal const val MAX_MESSAGE = 65535
+        private val NOT_FOUND = Regex("""\b404\b""")
     }
 }
 
