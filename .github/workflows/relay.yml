@@ -1,0 +1,75 @@
+name: Relay
+
+# The Phase B relay (src/GameTimer.Relay, docs/protocol.md §10): tests and an image smoke test on every PR;
+# on master, deploy to Fly.io. The deploy job needs the GitHub environment "relay" with the secret
+# FLY_API_TOKEN (a deploy token for the app only: `fly tokens create deploy -a gametimer-relay`); the
+# environment is limited to the master branch in the repository settings.
+on:
+  pull_request:
+    paths:
+      - 'src/GameTimer.Relay/**'
+      - 'src/GameTimer.Protocol/**'
+      - 'tests/GameTimer.Relay.Tests/**'
+      - '.dockerignore'
+      - '.github/workflows/relay.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'src/GameTimer.Relay/**'
+      - 'src/GameTimer.Protocol/**'
+      - 'tests/GameTimer.Relay.Tests/**'
+      - '.dockerignore'
+      - '.github/workflows/relay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests + image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Relay tests
+        run: dotnet test tests/GameTimer.Relay.Tests/GameTimer.Relay.Tests.csproj -c Release
+
+      - name: Build the image and check it answers
+        run: |
+          docker build -f src/GameTimer.Relay/Dockerfile -t relay .
+          docker run -d --name relay -p 8080:8080 relay
+          for i in $(seq 1 30); do curl -fs http://localhost:8080/healthz && exit 0; sleep 1; done
+          docker logs relay
+          exit 1
+
+  deploy:
+    name: Deploy to Fly.io
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: relay
+    concurrency:
+      group: relay-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Pinned: this job holds FLY_API_TOKEN
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+
+      - name: Deploy
+        run: flyctl deploy . --config src/GameTimer.Relay/fly.toml --dockerfile src/GameTimer.Relay/Dockerfile --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Check it answers
+        run: |
+          for i in $(seq 1 30); do curl -fs https://gametimer-relay.fly.dev/healthz && exit 0; sleep 2; done
+          exit 1

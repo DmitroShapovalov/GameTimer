@@ -1,0 +1,35 @@
+# Fly.io app of the relay (docs/protocol.md §10). Deployed by .github/workflows/relay.yml from the repo root:
+#   flyctl deploy . --config src/GameTimer.Relay/fly.toml --dockerfile src/GameTimer.Relay/Dockerfile --ha=false
+app = "gametimer-relay"
+primary_region = "ams"
+# Time to close agents with 1012 on a deploy (the app waits up to 8 s)
+kill_timeout = 10
+
+[env]
+  # Fly's proxy puts the client address here; the per-IP limits (§10.4) need it
+  Relay__ClientIpHeader = "Fly-Client-IP"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Agents keep a socket open all the time: the machine must never stop
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    # RelayOptions: at most 400 agent + 600 hub sockets
+    soft_limit = 900
+    hard_limit = 1100
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

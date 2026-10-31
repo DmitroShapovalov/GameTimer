@@ -1,0 +1,6 @@
+# Only the relay image is built with Docker (src/GameTimer.Relay/Dockerfile); send just what it needs
+*
+!src/GameTimer.Protocol/
+!src/GameTimer.Relay/
+**/bin/
+**/obj/

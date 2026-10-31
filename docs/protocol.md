@@ -475,8 +475,8 @@ big-endian order. A frame's length must match its type exactly.
 | `0x06` | `pong` | both | the bytes of the `ping` it answers |
 | `0x07` | — | — | reserved for the push wake-up (step B5) |
 
-**Malformed or unexpected frames.** A text message, a frame of the wrong length, more than 64
-claims (counted before duplicates are removed) or an unknown type from the agent → the relay closes the socket with 1002 (1003 for text).
+**Malformed or unexpected frames.** A text message, a frame of the wrong length (or longer than
+5 + 65 535 bytes), more than 64 claims (counted before duplicates are removed) or an unknown type from the agent → the relay closes the socket with 1002 (1003 for text).
 A malformed frame from the relay → the agent closes the socket and reconnects. The agent ignores
 frame types it doesn't know (room for later additions); the relay doesn't.
 
@@ -498,7 +498,8 @@ hub's close reaches the agent the same way; a hub socket that just drops is repo
 agent socket goes away, the relay closes every hub socket of it with 1001.
 
 **Keepalive.** Either side sends `ping` after 30 s without sending anything and closes the socket
-after 90 s without receiving anything. The agent reconnects after a drop with back-off (1 s, doubling
+after 90 s without receiving anything. When the relay restarts (a deploy) it closes agent sockets with
+1012; the agent reconnects as after any drop. The agent reconnects after a drop with back-off (1 s, doubling
 to 5 min, with jitter) and registers again.
 
 **When the agent connects.** Only while "Control from anywhere" is on (off by default; turned on by
@@ -538,19 +539,22 @@ keeps the stream alive.
 ### 10.4 Limits
 
 **Relay** (no state on disk, no database; everything is in memory). "Per IP" means per IPv4 address
-or per IPv6 /64.
+or per IPv6 /64; the IPv4 /24 or IPv6 /48 around it also has 4× each per-IP limit in total, so one
+host with many addresses can't take the relay alone. Per-IP limits are generous for hubs because mobile carriers put many phones behind one
+address. When the client address can't be read (behind the hosting proxy), the upgrade gets 400.
 
 | Limit | Value |
 |---|---|
-| New sockets per IP | 5 / s |
-| Open sockets per IP | 8 hub sockets, 8 agent sockets |
-| Route dials answered 404 per IP | 30 / min, then 429 |
+| New sockets per IP | 10 / s |
+| Open sockets per IP | 32 hub sockets, 8 agent sockets |
+| Route dials answered 404 per IP | 60 / min, then 429 |
 | Streams per agent socket | 16 (the agent's own session limit, §3) |
 | Claims per agent socket | 64 |
 | Frame size | 5 + 65 535 bytes |
 | Idle stream (no `data` either way) | closed after 120 s with 1001 |
-| Buffered bytes per stream and direction | 64 KiB; beyond that the stream is closed with 1013 |
-| In total | caps on sockets, claims and buffered bytes sized to the machine; beyond them new upgrades get 503 |
+| Buffered bytes per stream and direction | 64 KiB (one message always fits); beyond that the stream is closed with 1013 |
+| Frames queued to an agent that aren't hub data (`open`, `close`, `ping`, `pong`) | 16 KiB, at most one `pong`; beyond that the socket is closed with 1008 |
+| In total | caps on agent sockets and hub sockets (apart), claims, buffered bytes (incl. messages still arriving) and the per-IP table, sized to the machine; beyond them new upgrades get 503, a `register` over the claim cap closes the socket with 1013, and a stream whose data would go over the byte cap is closed with 1013 (that stream only; a full per-IP table first forgets entries without open sockets) |
 
 **Agent.** A relay stream gets the same handshake, `ready` rule, session and `rid` handling as a LAN
 socket on `/v2` (it is one more `IFrameTransport`), with these differences, so that a relay — or
@@ -581,6 +585,9 @@ pinned at pairing.
   count against that hub only, and waiting streams are evicted (§10.4), so the most it can do is
   slow that hub's relay path down. It can't be used to take the route over (§10.1). The relay
   itself can always cut off or hijack the relay path — denial of service only; the LAN keeps working.
+- One small relay can be overloaded by someone with many addresses (fake agents and hubs need no
+  secret): the relay path then fails for everyone until it passes. Denial of service only; the LAN
+  keeps working. Accepted for now; watched through the relay's counts and more machines if needed.
 - The relay doesn't log request paths (they contain routes) and keeps IP addresses in its logs for a
   few days at most. This is stated in the privacy note.
 
