@@ -549,7 +549,7 @@ or per IPv6 /64.
 | Claims per agent socket | 64 |
 | Frame size | 5 + 65 535 bytes |
 | Idle stream (no `data` either way) | closed after 120 s with 1001 |
-| Buffered bytes per stream and direction | 64 KiB; beyond that the stream is closed with 1013 |
+| Buffered bytes per stream and direction | 64 KiB (one message always fits); beyond that the stream is closed with 1013 |
 | In total | caps on sockets, claims and buffered bytes sized to the machine; beyond them new upgrades get 503 |
 
 **Agent.** A relay stream gets the same handshake, `ready` rule, session and `rid` handling as a LAN

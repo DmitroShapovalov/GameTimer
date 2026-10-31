@@ -103,6 +103,15 @@ src/GameTimer.Protocol/    Protocol v2 core in C# (net8.0, no WPF), no web serve
                            The app plugs in IAgentBackend (timer etc.), IPairingUi, IAgentStore, IFrameTransport
   Discovery/               §9: MdnsMessage (DNS wire format), MdnsResponder (pure answers + announcements),
                            MdnsAdvertiser (UDP 5353 shared socket, multicast/QU/legacy replies, re-reads the service)
+src/GameTimer.Relay/       Phase B relay (protocol §10), ASP.NET Core, no storage: /v2/agent (framed, many streams),
+                           /v2/hub/<route> (one stream), /healthz. Registry (route → agent socket, routes computed
+                           from the registered claims), AgentSession / HubStream (outboxes, close codes, buffers),
+                           IpLimits (per IPv4 / IPv6 /64), Sweeper (register deadline, keepalive, idle streams).
+                           Logs nothing below Warning for ASP.NET Core (paths contain routes). Dockerfile + fly.toml
+                           (app gametimer-relay, region ams, one shared-cpu-1x 256 MB machine, never stopped);
+                           .github/workflows/relay.yml tests every PR and deploys master (environment "relay",
+                           secret FLY_API_TOKEN = a deploy token for that app only)
+tests/GameTimer.Relay.Tests/  xunit over TestServer WebSockets: joining, close codes, upgrade answers, limits, frames
 shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, android, iosArm64, iosSimulatorArm64):
                            noise/ (mirrors the C# classes 1:1, libsodium via ionspin), encodings/, identity/,
                            hub/ = the parent-app side: PairingLink (QR), pair(), HubSession (IK + ready + hello,
@@ -198,6 +207,7 @@ Protocol core (Linux/macOS/Windows; JDK 21):
 
 ```bash
 dotnet test tests/GameTimer.Protocol.Tests/GameTimer.Protocol.Tests.csproj
+dotnet test tests/GameTimer.Relay.Tests/GameTimer.Relay.Tests.csproj    # the relay
 dotnet build tests/interop/NoisePeer/NoisePeer.csproj -c Release -o /tmp/peer
 dotnet build tests/interop/TestAgent/TestAgent.csproj -c Release -o /tmp/agent
 ./gradlew :shared:jvmTest -PcsharpPeer=/tmp/peer/NoisePeer.dll -PcsharpAgent=/tmp/agent/TestAgent.dll   # without them the interop tests are skipped (CI fails instead)
