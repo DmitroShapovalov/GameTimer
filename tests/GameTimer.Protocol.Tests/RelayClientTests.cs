@@ -68,6 +68,7 @@ public class RelayClientTests
         await app.StartAsync();
         var server = app.GetTestServer();
         var agent = new AgentFixture();
+        agent.Host.RemoteAccess = true;
         var client = new RelayClient(agent.Host, new Uri(server.BaseAddress, "v2/agent"), connect: async (uri, ct) =>
         {
             var c = server.CreateWebSocketClient();
@@ -142,7 +143,8 @@ public class RelayClientTests
     {
         await using var rig = await StartAsync();
         var (key, pair) = await rig.Agent.PairAsync("Away");
-        rig.Agent.Host.RemoteAccess = true;
+        var started = new List<string>();
+        rig.Agent.Host.SessionStarted += ip => { lock (started) started.Add(ip); };
         rig.Client.Start();
 
         var hub = new Hub { Ws = await rig.DialHubAsync(Ak(pair)) };
@@ -155,12 +157,23 @@ public class RelayClientTests
         var reply = await hub.ReceiveJsonAsync();
         Assert.Equal("result", reply!.Value.GetProperty("t").GetString());
 
-        // "Control from anywhere" turned off: the relayed session ends with bye remote_off
-        rig.Agent.Host.EndRelaySessions();
+        // The same parent at home on the LAN at the same time
+        var (lan, _) = await TestHub.ConnectAsync(rig.Agent.Host, key);
+        for (int i = 0; i < 100 && started.Count == 0; i++) await Task.Delay(10); // raised just after hello
+        lock (started) Assert.Equal(new[] { "192.168.1.20" }, started); // only the LAN session marks the network (§9)
+
+        // "Control from anywhere" turned off: the relayed session ends with bye remote_off, the LAN one stays
+        rig.Agent.Host.RemoteAccess = false;
+        var ending = rig.Agent.Host.EndRelaySessionsAsync();
         var bye = await hub.ReceiveJsonAsync();
         Assert.Equal("bye", bye!.Value.GetProperty("t").GetString());
         Assert.Equal("remote_off", bye.Value.GetProperty("code").GetString());
+        await ending;
         Assert.Null(await hub.ReceiveAsync());
+        var state = await lan.RequestAsync("state.get");
+        Assert.Equal("result", state.GetProperty("t").GetString());
+        // …and no new relayed stream is taken
+        Assert.Null(rig.Agent.Host.TryAdmitRelay(Ids.HubId(key.PublicKey)));
     }
 
     [Fact]
@@ -224,10 +237,43 @@ public class RelayClientTests
         return false;
     }
 
+    /// <summary>
+    /// Against the deployed relay (set GT_RELAY_E2E=wss://host to run; skipped otherwise): a real
+    /// ClientWebSocket on both sides, TLS and the hosting proxy included.
+    /// </summary>
+    [Fact]
+    public async Task Through_the_deployed_relay_when_asked()
+    {
+        var relay = Environment.GetEnvironmentVariable("GT_RELAY_E2E");
+        if (string.IsNullOrEmpty(relay)) return;
+        using var agent = new AgentFixture();
+        agent.Host.RemoteAccess = true;
+        var (key, pair) = await agent.PairAsync("E2E");
+        await using var client = new RelayClient(agent.Host, new Uri(relay.TrimEnd('/') + "/v2/agent"));
+        client.Start();
+        var route = RouteToken.Derive(Ak(pair), agent.Host.UtcToday);
+        ClientWebSocket? ws = null;
+        for (int i = 0; i < 60 && ws == null; i++)
+        {
+            var c = new ClientWebSocket();
+            try { await c.ConnectAsync(new Uri(relay.TrimEnd('/') + "/v2/hub/" + route), CancellationToken.None); ws = c; }
+            catch (WebSocketException) { c.Dispose(); await Task.Delay(500); }
+        }
+        Assert.NotNull(ws);
+        var hub = new Hub { Ws = ws! };
+        Assert.True(await hub.HandshakeAsync(key, agent.Host.AgentPublicKey));
+        var hello = await hub.ReadyAsync();
+        Assert.True(hello.GetProperty("remoteAccess").GetBoolean());
+        await hub.SendJsonAsync(new JsonObject { ["t"] = "state.get", ["id"] = 1 });
+        Assert.Equal("result", (await hub.ReceiveJsonAsync())!.Value.GetProperty("t").GetString());
+        ws!.Abort();
+    }
+
     [Fact]
     public async Task The_relay_pool_is_apart_and_evicts_the_oldest()
     {
         using var f = new AgentFixture();
+        f.Host.RemoteAccess = true;
         var lan = Enumerable.Range(0, AgentHost.MaxPendingHandshakes / AgentHost.MaxPendingPerIp)
             .SelectMany(i => Enumerable.Range(0, AgentHost.MaxPendingPerIp).Select(_ => f.Host.TryAdmit("192.168.1." + i)))
             .ToList();
@@ -242,12 +288,16 @@ public class RelayClientTests
         var c1 = f.Host.TryAdmitRelay("C")!;           // a2, a3, b1, c1: the pool is full
         Assert.Equal(AgentHost.MaxRelayPending, f.Host.RelayPendingCount);
         Assert.False(a2.Evicted.IsCancellationRequested);
-        var d1 = f.Host.TryAdmitRelay("D")!;           // 4 in total: the oldest (a2) goes
+        var d1 = f.Host.TryAdmitRelay("D")!;           // D has none: the hub with the most waiting (A) gives its oldest
         Assert.Equal(AgentHost.MaxRelayPending, f.Host.RelayPendingCount);
         Assert.True(a2.Evicted.IsCancellationRequested);
         Assert.False(a3.Evicted.IsCancellationRequested || b1.Evicted.IsCancellationRequested
                      || c1.Evicted.IsCancellationRequested || d1.Evicted.IsCancellationRequested);
-        foreach (var t in new[] { a1, a2, a3, b1, c1, d1 }) t.Dispose();
+        // A flood on one hub's route (leaked) only ever evicts that hub's own streams
+        var flood = Enumerable.Range(0, 5).Select(_ => f.Host.TryAdmitRelay("D")!).ToList();
+        Assert.False(a3.Evicted.IsCancellationRequested || b1.Evicted.IsCancellationRequested || c1.Evicted.IsCancellationRequested);
+        Assert.True(d1.Evicted.IsCancellationRequested);
+        foreach (var t in new[] { a1, a2, a3, b1, c1, d1 }.Concat(flood)) t.Dispose();
         Assert.Equal(0, f.Host.RelayPendingCount);
         Assert.Null(f.Host.TryAdmit("192.168.1.99")); // relay tickets never touched the LAN pool
         foreach (var t in lan) t!.Dispose();

@@ -1137,7 +1137,13 @@ public partial class MainWindow : FluentWindow
     // (through the relay), off would let the child cut a parent who is away from home
     private async void RemoteAccessToggle_Changed(object sender, RoutedEventArgs e)
     {
-        if (_isLoading || _isRemoteBusy) return;
+        if (_isLoading) return;
+        if (_isRemoteBusy)
+        {
+            // The other toggle is busy (or this one is reverting): show the real value
+            if ((RemoteAccessToggle.IsChecked == true) != _settings.RemoteAccess) RemoteAccessToggle.IsChecked = _settings.RemoteAccess;
+            return;
+        }
 
         bool enable = RemoteAccessToggle.IsChecked == true;
         if (enable == _settings.RemoteAccess) return;

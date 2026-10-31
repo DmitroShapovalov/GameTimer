@@ -27,6 +27,10 @@ public sealed class RelayClient : IAsyncDisposable
     private static readonly TimeSpan MinBackoff = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan StableAfter = TimeSpan.FromSeconds(60);
+    /// <summary>A send the relay doesn't take in this time means a stuck socket: it is aborted and reconnected.</summary>
+    internal static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(10);
+    /// <summary>Streams on one relay socket, counted here whatever the relay sends (§10.4): 4 waiting + 16 sessions.</summary>
+    public const int MaxStreams = AgentHost.MaxRelayPending + AgentHost.MaxSessions;
 
     private readonly AgentHost _host;
     private readonly Uri _url;
@@ -48,6 +52,13 @@ public sealed class RelayClient : IAsyncDisposable
     }
 
     public RelayStatus Status { get { lock (_lock) return _status; } }
+
+    /// <summary>
+    /// False while the app is stopping: new streams are refused (1008) so no session starts after the
+    /// <c>bye shutdown</c> went out; existing ones keep the connection until the client stops.
+    /// </summary>
+    public bool AcceptStreams { get => Volatile.Read(ref _acceptStreams); set => Volatile.Write(ref _acceptStreams, value); }
+    private bool _acceptStreams = true;
 
     /// <summary>The status changed (any thread).</summary>
     public event Action<RelayStatus>? StatusChanged;
@@ -80,6 +91,10 @@ public sealed class RelayClient : IAsyncDisposable
         run.Cancel();
         if (loop != null) await loop.ConfigureAwait(false);
         run.Dispose();
+        lock (_lock)
+        {
+            if (_run != null) return; // started again meanwhile: its loop reports its own status
+        }
         SetStatus(RelayStatus.Off);
     }
 
@@ -230,18 +245,18 @@ public sealed class RelayClient : IAsyncDisposable
                     len += r.Count;
                 } while (!r.EndOfMessage);
                 Volatile.Write(ref _lastReceived, Time.GetTimestamp());
-                await HandleAsync(buffer.AsSpan(0, len).ToArray()).ConfigureAwait(false);
+                Handle(buffer.AsSpan(0, len).ToArray());
             }
         }
 
-        private async Task HandleAsync(byte[] f)
+        private void Handle(byte[] f)
         {
             if (f.Length == 0) throw new InvalidDataException("empty frame");
             switch (f[0])
             {
                 case RelayFrames.Open:
                     if (f.Length != RelayFrames.StreamHeader + 16) throw new InvalidDataException("bad open");
-                    await OpenAsync(RelayFrames.StreamOf(f), Base32.Encode(f.AsSpan(RelayFrames.StreamHeader))).ConfigureAwait(false);
+                    Open(RelayFrames.StreamOf(f), Base32.Encode(f.AsSpan(RelayFrames.StreamHeader)));
                     break;
                 case RelayFrames.Data:
                     if (f.Length < RelayFrames.StreamHeader + 1) throw new InvalidDataException("bad data");
@@ -249,7 +264,7 @@ public sealed class RelayClient : IAsyncDisposable
                     {
                         // The session isn't reading: end the stream rather than buffer without limit
                         s.RemoteClosed();
-                        await SendAsync(RelayFrames.CloseFrame(s.Id, 1013), CancellationToken.None).ConfigureAwait(false);
+                        SendSoon(RelayFrames.CloseFrame(s.Id, 1008));
                     }
                     break;
                 case RelayFrames.Close:
@@ -258,7 +273,7 @@ public sealed class RelayClient : IAsyncDisposable
                     break;
                 case RelayFrames.Ping:
                     if (f.Length > 1 + RelayFrames.MaxPingData) throw new InvalidDataException("bad ping");
-                    await SendAsync(RelayFrames.PongFrame(f.AsSpan(1)), CancellationToken.None).ConfigureAwait(false);
+                    SendSoon(RelayFrames.PongFrame(f.AsSpan(1)));
                     break;
                 case RelayFrames.Pong:
                     if (f.Length > 1 + RelayFrames.MaxPingData) throw new InvalidDataException("bad pong");
@@ -270,14 +285,17 @@ public sealed class RelayClient : IAsyncDisposable
             }
         }
 
-        private async Task OpenAsync(uint id, string route)
+        private void Open(uint id, string route)
         {
+            // §10.2: ids are never reused while the socket lives; a relay that does is broken: reconnect
+            if (id == 0 || _streams.ContainsKey(id)) throw new InvalidDataException("bad stream id");
             string? hubId = FindHub(route);
-            HandshakeTicket? ticket = hubId == null ? null : _c._host.TryAdmitRelay(hubId);
-            if (id == 0 || ticket == null || _streams.ContainsKey(id))
+            HandshakeTicket? ticket = hubId == null || !_c.AcceptStreams || _streams.Count >= MaxStreams
+                ? null
+                : _c._host.TryAdmitRelay(hubId);
+            if (ticket == null)
             {
-                ticket?.Dispose();
-                await SendAsync(RelayFrames.CloseFrame(id, 1008), CancellationToken.None).ConfigureAwait(false);
+                SendSoon(RelayFrames.CloseFrame(id, 1008));
                 return;
             }
             var stream = new Stream(this, id);
@@ -351,12 +369,13 @@ public sealed class RelayClient : IAsyncDisposable
             lock (_routesLock)
             {
                 // The new set is valid at once; the old one stays valid for opens already in flight
+                _recent.RemoveAll(x => Time.GetElapsedTime(x.At, now) > RecentSets);
                 if (_routes.Count > 0) _recent.Add((now, _routes));
                 _routes = routes.ToDictionary(r => r.Route, r => r.HubId, StringComparer.Ordinal);
             }
-            _lastRegister = now;
             _registeredKey = key;
             await SendAsync(RelayFrames.RegisterFrame(routes.Select(r => r.Claim)), CancellationToken.None).ConfigureAwait(false);
+            _lastRegister = Time.GetTimestamp(); // after the send: the relay's 1 s counts from its arrival
             return true;
         }
 
@@ -365,12 +384,26 @@ public sealed class RelayClient : IAsyncDisposable
             await _sendLock.WaitAsync(cancel).ConfigureAwait(false);
             try
             {
-                // Never cancelled mid-send (that aborts the socket); a dead socket is aborted by the keepalive
-                await _ws.SendAsync(frame, WebSocketMessageType.Binary, true, CancellationToken.None).ConfigureAwait(false);
+                // A send the relay doesn't take in time means a stuck socket: abort it (the timeout
+                // cancels the send, which aborts the socket) and reconnect
+                using var stuck = new CancellationTokenSource(SendTimeout);
+                await _ws.SendAsync(frame, WebSocketMessageType.Binary, true, stuck.Token).ConfigureAwait(false);
                 Volatile.Write(ref _lastSent, Time.GetTimestamp());
+            }
+            catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+            {
+                _ws.Abort();
+                throw new IOException("the relay socket is stuck");
             }
             finally { _sendLock.Release(); }
         }
+
+        /// <summary>A pong or close from the receive loop: sent without making the loop wait for the socket.</summary>
+        private void SendSoon(byte[] frame) => _ = Task.Run(async () =>
+        {
+            try { await SendAsync(frame, CancellationToken.None).ConfigureAwait(false); }
+            catch (Exception) { /* the socket is gone; the receive loop ends on its own */ }
+        });
 
         public void Forget(Stream s) => _streams.TryRemove(new KeyValuePair<uint, Stream>(s.Id, s));
     }
@@ -379,9 +412,10 @@ public sealed class RelayClient : IAsyncDisposable
     private sealed class Stream : IFrameTransport
     {
         private const int InboxLimit = 64;
+        private const int InboxBytes = 128 * 1024;
         private readonly Connection _conn;
         private readonly Channel<byte[]> _in = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(InboxLimit) { SingleReader = true });
-        private int _remoteClosed, _closed;
+        private int _remoteClosed, _closed, _queuedBytes;
 
         public Stream(Connection conn, uint id)
         {
@@ -391,7 +425,17 @@ public sealed class RelayClient : IAsyncDisposable
 
         public uint Id { get; }
 
-        public bool Deliver(byte[] noise) => _in.Writer.TryWrite(noise) || Volatile.Read(ref _remoteClosed) != 0;
+        /// <summary>Queues a message for the session; false when the session doesn't keep up (64 messages / 128 KiB).</summary>
+        public bool Deliver(byte[] noise)
+        {
+            if (Volatile.Read(ref _remoteClosed) != 0) return true;
+            if (Interlocked.Add(ref _queuedBytes, noise.Length) > InboxBytes || !_in.Writer.TryWrite(noise))
+            {
+                Interlocked.Add(ref _queuedBytes, -noise.Length);
+                return false;
+            }
+            return true;
+        }
 
         public void RemoteClosed()
         {
@@ -401,7 +445,12 @@ public sealed class RelayClient : IAsyncDisposable
 
         public async ValueTask<byte[]?> ReceiveAsync(CancellationToken cancel)
         {
-            try { return await _in.Reader.ReadAsync(cancel).ConfigureAwait(false); }
+            try
+            {
+                var m = await _in.Reader.ReadAsync(cancel).ConfigureAwait(false);
+                Interlocked.Add(ref _queuedBytes, -m.Length);
+                return m;
+            }
             catch (ChannelClosedException) { return null; }
         }
 

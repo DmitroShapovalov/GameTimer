@@ -25,7 +25,7 @@ public sealed partial class AgentHost
         }
         finally
         {
-            ticket.Dispose();
+            ticket.DisposeEviction();
             try { await transport.CloseAsync().ConfigureAwait(false); } catch { /* already gone */ }
         }
     }
@@ -76,6 +76,7 @@ public sealed partial class AgentHost
                 if (known == null || !IsBareMessage(payload, "connect")) { RecordFailure(ip); return; }
                 // §10.4: a relayed stream is only for the hub whose route it was opened with
                 if (relayed && known.Id != ticket.RelayHubId) { RecordFailure(ip); return; }
+                if (relayed) ticket.Proven(); // a real hub: out of the evictable pool
 
                 await transport.SendAsync(hs.WriteMessage(ReadOnlySpan<byte>.Empty), hsCancel.Token).ConfigureAwait(false);
                 (send, recv) = hs.Split();

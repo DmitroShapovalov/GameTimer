@@ -561,12 +561,17 @@ socket on `/v2` (it is one more `IFrameTransport`), with these differences, so t
 someone with a leaked route — can't crowd out the LAN:
 - Relay streams waiting for a handshake have **their own pool**: at most 4 in total and 2 per
   *hub* (all routes of a hub count together); they never take a LAN slot (§3), and the agent counts
-  them itself, whatever the relay sends. A new relay stream that finds the pool full **evicts the
-  oldest** waiting relay stream instead of being refused, and msg 1 must arrive within **2 s** of
+  them itself, whatever the relay sends. A new relay stream that finds the pool full **evicts**
+  instead of being refused: its own hub's oldest waiting stream if there is one, else the oldest of
+  the hub with the most waiting, and msg 1 must arrive within **2 s** of
   `open` (a real hub sends it at once). So silent streams on a leaked route can't keep the other hubs
   out.
-- The failed-handshake counter of §3 counts **per route** for relay streams (every relayed hub has the
-  relay's IP).
+- The failed-handshake counter of §3 counts **per hub** for relay streams (by the hub whose route was
+  dialled; every relayed hub has the relay's IP). Like on `/v2` it only counts: pairing, which it
+  gates, never goes through the relay.
+- A stream whose msg 1 proved the hub's key leaves the pool (it can't be evicted after that), and the
+  agent takes at most 20 streams on one relay socket (4 waiting + 16 sessions); more → `close` 1008.
+- While "Control from anywhere" is off the agent takes no relayed stream, whatever the relay sends.
 - **The route must match the key.** After msg 1, the hub's static key must be the hub whose route the
   stream was opened with; otherwise the agent closes the stream and counts a failure for that route.
 

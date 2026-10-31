@@ -190,11 +190,15 @@ public sealed partial class AgentHost : IDisposable
     public bool RemoteAccess { get => Volatile.Read(ref _remoteAccess); set => Volatile.Write(ref _remoteAccess, value); }
     private bool _remoteAccess;
 
-    /// <summary>Ends every session that came through the relay with <c>bye</c> <paramref name="code"/> (§10.2: remote_off).</summary>
-    public void EndRelaySessions(string code = "remote_off")
+    /// <summary>
+    /// Ends every session that came through the relay with <c>bye</c> <paramref name="code"/> (§10.2: remote_off)
+    /// and waits (at most 2 s) until they are out, so the bye isn't lost when the relay connection stops next.
+    /// </summary>
+    public async Task EndRelaySessionsAsync(string code = "remote_off")
     {
-        foreach (var s in LiveSessions())
-            if (s.Relayed) s.Bye(code);
+        var relayed = LiveSessions().Where(s => s.Relayed).ToList();
+        foreach (var s in relayed) s.Bye(code);
+        await Task.WhenAny(Task.WhenAll(relayed.Select(s => s.Completion)), Task.Delay(TimeSpan.FromSeconds(2), _time)).ConfigureAwait(false);
     }
 
     public const int MaxKnownNetworks = 16;
@@ -365,19 +369,23 @@ public sealed partial class AgentHost : IDisposable
 
     /// <summary>
     /// Reserves a handshake slot for a stream the relay opened with one of <paramref name="hubId"/>'s routes
-    /// (§10.4): at most 2 per hub and 4 in total, apart from the LAN slots. A full pool evicts the oldest
-    /// waiting relay stream (of that hub first) instead of refusing, so silent streams can't keep hubs out.
-    /// Null only once the host is disposed.
+    /// (§10.4): at most 2 per hub and 4 in total, apart from the LAN slots. A full pool evicts instead of
+    /// refusing, so silent streams can't keep hubs out: the hub's own oldest waiting stream if it has one,
+    /// else the oldest of the hub with the most waiting — never the only stream of another hub while that
+    /// can be avoided. A stream leaves the pool once its msg 1 proved the hub's key (§10.4), so a real
+    /// handshake is never evicted after that. Null when "Control from anywhere" is off or the host is disposed.
     /// </summary>
     public HandshakeTicket? TryAdmitRelay(string hubId)
     {
         HandshakeTicket? evict = null, ticket;
         lock (_lock)
         {
-            if (_disposed) return null;
+            if (_disposed || !RemoteAccess) return null;
             var mine = _relayPending.Where(t => t.RelayHubId == hubId).ToList();
-            if (mine.Count >= MaxRelayPendingPerHub) evict = mine[0];
-            else if (_relayPending.Count >= MaxRelayPending) evict = _relayPending[0];
+            if (mine.Count > 0 && (mine.Count >= MaxRelayPendingPerHub || _relayPending.Count >= MaxRelayPending))
+                evict = mine[0];
+            else if (_relayPending.Count >= MaxRelayPending)
+                evict = _relayPending.GroupBy(t => t.RelayHubId).OrderByDescending(g => g.Count()).First().First();
             if (evict != null) _relayPending.Remove(evict);
             ticket = new HandshakeTicket(this, "relay:" + hubId, hubId);
             _relayPending.Add(ticket);
@@ -628,9 +636,19 @@ public sealed class HandshakeTicket : IDisposable
         try { _evicted.Cancel(); } catch (ObjectDisposedException) { }
     }
 
+    /// <summary>A relayed stream's msg 1 proved the hub's key: its pool slot is free again (§10.4).</summary>
+    internal void Proven() => Dispose();
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _released, 1) == 0) _host.Release(this);
+    }
+
+    /// <summary>Called once the handshake is over either way (the eviction token is no longer needed).</summary>
+    internal void DisposeEviction()
+    {
+        Dispose();
+        _evicted.Dispose();
     }
 }
 

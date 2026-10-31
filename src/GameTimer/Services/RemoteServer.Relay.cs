@@ -38,9 +38,11 @@ public sealed partial class RemoteServer
         if (_settings.RemoteAccess == on) return;
         _settings.RemoteAccess = on;
         _settingsService.Save(_settings);
-        Agent.RemoteAccess = on;
-        if (!on) Agent.EndRelaySessions(); // §10.2: bye remote_off; LAN sessions stay
+        Agent.RemoteAccess = on; // off: the agent takes no new relayed stream from here on
+        // §7.2: a new rev either way (a parent app may cache settings by rev); ev.settings while running
         if (_app != null) V2SettingsChanged(settings: true, schedule: false);
+        else _v2Backend!.SettingsRev++;
+        if (!on) await Agent.EndRelaySessionsAsync(); // §10.2: bye remote_off is out before the relay stops; LAN stays
         await UpdateRelayAsync();
     }
 
