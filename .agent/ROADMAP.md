@@ -67,7 +67,7 @@ peer-to-peer WebRTC (needs a TURN relay anyway), UnifiedPush (too complex to set
 
 | # | Step | Done when | Status |
 |---|---|---|---|
-| B1 | **Spec + route tokens**: §10 normative (agent framing, hub endpoint, limits, keepalive, what the relay sees); route tokens in C# and Kotlin with Python vectors | Both pass the vectors in CI | in review |
+| B1 | **Spec + route tokens**: §10 normative (agent framing, hub endpoint, limits, keepalive, what the relay sees); route claims / routes in C# and Kotlin with Python vectors | Both pass the vectors in CI | in review |
 | B2 | **Relay service** `src/GameTimer.Relay` (ASP.NET Core, no storage): agent + hub endpoints, in-memory token registry, stream joining, all limits; deployed to Fly.io | Tests cover joining, unknown tokens, limits, idle close; a test relay runs on Fly.io | ☐ |
 | B3 | **PC side**: `RelayClient` + `RelayFrameTransport` into `AgentHost`; admission limits per token; "Control from anywhere" setting (Windows Hello), `remoteAccess` in settings | `gt-testhub` controls the real PC through the test relay | ☐ |
 | B4 | **Phone side**: relay connector in `shared` (LAN first, relay after ~2 s or off Wi-Fi), "via internet" status in the app | CI interop test runs Kotlin ↔ C# through a real relay process; the owner's phone controls the PC over mobile data | ☐ |

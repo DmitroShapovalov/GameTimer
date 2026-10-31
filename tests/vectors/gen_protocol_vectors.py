@@ -26,9 +26,12 @@ def tag(ak, date):
     return b32(d[:8])
 
 
-def route(ak, date):
-    d = hashlib.blake2b(b"GameTimer route v2" + date.encode(), digest_size=32, key=ak).digest()
-    return d[:16]
+def claim(ak, date):
+    return hashlib.blake2b(b"GameTimer route v2" + date.encode(), digest_size=32, key=ak).digest()[:16]
+
+
+def route(c):
+    return hashlib.blake2b(b"GameTimer route id v2" + c, digest_size=32).digest()[:16]
 
 
 def code(h):
@@ -51,8 +54,9 @@ out = {
     "pairingCodes": [{"handshakeHash": h.hex(), "code": code(h)} for h in hashes],
     "discoveryTags": [{"ak": ak.hex(), "date": date, "tag": tag(ak, date)}
                       for ak in [bytes(32), bytes(range(32))] for date in ["2026-10-24", "2027-01-01"]],
-    "routeTokens": [{"ak": ak.hex(), "date": date, "bytes": route(ak, date).hex(), "token": b32(route(ak, date))}
-                    for ak in [bytes(32), bytes(range(32))] for date in ["2026-10-24", "2027-01-01"]],
+    "routeTokens": [{"ak": ak.hex(), "date": date, "claim": claim(ak, date).hex(), "route": route(claim(ak, date)).hex(),
+                     "token": b32(route(claim(ak, date)))}
+                    for ak in [bytes(32), bytes(range(32))] for date in ["2026-10-24", "2027-01-01", "2028-02-29"]],
     "base32": [{"hex": d.hex(), "text": b32(d)} for d in data],
     "base64url": [{"hex": d.hex(), "text": b64u(d)} for d in data],
 }

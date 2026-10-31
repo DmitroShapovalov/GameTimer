@@ -141,28 +141,35 @@ public sealed partial class AgentHost : IDisposable
         }
     }
 
-    /// <summary>At most this many route tokens on one relay socket (§10.4).</summary>
-    public const int MaxRouteTokens = 64;
+    /// <summary>At most this many route claims on one relay socket (§10.4): 21 hubs × 3 days.</summary>
+    public const int MaxRouteTokens = 63;
 
     /// <summary>
-    /// The relay route tokens (§10.1) to register around <paramref name="utcToday"/>: yesterday's, today's
-    /// and tomorrow's for each paired hub, newest hub first, so that the phone's date and a PC clock that is
-    /// somewhat off still meet. At most <see cref="MaxRouteTokens"/> (all three of a hub or none of them).
+    /// The relay route claims (§10.1) to register around <paramref name="utcToday"/>: yesterday's, today's
+    /// and tomorrow's for each paired hub, so that the phone's date and a PC clock that is somewhat off still
+    /// meet. Hubs used most recently come first (last seen, else paired); beyond <see cref="MaxRouteTokens"/>
+    /// the least recently used hubs are left out, whole. The order inside the result is shuffled, so the relay
+    /// can't tell which three belong together from their position (§10.5).
     /// They change when <see cref="PeersChanged"/> fires and at the UTC date change.
     /// </summary>
-    public IReadOnlyList<byte[]> RouteTokens(DateOnly utcToday)
+    public IReadOnlyList<byte[]> RouteClaims(DateOnly utcToday)
     {
         lock (_lock)
         {
-            var tokens = new List<byte[]>();
-            for (int i = _state.Peers.Count - 1; i >= 0 && tokens.Count + 3 <= MaxRouteTokens; i--)
+            var claims = new List<byte[]>();
+            var byUse = _state.Peers.Select((p, i) => (p, i))
+                .OrderByDescending(x => x.p.LastSeen ?? x.p.PairedAt).ThenByDescending(x => x.i)
+                .Select(x => x.p);
+            foreach (var p in byUse)
             {
-                var ak = Base64Url.TryDecode(_state.Peers[i].Ak);
+                if (claims.Count + 3 > MaxRouteTokens) break;
+                var ak = Base64Url.TryDecode(p.Ak);
                 if (ak is not { Length: 32 }) continue;
-                for (int d = -1; d <= 1; d++) tokens.Add(RouteToken.DeriveBytes(ak, utcToday.AddDays(d)));
+                for (int d = -1; d <= 1; d++) claims.Add(RouteToken.Claim(ak, utcToday.AddDays(d)));
                 CryptographicOperations.ZeroMemory(ak);
             }
-            return tokens;
+            RandomNumberGenerator.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(claims));
+            return claims;
         }
     }
 
@@ -218,7 +225,7 @@ public sealed partial class AgentHost : IDisposable
         return added;
     }
 
-    /// <summary>Today's UTC date by this host's clock (for <see cref="DiscoveryTags"/> and <see cref="RouteTokens"/>).</summary>
+    /// <summary>Today's UTC date by this host's clock (for <see cref="DiscoveryTags"/> and <see cref="RouteClaims"/>).</summary>
     public DateOnly UtcToday => DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
 
     /// <summary>
