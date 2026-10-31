@@ -13,9 +13,18 @@ using static Wire;
 //   gt-testhub pair "<link from the Connect phone window>" [name]
 //   gt-testhub status | stop | start <minutes> | extend <minutes> | peers | history | settings | watch
 //   gt-testhub replay-test      a recorded msg 1 + ready, replayed, must never become a session
+//   --relay[=wss://host]        before any command except pair: go through the relay (protocol §10) instead of
+//                               the LAN, with today's route of this hub ("Control from anywhere" must be on)
 
 const string StateFile = "gt-testhub.json";
+const string DefaultRelay = "wss://gametimer-relay.fly.dev";
 var prologue = "GameTimer/2"u8.ToArray();
+string? relay = null;
+if (args.Length > 0 && args[0].StartsWith("--relay", StringComparison.Ordinal))
+{
+    relay = args[0].Contains('=') ? args[0][(args[0].IndexOf('=') + 1)..].TrimEnd('/') : DefaultRelay;
+    args = args[1..];
+}
 
 try
 {
@@ -62,6 +71,7 @@ static int Usage()
         gt-testhub status | stop | lift [today] | end | endat <HH:MM> | start <minutes> | extend <minutes>
         gt-testhub peers | history | settings | watch
         gt-testhub replay-test
+        Add --relay (or --relay=wss://host) before a command to go through the relay instead of the LAN.
         """);
     return 2;
 }
@@ -118,7 +128,7 @@ async Task<int> Session(Func<HubSession, Task> body)
     var st = JsonNode.Parse(File.ReadAllText(StateFile))!;
     var hubKey = KeyPair.FromPrivateKey(Base64Url.TryDecode(st["hubKey"]!.GetValue<string>())!);
     var agentKey = Base64Url.TryDecode(st["agentKey"]!.GetValue<string>())!;
-    using var ws = await Connect(st["host"]!.GetValue<string>(), st["port"]!.GetValue<int>(), "/v2");
+    using var ws = await ConnectV2(st);
     var session = await HubSession.Open(ws, hubKey, agentKey, prologue);
     if (session.Hello["agent"]?["id"]?.GetValue<string>() != Ids.AgentId(agentKey))
         throw new InvalidOperationException("hello.agent.id does not match the pinned key");
@@ -129,14 +139,12 @@ async Task<int> Session(Func<HubSession, Task> body)
 async Task<int> ReplayTest()
 {
     var st = JsonNode.Parse(File.ReadAllText(StateFile))!;
-    var host = st["host"]!.GetValue<string>();
-    var port = st["port"]!.GetValue<int>();
     var hubKey = KeyPair.FromPrivateKey(Base64Url.TryDecode(st["hubKey"]!.GetValue<string>())!);
     var agentKey = Base64Url.TryDecode(st["agentKey"]!.GetValue<string>())!;
 
     // A real session, as a sniffer would record it: msg 1 and the first transport message (ready)
     byte[] msg1, ready;
-    using (var ws = await Connect(host, port, "/v2"))
+    using (var ws = await ConnectV2(st))
     {
         var hs = new HandshakeState(NoisePattern.IK, true, prologue, hubKey, agentKey);
         msg1 = hs.WriteMessage("{\"t\":\"connect\"}"u8);
@@ -149,7 +157,7 @@ async Task<int> ReplayTest()
     }
 
     // The replay: the PC answers msg 2 (Noise allows that), but the recorded ready can't decrypt any more
-    using (var ws = await Connect(host, port, "/v2"))
+    using (var ws = await ConnectV2(st))
     {
         await SendRaw(ws, msg1);
         var msg2 = await ReceiveRaw(ws);
@@ -164,6 +172,25 @@ async Task<int> ReplayTest()
         Console.WriteLine("FAIL: the PC sent something after the replayed ready");
         return 1;
     }
+}
+
+/// <summary>The PC's /v2: on the LAN at the stored address, or through the relay with today's route (§10.1).</summary>
+async Task<ClientWebSocket> ConnectV2(JsonNode st)
+{
+    if (relay == null) return await Connect(st["host"]!.GetValue<string>(), st["port"]!.GetValue<int>(), "/v2");
+    var ak = Base64Url.TryDecode(st["ak"]!.GetValue<string>())!;
+    var route = RouteToken.Derive(ak, DateOnly.FromDateTime(DateTime.UtcNow));
+    Console.Error.WriteLine($"(through the relay {relay})");
+    var ws = new ClientWebSocket(); // no Origin header: the relay refuses browsers
+    try
+    {
+        await ws.ConnectAsync(new Uri($"{relay}/v2/hub/{route}"), CancellationToken.None);
+    }
+    catch (WebSocketException e)
+    {
+        throw new InvalidOperationException("the relay doesn't reach the PC (is \"Control from anywhere\" on, and the PC online?): " + e.Message);
+    }
+    return ws;
 }
 
 /// <summary>An open /v2 session after ready → hello.</summary>

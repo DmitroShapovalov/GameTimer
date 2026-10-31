@@ -32,6 +32,7 @@ public sealed partial class RemoteServer
         _v2Backend = new V2Backend(this);
         Agent = new AgentHost(store, _v2Backend, pairingUi);
         Agent.StoreError += ex => DiagnosticLog.Write("v2 store save failed: " + ex.Message);
+        InitRelay();
     }
 
     // ---------------- discovery (§9) ----------------
@@ -386,6 +387,7 @@ public sealed partial class RemoteServer
         public JsonObject Settings()
         {
             var o = JsonSerializer.SerializeToNode(_s.BuildSettings(), Json)!.AsObject();
+            _s.AddRemoteAccess(o);
             o["rev"] = SettingsRev;
             return o;
         }

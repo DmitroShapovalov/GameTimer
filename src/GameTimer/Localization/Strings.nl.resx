@@ -485,4 +485,19 @@
   <data name="Sched_St_Skipped" xml:space="preserve">
     <value>Het schema geldt vandaag niet (opgeheven door een ouder). Het geldt weer om middernacht, of zodra een nieuwe timer afloopt.</value>
   </data>
+  <data name="RemoteAccess_Toggle" xml:space="preserve">
+    <value>Bediening op afstand (via internet)</value>
+  </data>
+  <data name="RemoteAccess_Hint" xml:space="preserve">
+    <value>De telefoons van ouders kunnen deze pc ook buitenshuis bereiken, via de GameTimer-relay. Alles blijft end-to-end versleuteld: de relay kan niets lezen of wijzigen.</value>
+  </data>
+  <data name="RemoteAccess_Connected" xml:space="preserve">
+    <value>Verbonden: deze pc is overal bereikbaar</value>
+  </data>
+  <data name="RemoteAccess_Connecting" xml:space="preserve">
+    <value>Verbinden met de relay…</value>
+  </data>
+  <data name="RemoteAccess_Waiting" xml:space="preserve">
+    <value>Werkt als bediening via telefoon aan staat en er een ouder-app gekoppeld is.</value>
+  </data>
 </root>

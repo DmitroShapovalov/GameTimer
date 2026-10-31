@@ -152,25 +152,53 @@ public sealed partial class AgentHost : IDisposable
     /// can't tell which three belong together from their position (§10.5).
     /// They change when <see cref="PeersChanged"/> fires and at the UTC date change.
     /// </summary>
-    public IReadOnlyList<byte[]> RouteClaims(DateOnly utcToday)
+    public IReadOnlyList<byte[]> RouteClaims(DateOnly utcToday) => RelayRoutes(utcToday).Select(r => r.Claim).ToList();
+
+    /// <summary>
+    /// The same set as <see cref="RouteClaims"/>, each with its public route (base32, as the relay names it
+    /// in <c>open</c>) and the hub it belongs to, so a relayed stream can be bound to that hub's key (§10.4).
+    /// </summary>
+    public IReadOnlyList<RelayRoute> RelayRoutes(DateOnly utcToday)
     {
         lock (_lock)
         {
-            var claims = new List<byte[]>();
+            var routes = new List<RelayRoute>();
             var byUse = _state.Peers.Select((p, i) => (p, i))
                 .OrderByDescending(x => x.p.LastSeen ?? x.p.PairedAt).ThenByDescending(x => x.i)
                 .Select(x => x.p);
             foreach (var p in byUse)
             {
-                if (claims.Count + 3 > MaxRouteTokens) break;
+                if (routes.Count + 3 > MaxRouteTokens) break;
                 var ak = Base64Url.TryDecode(p.Ak);
                 if (ak is not { Length: 32 }) continue;
-                for (int d = -1; d <= 1; d++) claims.Add(RouteToken.Claim(ak, utcToday.AddDays(d)));
+                for (int d = -1; d <= 1; d++)
+                {
+                    var claim = RouteToken.Claim(ak, utcToday.AddDays(d));
+                    routes.Add(new RelayRoute(claim, Base32.Encode(RouteToken.Route(claim)), p.Id));
+                }
                 CryptographicOperations.ZeroMemory(ak);
             }
-            RandomNumberGenerator.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(claims));
-            return claims;
+            RandomNumberGenerator.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(routes));
+            return routes;
         }
+    }
+
+    /// <summary>
+    /// "Control from anywhere" (§10.2) is on: reported to hubs in <c>hello</c> (and by the app in
+    /// <c>settings</c>). Set by the app; the relay connection itself is the app's <c>RelayClient</c>.
+    /// </summary>
+    public bool RemoteAccess { get => Volatile.Read(ref _remoteAccess); set => Volatile.Write(ref _remoteAccess, value); }
+    private bool _remoteAccess;
+
+    /// <summary>
+    /// Ends every session that came through the relay with <c>bye</c> <paramref name="code"/> (§10.2: remote_off)
+    /// and waits (at most 2 s) until they are out, so the bye isn't lost when the relay connection stops next.
+    /// </summary>
+    public async Task EndRelaySessionsAsync(string code = "remote_off")
+    {
+        var relayed = LiveSessions().Where(s => s.Relayed).ToList();
+        foreach (var s in relayed) s.Bye(code);
+        await Task.WhenAny(Task.WhenAll(relayed.Select(s => s.Completion)), Task.Delay(TimeSpan.FromSeconds(2), _time)).ConfigureAwait(false);
     }
 
     public const int MaxKnownNetworks = 16;
@@ -330,10 +358,80 @@ public sealed partial class AgentHost : IDisposable
         }
     }
 
+    /// <summary>Relay streams waiting for a handshake: their own pool, never LAN slots (§10.4).</summary>
+    public const int MaxRelayPending = 4;
+    public const int MaxRelayPendingPerHub = 2;
+
+    /// <summary>A relayed stream must bring msg 1 this soon after <c>open</c> (§10.4).</summary>
+    public static readonly TimeSpan RelayFirstMessageTimeout = TimeSpan.FromSeconds(2);
+
+    private readonly List<HandshakeTicket> _relayPending = new();
+
+    /// <summary>
+    /// Reserves a handshake slot for a stream the relay opened with one of <paramref name="hubId"/>'s routes
+    /// (§10.4): at most 2 per hub and 4 in total, apart from the LAN slots. A full pool evicts instead of
+    /// refusing, so silent streams can't keep hubs out: the hub's own oldest waiting stream if it has one,
+    /// else the oldest of the hub with the most waiting — never the only stream of another hub while that
+    /// can be avoided. A stream leaves the pool once its msg 1 proved the hub's key (§10.4), so a real
+    /// handshake is never evicted after that. Null when "Control from anywhere" is off or the host is disposed.
+    /// </summary>
+    public HandshakeTicket? TryAdmitRelay(string hubId)
+    {
+        HandshakeTicket? evict = null, ticket;
+        lock (_lock)
+        {
+            if (_disposed || !RemoteAccess) return null;
+            var mine = _relayPending.Where(t => t.RelayHubId == hubId).ToList();
+            if (mine.Count > 0 && (mine.Count >= MaxRelayPendingPerHub || _relayPending.Count >= MaxRelayPending))
+                evict = mine[0];
+            else if (_relayPending.Count >= MaxRelayPending)
+                evict = _relayPending.GroupBy(t => t.RelayHubId).OrderByDescending(g => g.Count()).First().First();
+            if (evict != null) _relayPending.Remove(evict);
+            ticket = new HandshakeTicket(this, "relay:" + hubId, hubId);
+            _relayPending.Add(ticket);
+        }
+        evict?.Evict();
+        return ticket;
+    }
+
+    internal int RelayPendingCount { get { lock (_lock) return _relayPending.Count; } }
+
+    /// <summary>Relayed streams whose msg 1 named the right key but which aren't confirmed yet, per hub (≤ 2).</summary>
+    private readonly Dictionary<string, int> _relayProven = new();
+
+    /// <summary>
+    /// A relayed stream's msg 1 proved the hub's key: it leaves the evictable pool. A msg 1 can be replayed,
+    /// so at most <see cref="MaxRelayPendingPerHub"/> such streams per hub wait for <c>ready</c> at a time.
+    /// </summary>
+    private bool TryProve(HandshakeTicket ticket)
+    {
+        lock (_lock)
+        {
+            var hub = ticket.RelayHubId!;
+            _relayProven.TryGetValue(hub, out var n);
+            if (n >= MaxRelayPendingPerHub) return false;
+            _relayProven[hub] = n + 1;
+            ticket.MarkProven();
+        }
+        ticket.Dispose(); // the pool slot
+        return true;
+    }
+
+    internal void Unprove(string hub)
+    {
+        lock (_lock)
+            if (_relayProven.TryGetValue(hub, out var n)) { if (n <= 1) _relayProven.Remove(hub); else _relayProven[hub] = n - 1; }
+    }
+
     internal void Release(HandshakeTicket ticket)
     {
         lock (_lock)
         {
+            if (ticket.RelayHubId != null)
+            {
+                _relayPending.Remove(ticket);
+                return;
+            }
             _pendingTotal--;
             if (--_pendingPerIp[ticket.RemoteIp] == 0) _pendingPerIp.Remove(ticket.RemoteIp);
         }
@@ -537,23 +635,55 @@ public sealed partial class AgentHost : IDisposable
     };
 }
 
-/// <summary>A reserved handshake slot (§3). Disposing it releases the slot; safe to dispose twice.</summary>
+/// <summary>A reserved handshake slot (§3, §10.4). Disposing it releases the slot; safe to dispose twice.</summary>
 public sealed class HandshakeTicket : IDisposable
 {
     private readonly AgentHost _host;
+    private readonly CancellationTokenSource _evicted = new();
     private int _released;
 
-    internal HandshakeTicket(AgentHost host, string remoteIp)
+    internal HandshakeTicket(AgentHost host, string remoteIp, string? relayHubId = null)
     {
         _host = host;
         RemoteIp = remoteIp;
+        RelayHubId = relayHubId;
     }
 
+    /// <summary>The remote IP, or <c>relay:&lt;hub id&gt;</c> for a relayed stream (its failure-counter key).</summary>
     public string RemoteIp { get; }
+
+    /// <summary>For a relayed stream: the hub whose route the relay opened it with; its key must match (§10.4).</summary>
+    public string? RelayHubId { get; }
+
+    /// <summary>Fires when a newer relayed stream took this slot (the handshake is abandoned).</summary>
+    public CancellationToken Evicted => _evicted.Token;
+
+    internal void Evict()
+    {
+        try { _evicted.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    private int _proven;
+
+    internal void MarkProven() => Volatile.Write(ref _proven, 1);
+
+    /// <summary>The proven-but-unconfirmed count of its hub goes down once (confirmed or ended).</summary>
+    internal void Unprove()
+    {
+        if (Interlocked.Exchange(ref _proven, 0) == 1) _host.Unprove(RelayHubId!);
+    }
 
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _released, 1) == 0) _host.Release(this);
+    }
+
+    /// <summary>Called once the handshake is over either way (the eviction token is no longer needed).</summary>
+    internal void DisposeEviction()
+    {
+        Dispose();
+        Unprove();
+        _evicted.Dispose();
     }
 }
 
@@ -628,3 +758,6 @@ public sealed class RequestOrigin
         }
     }
 }
+
+/// <summary>One relay route of a hub (§10.1): the claim to register, its public route (base32), the hub.</summary>
+public sealed record RelayRoute(byte[] Claim, string Route, string HubId);
