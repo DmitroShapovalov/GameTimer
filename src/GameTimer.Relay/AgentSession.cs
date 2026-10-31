@@ -83,7 +83,9 @@ internal sealed class AgentSession
                     Close(1002); // longer than any frame (§10.2)
                     break;
                 case Received.Overloaded:
-                    Close(1013);
+                    // The relay is out of buffer: only the stream this data was for ends (§10.4)
+                    if (data is { Length: Frames.StreamHeader } h && h[0] == (byte)FrameType.Data)
+                        Find(Frames.StreamOf(h))?.Terminate(1013, 1013);
                     break;
                 default:
                     if (!IsClosing) Handle(data!);
@@ -92,7 +94,7 @@ internal sealed class AgentSession
         }
     }
 
-    private bool IsClosing { get { lock (_gate) return _closing; } }
+    public bool IsClosing { get { lock (_gate) return _closing; } }
 
     private void Handle(byte[] f)
     {
@@ -142,7 +144,8 @@ internal sealed class AgentSession
             var route = RouteToken.Route(f.AsSpan(off, Frames.ClaimSize));
             routes[Base32.Encode(route)] = route;
         }
-        if (!_s.Registry.Register(this, routes, _s.Options.MaxClaims)) Close(1013);
+        var result = _s.Registry.Register(this, routes, _s.Options.MaxClaims);
+        if (result == false) Close(1013); // over the claim cap; null: this socket is closing, nothing to do
     }
 
     private HubStream? Find(uint id)
@@ -153,7 +156,12 @@ internal sealed class AgentSession
     /// <summary>Whether a new stream would fit (checked before the hub's upgrade is accepted, §10.3: 503).</summary>
     public bool HasRoom
     {
-        get { lock (_gate) return !_closing && _streams.Count < _s.Options.StreamsPerAgent; }
+        get
+        {
+            // Also refuse while its control frames pile up (a congested agent link), rather than close it
+            lock (_gate) return !_closing && _streams.Count < _s.Options.StreamsPerAgent
+                && Volatile.Read(ref _controlQueued) < _s.Options.AgentControlBytes / 2;
+        }
     }
 
     /// <summary>Adds the stream and tells the agent (<c>open</c>). False if the socket is closing or full.</summary>
@@ -165,7 +173,9 @@ internal sealed class AgentSession
             st.Id = ++_nextId;
             _streams[st.Id] = st;
         }
-        return Enqueue(Frames.Open(st.Id, route), owner: null);
+        if (Enqueue(Frames.Open(st.Id, route), owner: null)) return true;
+        RemoveStream(st.Id);
+        return false;
     }
 
     public void RemoveStream(uint id)

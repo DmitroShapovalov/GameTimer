@@ -6,12 +6,13 @@ namespace GameTimer.Relay;
 
 /// <summary>
 /// Per-IP limits (§10.4): new sockets per second, open hub / agent sockets, 404 answers per minute.
-/// "Per IP" is per IPv4 address or per IPv6 /64; an IPv6 /48 also has a wider budget (4× each limit), so
-/// one host with many /64s can't take the whole relay. Fixed windows, a bounded table, nothing logged.
+/// "Per IP" is per IPv4 address or per IPv6 /64; the IPv4 /24 or IPv6 /48 around it also has a wider budget
+/// (4× each limit), so one host with many addresses can't take the whole relay alone. Fixed windows, a
+/// bounded table (idle entries are evicted when it is full), nothing logged.
 /// </summary>
 internal sealed class IpLimits
 {
-    /// <summary>The limit keys of one client: its own, and for IPv6 the /48 around it.</summary>
+    /// <summary>The limit keys of one client: its own, and the IPv4 /24 or IPv6 /48 around it.</summary>
     public readonly record struct Client(string Key, string? Wide);
 
     private sealed class Entry
@@ -53,12 +54,10 @@ internal sealed class IpLimits
     {
         if (ip == null) return new Client("none", null);
         if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        var b = ip.GetAddressBytes();
         if (ip.AddressFamily == AddressFamily.InterNetworkV6)
-        {
-            var b = ip.GetAddressBytes();
             return new Client("6:" + Convert.ToHexString(b, 0, 8), "6w:" + Convert.ToHexString(b, 0, 6));
-        }
-        return new Client("4:" + ip, null);
+        return new Client("4:" + ip, "4w:" + Convert.ToHexString(b, 0, 3));
     }
 
     /// <summary>
@@ -157,11 +156,23 @@ internal sealed class IpLimits
         e.NotFoundCount++;
     }
 
-    /// <summary>An entry, created if the table has room (else null: the request is refused).</summary>
+    /// <summary>
+    /// An entry, created if the table has room. A full table first evicts entries that hold no socket (their
+    /// windows are forgotten early); only a table full of open sockets refuses (null).
+    /// </summary>
     private Entry? Get(string key)
     {
         if (_map.TryGetValue(key, out var e)) return e;
-        if (_map.Count >= _o.MaxIpEntries) return null;
+        if (_map.Count >= _o.MaxIpEntries)
+        {
+            int target = _o.MaxIpEntries - Math.Max(1, _o.MaxIpEntries / 8);
+            foreach (var (k, old) in _map.ToList())
+            {
+                if (_map.Count <= target) break;
+                if (old.Hubs <= 0 && old.Agents <= 0) _map.Remove(k);
+            }
+            if (_map.Count >= _o.MaxIpEntries) return null;
+        }
         _map[key] = e = new Entry { NewWindow = long.MinValue / 2, NotFoundWindow = long.MinValue / 2 };
         return e;
     }

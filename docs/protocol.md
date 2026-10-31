@@ -539,8 +539,8 @@ keeps the stream alive.
 ### 10.4 Limits
 
 **Relay** (no state on disk, no database; everything is in memory). "Per IP" means per IPv4 address
-or per IPv6 /64; an IPv6 /48 also has 4× each per-IP limit in total, so one host with many /64s can't
-take the relay. Per-IP limits are generous for hubs because mobile carriers put many phones behind one
+or per IPv6 /64; the IPv4 /24 or IPv6 /48 around it also has 4× each per-IP limit in total, so one
+host with many addresses can't take the relay alone. Per-IP limits are generous for hubs because mobile carriers put many phones behind one
 address. When the client address can't be read (behind the hosting proxy), the upgrade gets 400.
 
 | Limit | Value |
@@ -554,7 +554,7 @@ address. When the client address can't be read (behind the hosting proxy), the u
 | Idle stream (no `data` either way) | closed after 120 s with 1001 |
 | Buffered bytes per stream and direction | 64 KiB (one message always fits); beyond that the stream is closed with 1013 |
 | Frames queued to an agent that aren't hub data (`open`, `close`, `ping`, `pong`) | 16 KiB, at most one `pong`; beyond that the socket is closed with 1008 |
-| In total | caps on agent sockets and hub sockets (apart), claims, buffered bytes (incl. messages still arriving) and the per-IP table, sized to the machine; beyond them new upgrades get 503, a `register` over the claim cap closes the socket with 1013, and a stream that would go over the byte cap is closed with 1013 |
+| In total | caps on agent sockets and hub sockets (apart), claims, buffered bytes (incl. messages still arriving) and the per-IP table, sized to the machine; beyond them new upgrades get 503, a `register` over the claim cap closes the socket with 1013, and a stream whose data would go over the byte cap is closed with 1013 (that stream only; a full per-IP table first forgets entries without open sockets) |
 
 **Agent.** A relay stream gets the same handshake, `ready` rule, session and `rid` handling as a LAN
 socket on `/v2` (it is one more `IFrameTransport`), with these differences, so that a relay — or
@@ -585,6 +585,9 @@ pinned at pairing.
   count against that hub only, and waiting streams are evicted (§10.4), so the most it can do is
   slow that hub's relay path down. It can't be used to take the route over (§10.1). The relay
   itself can always cut off or hijack the relay path — denial of service only; the LAN keeps working.
+- One small relay can be overloaded by someone with many addresses (fake agents and hubs need no
+  secret): the relay path then fails for everyone until it passes. Denial of service only; the LAN
+  keeps working. Accepted for now; watched through the relay's counts and more machines if needed.
 - The relay doesn't log request paths (they contain routes) and keeps IP addresses in its logs for a
   few days at most. This is stated in the privacy note.
 

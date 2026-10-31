@@ -14,12 +14,14 @@ internal sealed class Registry
     /// <summary>
     /// Replaces <paramref name="agent"/>'s whole set with <paramref name="routes"/> (base32 → bytes).
     /// False if the total would go over <paramref name="maxTotal"/>; the agent then holds nothing.
+    /// Null if the agent socket is already closing (it must not take routes back from a newer socket).
     /// </summary>
-    public bool Register(AgentSession agent, IReadOnlyDictionary<string, byte[]> routes, int maxTotal)
+    public bool? Register(AgentSession agent, IReadOnlyDictionary<string, byte[]> routes, int maxTotal)
     {
         lock (_lock)
         {
             RemoveLocked(agent);
+            if (agent.IsClosing) return null;
             int added = routes.Keys.Count(r => !_map.ContainsKey(r));
             if (_map.Count + added > maxTotal) return false;
             foreach (var (route, bytes) in routes)

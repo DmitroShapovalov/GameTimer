@@ -35,7 +35,7 @@ public static class RelayApp
         if (!s.Limits.TryStart(client, agent: true)) { ctx.Response.StatusCode = 429; return; }
         try
         {
-            if (!s.TryTakeSocket(agent: true)) { ctx.Response.StatusCode = 503; return; }
+            if (s.Stopping || !s.TryTakeSocket(agent: true)) { ctx.Response.StatusCode = 503; return; }
             try
             {
                 using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
@@ -63,7 +63,7 @@ public static class RelayApp
                 ctx.Response.StatusCode = 404;
                 return;
             }
-            if (!target.Agent.HasRoom || s.NearlyFull || !s.TryTakeSocket(agent: false)) { ctx.Response.StatusCode = 503; return; }
+            if (s.Stopping || !target.Agent.HasRoom || s.NearlyFull || !s.TryTakeSocket(agent: false)) { ctx.Response.StatusCode = 503; return; }
             try
             {
                 using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
@@ -131,6 +131,7 @@ internal sealed class Sweeper : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        _s.Stopping = true;
         foreach (var agent in _s.Agents.Keys) agent.Close(1012); // service restart: agents reconnect
         for (int i = 0; i < 30 && !_s.Agents.IsEmpty; i++) await Task.Delay(100, CancellationToken.None);
         await base.StopAsync(cancellationToken);

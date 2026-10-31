@@ -24,6 +24,9 @@ internal sealed class RelayState
         Limits = new IpLimits(Options, time);
     }
 
+    /// <summary>Set when the relay is stopping (a deploy): new upgrades get 503 so agents don't come back to it.</summary>
+    public volatile bool Stopping;
+
     public int AgentSockets => Volatile.Read(ref _agentSockets);
     public int HubSockets => Volatile.Read(ref _hubSockets);
     public long Buffered => Interlocked.Read(ref _buffered);

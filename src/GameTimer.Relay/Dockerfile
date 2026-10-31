@@ -14,7 +14,7 @@ COPY --from=build /app .
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_gcServer=0 \
-    DOTNET_GCHeapHardLimit=0xA000000
+    DOTNET_GCHeapHardLimit=0x8000000
 EXPOSE 8080
 USER app
 ENTRYPOINT ["dotnet", "GameTimer.Relay.dll"]

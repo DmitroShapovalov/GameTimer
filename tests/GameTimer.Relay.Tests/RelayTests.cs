@@ -406,6 +406,25 @@ public class RelayTests
     }
 
     [Fact]
+    public async Task Out_of_buffer_only_the_stream_of_that_data_ends()
+    {
+        await using var f = await StartAsync(o => o.MaxBufferedBytes = 20_000);
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1, 2);
+        var a = await f.HubAsync(Route(1));
+        uint idA = Frames.StreamOf(await NextFrameAsync(agent, 0x02));
+        var b = await f.HubAsync(Route(2), "10.0.0.3");
+        uint idB = Frames.StreamOf(await NextFrameAsync(agent, 0x02));
+        await SendAsync(agent, Data(idA, new byte[60_000])); // arrives in pieces, more than the budget
+        Assert.Equal(1013, await ClosedWithAsync(a));
+        Assert.Equal(Close(idA, 1013), await NextFrameAsync(agent, 0x04));
+        // The agent socket and the other stream carry on
+        await SendAsync(agent, Data(idB, 5));
+        Assert.Equal(new byte[] { 5 }, (await ReceiveAsync(b)).Data);
+        Assert.Equal(0, f.State.Buffered);
+    }
+
+    [Fact]
     public async Task Health_check()
     {
         await using var f = await StartAsync();

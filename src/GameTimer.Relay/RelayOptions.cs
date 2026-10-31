@@ -22,7 +22,7 @@ public sealed class RelayOptions
     public int MaxAgentSockets { get; set; } = 400;
     public int MaxHubSockets { get; set; } = 600;
     public int MaxClaims { get; set; } = 30_000;
-    public long MaxBufferedBytes { get; set; } = 48L * 1024 * 1024;
+    public long MaxBufferedBytes { get; set; } = 32L * 1024 * 1024;
     public int MaxIpEntries { get; set; } = 50_000;
 
     public TimeSpan IdleStream { get; set; } = TimeSpan.FromSeconds(120);

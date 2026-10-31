@@ -14,14 +14,17 @@ internal static class WsIo
 
     /// <summary>
     /// Reads one whole message of at most <paramref name="max"/> bytes. A waiting socket holds only a pooled
-    /// 4 KiB chunk; the bytes of a message that arrives in pieces count against the relay's byte budget
-    /// until it is complete (<see cref="Received.Overloaded"/> when the budget is spent).
+    /// 4 KiB chunk; the buffer of a message that arrives in pieces counts (at its full pooled size) against
+    /// the relay's byte budget until it is complete. When the budget is spent, the rest of the message is
+    /// read and dropped and <see cref="Received.Overloaded"/> returns its first bytes (up to 5: the frame
+    /// header), so only that stream needs to end.
     /// </summary>
     public static async Task<(Received Kind, byte[]? Data)> ReceiveAsync(WebSocket ws, int max, RelayState s)
     {
         var chunk = ArrayPool<byte>.Shared.Rent(Chunk);
         byte[]? msg = null;
-        int len = 0;
+        int len = 0, accounted = 0;
+        byte[]? head = null; // set once the message is being dropped
         try
         {
             while (true)
@@ -30,11 +33,26 @@ internal static class WsIo
                 if (r.MessageType == WebSocketMessageType.Close) return (Received.Close, null);
                 var kind = r.MessageType == WebSocketMessageType.Text ? Received.Text : Received.Binary;
                 if (len + r.Count > max) return (Received.TooBig, null);
+                if (head != null)
+                {
+                    len += r.Count;
+                    if (r.EndOfMessage) return (Received.Overloaded, head);
+                    continue;
+                }
                 if (r.EndOfMessage && msg == null) return (kind, chunk.AsSpan(0, r.Count).ToArray()); // one piece
-                if (!s.TryBuffer(r.Count)) return (Received.Overloaded, null);
                 if (msg == null || len + r.Count > msg.Length)
                 {
-                    var bigger = ArrayPool<byte>.Shared.Rent(Math.Min(max, Math.Max(2 * (len + r.Count), 16 * 1024)));
+                    int want = Math.Min(max, Math.Max(2 * (len + r.Count), 16 * 1024));
+                    var bigger = s.TryBuffer(want) ? ArrayPool<byte>.Shared.Rent(want) : null;
+                    if (bigger == null)
+                    {
+                        // Over budget: keep the header, drop the rest of this message
+                        head = (msg != null ? msg.AsSpan(0, len) : chunk.AsSpan(0, r.Count))[..Math.Min(5, msg != null ? len : r.Count)].ToArray();
+                        len += r.Count;
+                        if (r.EndOfMessage) return (Received.Overloaded, head);
+                        continue;
+                    }
+                    accounted += want;
                     if (msg != null)
                     {
                         msg.AsSpan(0, len).CopyTo(bigger);
@@ -51,7 +69,7 @@ internal static class WsIo
         {
             ArrayPool<byte>.Shared.Return(chunk);
             if (msg != null) ArrayPool<byte>.Shared.Return(msg);
-            s.Unbuffer(len);
+            s.Unbuffer(accounted);
         }
     }
 
