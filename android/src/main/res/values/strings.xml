@@ -6,6 +6,7 @@
     <string name="add_pc">Add PC</string>
     <string name="status_online">Online</string>
     <string name="status_online_relay">Online via the internet</string>
+    <string name="wake_title">Checking the PCs…</string>
     <string name="status_connecting">Connecting…</string>
     <string name="status_offline">Offline</string>
     <string name="status_refused">This phone isn\'t paired with the PC any more</string>

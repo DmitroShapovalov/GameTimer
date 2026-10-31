@@ -424,6 +424,98 @@ public class RelayTests
         Assert.Equal(0, f.State.Buffered);
     }
 
+    private static byte[] WakeFrame(string token) => new byte[] { 0x07 }.Concat(System.Text.Encoding.ASCII.GetBytes(token)).ToArray();
+
+    [Fact]
+    public async Task Wake_ups_go_to_the_push_sender_rate_limited()
+    {
+        await using var f = await StartAsync(o => { o.WakesPerAgentPerMinute = 3; o.WakeSameTokenEvery = TimeSpan.FromMilliseconds(500); });
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1);
+        var id = Guid.NewGuid().ToString("N");
+        await SendAsync(agent, WakeFrame("tokA-" + id));
+        await SendAsync(agent, WakeFrame("tokA-" + id)); // the same token too soon: dropped
+        await SendAsync(agent, WakeFrame("tokB-" + id));
+        await Task.Delay(600);
+        await SendAsync(agent, WakeFrame("tokA-" + id)); // later: passes
+        await SendAsync(agent, WakeFrame("tokC-" + id)); // 4th in a minute: over the socket's limit
+        await SendAsync(agent, new byte[] { 0x05 });     // a ping round trip: everything above was handled
+        await NextFrameAsync(agent, 0x06);
+        var mine = Push.Tokens.Where(t => t.EndsWith(id, StringComparison.Ordinal)).ToList();
+        Assert.Equal(new[] { "tokA-" + id, "tokB-" + id, "tokA-" + id }, mine);
+    }
+
+    [Fact]
+    public async Task Wake_ups_only_from_a_socket_that_registered_claims()
+    {
+        await using var f = await StartAsync();
+        var agent = await f.AgentAsync();
+        var id = Guid.NewGuid().ToString("N");
+        await SendAsync(agent, Register());              // registered, but nothing
+        await SendAsync(agent, WakeFrame("tokZ-" + id));
+        await SendAsync(agent, new byte[] { 0x05 });
+        await NextFrameAsync(agent, 0x06);
+        Assert.DoesNotContain(Push.Tokens, t => t.EndsWith(id, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_young_socket_or_a_busy_ip_wakes_nobody()
+    {
+        await using var f = await StartAsync(o => { o.WakeAfterConnected = TimeSpan.FromHours(1); });
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1);
+        var id = Guid.NewGuid().ToString("N");
+        await SendAsync(agent, WakeFrame("tokY-" + id)); // connected just now: an agent that churns sockets
+        await SendAsync(agent, new byte[] { 0x05 });
+        await NextFrameAsync(agent, 0x06);
+        Assert.DoesNotContain(Push.Tokens, t => t.EndsWith(id, StringComparison.Ordinal));
+
+        await using var g = await StartAsync(o => { o.WakesPerIpPerMinute = 2; o.AgentSocketsPerIp = 10; });
+        var sockets = new[] { await g.AgentAsync("10.9.0.1"), await g.AgentAsync("10.9.0.1") };
+        for (int i = 0; i < 2; i++) await g.RegisterAsync(sockets[i], i + 1);
+        for (int i = 0; i < 4; i++) await SendAsync(sockets[i % 2], WakeFrame($"tokI{i}-" + id));
+        foreach (var s in sockets) { await SendAsync(s, new byte[] { 0x05 }); await NextFrameAsync(s, 0x06); }
+        Assert.Equal(2, Push.Tokens.Count(t => t.EndsWith(id, StringComparison.Ordinal) && t.StartsWith("tokI", StringComparison.Ordinal))); // per IP, across sockets
+    }
+
+    [Fact]
+    public async Task One_token_is_woken_once_per_interval_across_sockets()
+    {
+        await using var f = await StartAsync();
+        var a = await f.AgentAsync("10.0.1.1");
+        await f.RegisterAsync(a, 1);
+        var b = await f.AgentAsync("10.0.2.1");
+        await f.RegisterAsync(b, 2);
+        var id = Guid.NewGuid().ToString("N");
+        await SendAsync(a, WakeFrame("tokS-" + id));
+        await SendAsync(b, WakeFrame("tokS-" + id)); // another socket, same token, too soon
+        foreach (var s in new[] { a, b }) { await SendAsync(s, new byte[] { 0x05 }); await NextFrameAsync(s, 0x06); }
+        Assert.Single(Push.Tokens, t => t.EndsWith(id, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0x07 })]                 // empty
+    [InlineData(new byte[] { 0x07, 0x41, 0x20 })]     // a space
+    [InlineData(new byte[] { 0x07, 0x41, 0xC3, 0xA9 })] // not ASCII
+    public async Task Malformed_wake_frames_are_1002(byte[] frame)
+    {
+        await using var f = await StartAsync();
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1);
+        await SendAsync(agent, frame);
+        Assert.Equal(1002, await ClosedWithAsync(agent));
+    }
+
+    [Fact]
+    public async Task A_too_long_push_token_is_1002()
+    {
+        await using var f = await StartAsync();
+        var agent = await f.AgentAsync();
+        await f.RegisterAsync(agent, 1);
+        await SendAsync(agent, WakeFrame(new string('a', Frames.MaxPushToken + 1)));
+        Assert.Equal(1002, await ClosedWithAsync(agent));
+    }
+
     [Fact]
     public async Task Health_check()
     {

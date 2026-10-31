@@ -35,11 +35,15 @@ class NotifySettings(context: Context) {
 
     fun set(category: Category, on: Boolean) = prefs.edit().putBoolean(category.key, on).apply()
 
-    enum class Category(val key: String) {
-        TimeUp("timeUp"),          // the time ran out (or was ended): the PC locked / logged off / shut down
-        Soon("soon"),              // a warning point on the PC ("5 min left")
-        Suspicious("suspicious"),  // the app on the PC was closed while a timer ran; files tampered; a parent app added
-        Others("others"),          // someone else started / stopped / changed the timer or lifted the schedule
+    /**
+     * [wakeEvents]: what may wake this phone for the category away from home (protocol §10.6, push.set):
+     * the history types [Notifier.show] turns into it, and `peerAdded`. Keep the two in step.
+     */
+    enum class Category(val key: String, val wakeEvents: List<String>) {
+        TimeUp("timeUp", listOf("expired")),         // the time ran out (or was ended): the PC locked / logged off / shut down
+        Soon("soon", emptyList()),                   // a warning point on the PC ("5 min left"): live only, not in the history
+        Suspicious("suspicious", listOf("closed", "tampered", "peerAdded")), // closed while a timer ran; tampered; a parent app added
+        Others("others", listOf("started", "stopped", "reset", "extended", "scheduleSkipped")), // someone else's action
     }
 }
 

@@ -25,6 +25,19 @@ public sealed class RelayOptions
     public long MaxBufferedBytes { get; set; } = 32L * 1024 * 1024;
     public int MaxIpEntries { get; set; } = 50_000;
 
+    /// <summary>
+    /// §10.6: the Firebase service account key file, base64 (a Fly secret: Relay__FcmServiceAccountB64).
+    /// Unset: wake-ups are dropped.
+    /// </summary>
+    public string? FcmServiceAccountB64 { get; set; }
+    public int WakesPerAgentPerMinute { get; set; } = 20;
+    public int WakesPerIpPerMinute { get; set; } = 30;
+    /// <summary>Wake-ups only from an agent socket connected at least this long (real agents stay; abusers churn).</summary>
+    public TimeSpan WakeAfterConnected { get; set; } = TimeSpan.FromSeconds(60);
+    /// <summary>All wake-ups through this relay per minute.</summary>
+    public int WakesPerMinute { get; set; } = 600;
+    public TimeSpan WakeSameTokenEvery { get; set; } = TimeSpan.FromSeconds(20);
+
     public TimeSpan IdleStream { get; set; } = TimeSpan.FromSeconds(120);
     public TimeSpan AgentPingAfter { get; set; } = TimeSpan.FromSeconds(30);
     public TimeSpan AgentDeadAfter { get; set; } = TimeSpan.FromSeconds(90);

@@ -23,16 +23,21 @@ internal sealed class RelayFixture : IAsyncDisposable
         Server = app.GetTestServer();
     }
 
+    /// <summary>Wake-ups the relay passed on (shared by the fixtures of one test class run; read per test).</summary>
+    public static FakePush Push { get; } = new();
+
     public static async Task<RelayFixture> StartAsync(Action<RelayOptions>? tweak = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         RelayApp.ConfigureServices(builder);
+        builder.Services.AddSingleton<IPushSender>(Push);
         builder.Services.PostConfigure<RelayOptions>(o =>
         {
             o.ClientIpHeader = IpHeader;
             o.Sweep = TimeSpan.FromMilliseconds(50);
             o.CloseEchoWait = TimeSpan.FromSeconds(2);
+            o.WakeAfterConnected = TimeSpan.Zero;
             tweak?.Invoke(o);
         });
         var app = builder.Build();
@@ -162,4 +167,18 @@ internal sealed class RelayFixture : IAsyncDisposable
         await SendAsync(agent, Register(hubs));
         for (int i = 0; i < 200 && hubs.Any(h => State.Registry.Find(Route(h)) == null); i++) await Task.Delay(10);
     }
+}
+
+/// <summary>Records wake-ups instead of calling FCM.</summary>
+public sealed class FakePush : IPushSender
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _tokens = new();
+
+    public bool TryWake(string pushToken)
+    {
+        _tokens.Enqueue(pushToken);
+        return true;
+    }
+
+    public IReadOnlyList<string> Tokens => _tokens.ToList();
 }

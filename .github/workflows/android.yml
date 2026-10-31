@@ -54,6 +54,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build the debug APK
+        env:
+          # Firebase config for push wake-ups (protocol §10.6); without it the APK has push off
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: ./gradlew :android:assembleDebug :android:assembleDebugAndroidTest
 
       - name: Upload the APK

@@ -20,7 +20,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -92,7 +100,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         } else {
             scope.launch {
                 kotlinx.coroutines.delay(5_000)
-                if (!uiVisible) {
+                if (!uiVisible && !waking) {
                     relayAllowed = false
                     links.values.forEach { it.relayPolicyChanged() }
                 }
@@ -113,7 +121,87 @@ class LinkHub(private val context: Context, private val store: HubStore) {
     // In the background the links only run on Wi-Fi / Ethernet: the PCs are on the home network, so on
     // mobile data every attempt would just wake the radio (and the screens connect anyway when opened)
     private fun updateActive() {
-        activeChanges.trySend(uiVisible || (monitoring && onLan))
+        activeChanges.trySend(uiVisible || waking || (monitoring && onLan))
+    }
+
+    // ---------------- push wake-ups away from home (protocol §10.6) ----------------
+
+    private var waking = false
+    private var wakes = 0
+
+    /** When each PC's history was last caught up (after a connect), to know a wake-up has done its job. */
+    private val caughtUp = MutableStateFlow<Map<String, Long>>(emptyMap())
+
+    /**
+     * A push wake-up arrived (any thread): connect to the PCs — through the relay too, the app being in
+     * the background — catch up their history (which notifies as usual), then let go. At most ~18 s,
+     * within what Android allows a high-priority message.
+     */
+    suspend fun wake() = withContext(Dispatchers.Main) {
+        if (!NotifySettings(context).background) return@withContext
+        try { loadKey() } catch (e: Exception) { return@withContext }
+        val since = android.os.SystemClock.elapsedRealtime()
+        wakes++
+        waking = true
+        relayAllowed = true
+        store.agents.value.forEach { link(it.agentId) }
+        updateActive()
+        links.values.forEach { it.relayPolicyChanged() }
+        try {
+            val targets = store.agents.value.filter { it.remoteAccess }.map { it.agentId }
+            withTimeoutOrNull(15_000) {
+                caughtUp.first { done -> targets.all { (done[it] ?: 0) >= since } }
+            }
+        } finally {
+            if (--wakes == 0) {
+                waking = false
+                if (!uiVisible) {
+                    relayAllowed = false
+                    links.values.forEach { it.relayPolicyChanged() }
+                }
+                updateActive()
+            }
+        }
+    }
+
+    /** This phone's push token, or none when background notifications are off (the PCs then wake nobody). */
+    private fun wantedPushToken(): String? = if (NotifySettings(context).background) Push.token(context) else null
+
+    /**
+     * The history types worth a wake-up (§10.6): those of the notification categories that are on, so the PCs
+     * never wake this phone for something it won't show. "Time almost up" exists only live (not in the
+     * history) and isn't among them.
+     */
+    private fun wantedPushEvents(): List<String> {
+        val s = NotifySettings(context)
+        return NotifySettings.Category.entries.filter { s.isOn(it) }.flatMap { it.wakeEvents }
+    }
+
+    /** The token or the notification setting changed: tell the PCs that are online now (the others on connect). */
+    fun pushTokenChanged() {
+        store.agents.value.forEach { a ->
+            val l = links[a.agentId] ?: return@forEach
+            val online = l.status.value as? LinkStatus.Online ?: return@forEach
+            scope.launch { syncPushToken(a.agentId, l, online.hello) }
+        }
+    }
+
+    /**
+     * §10.6 push.set on every session with a PC that supports it (cheap, and the PC's copy can't drift: a
+     * restored PC, a lost state). No token, or no category on → null: the PC wakes nobody.
+     */
+    private suspend fun syncPushToken(agentId: String, link: AgentLink, hello: JsonObject) {
+        val caps = (hello["capabilities"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: return
+        if ("push" !in caps) return
+        val events = wantedPushEvents()
+        val token = wantedPushToken()?.takeIf { events.isNotEmpty() }
+        val body = buildJsonObject {
+            if (token != null) {
+                put("token", token)
+                put("events", JsonArray(events.map { JsonPrimitive(it) }))
+            } else put("token", JsonNull)
+        }
+        link.send("push.set", body)
     }
 
     private fun watchNetwork() {
@@ -169,7 +257,12 @@ class LinkHub(private val context: Context, private val store: HubStore) {
     /** Re-paired or removed: drop the link (and its watcher); a later [link] makes a new one. */
     suspend fun forget(agentId: String, removed: Boolean) {
         watchers.remove(agentId)?.cancel()
-        links.remove(agentId)?.stop()
+        val link = links.remove(agentId)
+        if (removed && link != null && link.status.value is LinkStatus.Online) {
+            // Removed on this phone only: tell the PC to stop waking it (best effort, briefly)
+            withTimeoutOrNull(3_000) { link.send("push.set", buildJsonObject { put("token", JsonNull) }, resendWindow = 3.seconds) }
+        }
+        link?.stop()
         if (removed) {
             seenPeers.edit().remove(agentId).apply()
             notifier.forget(agentId)
@@ -221,6 +314,8 @@ class LinkHub(private val context: Context, private val store: HubStore) {
                         me = me.copy(hubId = ((it.hello["you"] as? JsonObject)?.get("id") as? JsonPrimitive)?.content)
                         compare()
                         notifier.catchUp(agent, api, me, link.state.value?.json?.str("now"), notify = shouldNotify(agent.agentId))
+                        caughtUp.value += agent.agentId to android.os.SystemClock.elapsedRealtime()
+                        syncPushToken(agent.agentId, link, it.hello)
                     }
                 }
             }

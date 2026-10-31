@@ -12,6 +12,9 @@ public static class RelayApp
         builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(8));
         builder.Services.Configure<RelayOptions>(builder.Configuration.GetSection("Relay"));
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<FcmSender>();
+        builder.Services.AddSingleton<IPushSender>(sp => sp.GetRequiredService<FcmSender>());
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<FcmSender>());
         builder.Services.AddSingleton<RelayState>();
         builder.Services.AddHostedService<Sweeper>();
     }
@@ -39,7 +42,7 @@ public static class RelayApp
             try
             {
                 using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
-                await new AgentSession(s, ws, client.Key).RunAsync();
+                await new AgentSession(s, ws, client).RunAsync();
             }
             finally { s.ReleaseSocket(agent: true); }
         }

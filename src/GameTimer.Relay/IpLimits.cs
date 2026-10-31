@@ -17,8 +17,8 @@ internal sealed class IpLimits
 
     private sealed class Entry
     {
-        public long NewWindow, NotFoundWindow;
-        public int NewCount, NotFoundCount, Hubs, Agents;
+        public long NewWindow, NotFoundWindow, WakeWindow;
+        public int NewCount, NotFoundCount, WakeCount, Hubs, Agents;
     }
 
     public const int WideFactor = 4;
@@ -108,6 +108,27 @@ internal sealed class IpLimits
         }
     }
 
+    /// <summary>§10.6: a wake-up from this client (per IP and per /24 or /48, per minute); false = over the budget.</summary>
+    public bool TryWake(Client c)
+    {
+        lock (_lock)
+        {
+            var now = _time.GetTimestamp();
+            var e = Get(c.Key);
+            var w = c.Wide == null ? null : Get(c.Wide);
+            if (e == null || (c.Wide != null && w == null)) return false;
+            bool Allows(Entry x, int factor)
+            {
+                if (Expired(x.WakeWindow, now, TimeSpan.FromMinutes(1))) { x.WakeWindow = now; x.WakeCount = 0; }
+                return x.WakeCount < _o.WakesPerIpPerMinute * factor;
+            }
+            if (!Allows(e, 1) || (w != null && !Allows(w, WideFactor))) return false;
+            e.WakeCount++;
+            if (w != null) w.WakeCount++;
+            return true;
+        }
+    }
+
     /// <summary>Drops entries with nothing open and expired windows.</summary>
     public void Cleanup()
     {
@@ -116,7 +137,7 @@ internal sealed class IpLimits
             var now = _time.GetTimestamp();
             foreach (var (key, e) in _map.ToList())
                 if (e.Hubs <= 0 && e.Agents <= 0 && Expired(e.NewWindow, now, TimeSpan.FromSeconds(1))
-                    && Expired(e.NotFoundWindow, now, TimeSpan.FromMinutes(1)))
+                    && Expired(e.NotFoundWindow, now, TimeSpan.FromMinutes(1)) && Expired(e.WakeWindow, now, TimeSpan.FromMinutes(1)))
                     _map.Remove(key);
         }
     }
@@ -173,7 +194,7 @@ internal sealed class IpLimits
             }
             if (_map.Count >= _o.MaxIpEntries) return null;
         }
-        _map[key] = e = new Entry { NewWindow = long.MinValue / 2, NotFoundWindow = long.MinValue / 2 };
+        _map[key] = e = new Entry { NewWindow = long.MinValue / 2, NotFoundWindow = long.MinValue / 2, WakeWindow = long.MinValue / 2 };
         return e;
     }
 

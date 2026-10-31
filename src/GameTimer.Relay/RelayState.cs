@@ -16,8 +16,11 @@ internal sealed class RelayState
     private int _agentSockets, _hubSockets;
     private long _buffered;
 
-    public RelayState(IOptions<RelayOptions> options, TimeProvider time, ILogger<RelayState> log)
+    public IPushSender Push { get; }
+
+    public RelayState(IOptions<RelayOptions> options, TimeProvider time, ILogger<RelayState> log, IPushSender push)
     {
+        Push = push;
         Options = options.Value;
         Time = time;
         Log = log;
@@ -61,6 +64,52 @@ internal sealed class RelayState
     }
 
     public void Unbuffer(int bytes) => Interlocked.Add(ref _buffered, -bytes);
+
+    // §10.6: one wake-up per token per WakeSameTokenEvery across the whole relay (whoever asks); keyed by
+    // a hash, so the table holds no token
+    private readonly Dictionary<string, long> _tokenWakes = new(StringComparer.Ordinal);
+    private const int MaxTokenWakes = 20_000;
+
+    private static string TokenKey(string token) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(token)), 0, 16);
+
+    public void ForgetWakeToken(string token)
+    {
+        lock (_tokenWakes) _tokenWakes.Remove(TokenKey(token));
+    }
+
+    private readonly Queue<long> _wakeTotal = new();
+
+    /// <summary>§10.6: all wake-ups through the relay per minute.</summary>
+    public bool TryWakeTotal()
+    {
+        var now = Time.GetTimestamp();
+        lock (_wakeTotal)
+        {
+            while (_wakeTotal.Count > 0 && Time.GetElapsedTime(_wakeTotal.Peek(), now) >= TimeSpan.FromMinutes(1)) _wakeTotal.Dequeue();
+            if (_wakeTotal.Count >= Options.WakesPerMinute) return false;
+            _wakeTotal.Enqueue(now);
+            return true;
+        }
+    }
+
+    public bool TryWakeToken(string token)
+    {
+        var key = TokenKey(token);
+        var now = Time.GetTimestamp();
+        lock (_tokenWakes)
+        {
+            if (_tokenWakes.TryGetValue(key, out var last) && Time.GetElapsedTime(last, now) < Options.WakeSameTokenEvery) return false;
+            if (_tokenWakes.Count >= MaxTokenWakes)
+            {
+                foreach (var old in _tokenWakes.Where(kv => Time.GetElapsedTime(kv.Value, now) >= Options.WakeSameTokenEvery).Select(kv => kv.Key).ToList())
+                    _tokenWakes.Remove(old);
+                if (_tokenWakes.Count >= MaxTokenWakes) return false;
+            }
+            _tokenWakes[key] = now;
+            return true;
+        }
+    }
 
     /// <summary>Unexpected failures are logged by type only: never a path, an address or a route.</summary>
     public void Unexpected(Exception e)

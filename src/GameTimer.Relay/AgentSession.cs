@@ -28,11 +28,15 @@ internal sealed class AgentSession
 
     public string IpKey { get; }
 
-    public AgentSession(RelayState state, WebSocket ws, string ipKey)
+    private readonly IpLimits.Client _client;
+    private bool _hasClaims;
+
+    public AgentSession(RelayState state, WebSocket ws, IpLimits.Client client)
     {
         _s = state;
         _ws = ws;
-        IpKey = ipKey;
+        _client = client;
+        IpKey = client.Key;
         _connected = _lastReceived = _lastSent = state.Time.GetTimestamp();
     }
 
@@ -122,10 +126,47 @@ internal sealed class AgentSession
             case FrameType.Pong:
                 if (f.Length > 1 + Frames.MaxPingData) Close(1002);
                 break;
+            case FrameType.Wake:
+                if (f.Length < 2 || f.Length > 1 + Frames.MaxPushToken || !f.AsSpan(1).ToArray().All(b => b is >= (byte)'!' and <= (byte)'~'))
+                {
+                    Close(1002);
+                    break;
+                }
+                Wake(System.Text.Encoding.ASCII.GetString(f, 1, f.Length - 1));
+                break;
             default:
                 Close(1002); // open, unknown or reserved types never come from an agent
                 break;
         }
+    }
+
+    private readonly Queue<long> _wakeTimes = new();
+    private readonly Dictionary<string, long> _wakeLast = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// §10.6: only from a socket that registered claims; rate-limited per socket, per IP (and /24, /48) and
+    /// per token across the whole relay. Over a limit a wake-up is just dropped.
+    /// </summary>
+    private void Wake(string token)
+    {
+        if (!_hasClaims) return;
+        var now = _s.Time.GetTimestamp();
+        if (_s.Time.GetElapsedTime(_connected, now) < _s.Options.WakeAfterConnected) return;
+        while (_wakeTimes.Count > 0 && _s.Time.GetElapsedTime(_wakeTimes.Peek(), now) >= TimeSpan.FromMinutes(1)) _wakeTimes.Dequeue();
+        if (_wakeTimes.Count >= _s.Options.WakesPerAgentPerMinute) return;
+        if (_wakeLast.TryGetValue(token, out var last) && _s.Time.GetElapsedTime(last, now) < _s.Options.WakeSameTokenEvery) return;
+        if (_wakeLast.Count >= 64)
+            foreach (var old in _wakeLast.Where(kv => _s.Time.GetElapsedTime(kv.Value, now) >= _s.Options.WakeSameTokenEvery).Select(kv => kv.Key).ToList())
+                _wakeLast.Remove(old);
+        if (_wakeLast.Count >= 64) return;
+        if (!_s.Limits.TryWake(_client) || !_s.TryWakeTotal() || !_s.TryWakeToken(token)) return;
+        if (!_s.Push.TryWake(token))
+        {
+            _s.ForgetWakeToken(token); // not sent (queue full, dead token): the token isn't used up
+            return;
+        }
+        _wakeTimes.Enqueue(now);
+        _wakeLast[token] = now;
     }
 
     private void Register(byte[] f)
@@ -144,6 +185,7 @@ internal sealed class AgentSession
             var route = RouteToken.Route(f.AsSpan(off, Frames.ClaimSize));
             routes[Base32.Encode(route)] = route;
         }
+        _hasClaims = routes.Count > 0;
         var result = _s.Registry.Register(this, routes, _s.Options.MaxClaims);
         if (result == false) Close(1013); // over the claim cap; null: this socket is closing, nothing to do
     }

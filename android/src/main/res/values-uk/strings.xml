@@ -6,6 +6,7 @@
     <string name="add_pc">Додати ПК</string>
     <string name="status_online">У мережі</string>
     <string name="status_online_relay">У мережі через інтернет</string>
+    <string name="wake_title">Перевірка ПК…</string>
     <string name="status_connecting">Підключення…</string>
     <string name="status_offline">Не в мережі</string>
     <string name="status_refused">Цей телефон більше не підключений до ПК</string>

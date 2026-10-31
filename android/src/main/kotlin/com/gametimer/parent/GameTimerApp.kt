@@ -17,5 +17,7 @@ class GameTimerApp : Application() {
         runBlocking { Sodium.initialize() } // loads libsodium once (a few ms); everything below needs it
         store = HubStore(this)
         hub = LinkHub(this, store)
+        Push.init(this)
+        Push.refresh(this) { hub.pushTokenChanged() }
     }
 }

@@ -5,7 +5,7 @@ namespace GameTimer.Protocol.Relay;
 /// <summary>Frames on the agent's relay socket (docs/protocol.md §10.2): a type byte, then big-endian fields.</summary>
 public static class RelayFrames
 {
-    public const byte Register = 0x01, Open = 0x02, Data = 0x03, Close = 0x04, Ping = 0x05, Pong = 0x06;
+    public const byte Register = 0x01, Open = 0x02, Data = 0x03, Close = 0x04, Ping = 0x05, Pong = 0x06, Wake = 0x07;
     public const int StreamHeader = 5;
     public const int MaxNoise = 65_535;
     public const int MaxFrame = StreamHeader + MaxNoise;
@@ -35,6 +35,9 @@ public static class RelayFrames
     }
 
     public static byte[] PingFrame(ReadOnlySpan<byte> data) => Simple(Ping, data);
+
+    /// <summary>§10.6: wake the phone with this push token (printable ASCII).</summary>
+    public static byte[] WakeFrame(string pushToken) => Simple(Wake, System.Text.Encoding.ASCII.GetBytes(pushToken));
 
     public static byte[] PongFrame(ReadOnlySpan<byte> data) => Simple(Pong, data);
 

@@ -108,7 +108,7 @@ public sealed partial class AgentHost : IDisposable
     {
         get
         {
-            var caps = new List<string>(_backend.Capabilities.Where(c => c != "peers")) { "peers" };
+            var caps = new List<string>(_backend.Capabilities.Where(c => c != "peers" && c != "push")) { "peers", "push" };
             return caps;
         }
     }
@@ -307,6 +307,7 @@ public sealed partial class AgentHost : IDisposable
     /// </summary>
     public void Publish(string type, JsonObject body, RequestOrigin? causedBy = null)
     {
+        if (type == "ev.history") RaiseWake(body["event"] as JsonObject);
         if (!type.StartsWith("ev.", StringComparison.Ordinal)) throw new ArgumentException("events start with ev.", nameof(type));
         var message = new JsonObject { ["t"] = type };
         foreach (var (k, v) in body) message[k] = v?.DeepClone();
@@ -318,6 +319,69 @@ public sealed partial class AgentHost : IDisposable
     }
 
     private readonly object _publishLock = new();
+
+    public const int MaxPushToken = 4096;
+
+    /// <summary>A push token as §10.6 allows it: 1..4096 printable ASCII characters.</summary>
+    public static bool IsPushToken(string? token) =>
+        token is { Length: > 0 and <= MaxPushToken } && token.All(c => c is >= '!' and <= '~');
+
+    /// <summary>
+    /// Something a parent may want to hear about happened (§10.6): the push tokens of the hubs that want that
+    /// kind of event and have no live session right now, while "Control from anywhere" is on. The relay
+    /// client wakes them (rate-limited); the phones then connect and catch up. Any thread.
+    /// </summary>
+    public event Action<IReadOnlyList<string>>? WakeNeeded;
+
+    /// <summary>History types that wake even when caused automatically (source system); the rest only when someone acted.</summary>
+    private static readonly HashSet<string> WakeAlways = new(StringComparer.Ordinal) { "expired", "closed", "tampered" };
+
+    /// <summary>A history event (§7.3): wakes the hubs that asked for its type — never the hub that caused it.</summary>
+    private void RaiseWake(JsonObject? historyEvent)
+    {
+        var type = (historyEvent?["type"] as JsonValue)?.TryGetValue<string>(out var t) == true ? t : null;
+        if (type == null) return;
+        var source = (historyEvent!["source"] as JsonValue)?.TryGetValue<string>(out var s) == true ? s : null;
+        if (source == "system" && !WakeAlways.Contains(type)) return; // automatic starts, resumes, restores
+        var causedBy = (historyEvent["hub"] as JsonValue)?.TryGetValue<string>(out var h) == true ? h : null;
+        RaiseWake(type, causedBy);
+    }
+
+    private void RaiseWake(string kind, string? causedBy)
+    {
+        if (!RemoteAccess || WakeNeeded is not { } handlers) return;
+        var tokens = PushTokensToWake(kind, causedBy);
+        if (tokens.Count == 0) return;
+        try { handlers(tokens); } catch (Exception) { /* the relay client's business */ }
+    }
+
+    private List<string> PushTokensToWake(string? kind, string? causedBy)
+    {
+        lock (_lock)
+        {
+            var live = _sessions.Select(s => s.HubId).ToHashSet();
+            return _state.Peers
+                .Where(p => p.PushToken != null && !live.Contains(p.Id) && p.Id != causedBy
+                            && (kind == null || p.PushEvents == null || p.PushEvents.Contains(kind)))
+                .Select(p => p.PushToken!).ToList();
+        }
+    }
+
+    /// <summary>Now by this host's clock (the time a held-back wake-up's event happened, for <see cref="StillToWake"/>).</summary>
+    public DateTimeOffset Now => _time.GetUtcNow();
+
+    /// <summary>
+    /// For a wake-up that was held back (one per 30 s): is this token still one to wake — its hub has no live
+    /// session and none started since <paramref name="lastEventAt"/>? A hub that connected after the event
+    /// has caught it up already (§10.6).
+    /// </summary>
+    public bool StillToWake(string pushToken, DateTimeOffset lastEventAt)
+    {
+        if (!RemoteAccess || !PushTokensToWake(null, null).Contains(pushToken)) return false;
+        lock (_lock)
+            return _state.Peers.FirstOrDefault(p => p.PushToken == pushToken) is { } peer
+                   && (peer.LastSeen == null || peer.LastSeen < lastEventAt);
+    }
 
     /// <summary>Says <c>bye shutdown</c> to every session (app exit or update).</summary>
     public async Task ShutdownAsync()
@@ -395,6 +459,8 @@ public sealed partial class AgentHost : IDisposable
     }
 
     internal int RelayPendingCount { get { lock (_lock) return _relayPending.Count; } }
+
+    internal int LiveSessionCount { get { lock (_lock) return _sessions.Count; } }
 
     /// <summary>Relayed streams whose msg 1 named the right key but which aren't confirmed yet, per hub (≤ 2).</summary>
     private readonly Dictionary<string, int> _relayProven = new();
@@ -605,6 +671,7 @@ public sealed partial class AgentHost : IDisposable
     /// <summary>ev.peers is per session (each hub sees its own <c>current</c>), so it bypasses <see cref="Publish"/>.</summary>
     private void PublishPeers(string change, string hubId, RequestOrigin? origin)
     {
+        if (change == "added") RaiseWake("peerAdded", hubId); // §10.6: a new parent app is news for the others
         lock (_publishLock)
             foreach (var s in LiveSessions())
             {
