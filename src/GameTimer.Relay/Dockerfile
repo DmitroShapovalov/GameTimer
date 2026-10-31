@@ -9,8 +9,12 @@ RUN dotnet publish src/GameTimer.Relay/GameTimer.Relay.csproj -c Release -r linu
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=build /app .
+# One small machine (256 MB): workstation GC with a hard heap cap, so the process fails loudly instead of
+# being killed by the kernel; the relay's own budgets (RelayOptions) stay well below it
 ENV ASPNETCORE_HTTP_PORTS=8080 \
-    DOTNET_CLI_TELEMETRY_OPTOUT=1
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_gcServer=0 \
+    DOTNET_GCHeapHardLimit=0xA000000
 EXPOSE 8080
 USER app
 ENTRYPOINT ["dotnet", "GameTimer.Relay.dll"]

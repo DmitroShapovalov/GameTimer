@@ -2,7 +2,8 @@ name: Relay
 
 # The Phase B relay (src/GameTimer.Relay, docs/protocol.md §10): tests and an image smoke test on every PR;
 # on master, deploy to Fly.io. The deploy job needs the GitHub environment "relay" with the secret
-# FLY_API_TOKEN (a deploy token for the app only: `fly tokens create deploy -a gametimer-relay`).
+# FLY_API_TOKEN (a deploy token for the app only: `fly tokens create deploy -a gametimer-relay`); the
+# environment is limited to the master branch in the repository settings.
 on:
   pull_request:
     paths:
@@ -30,9 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '8.0.x'
 
@@ -58,9 +59,10 @@ jobs:
       group: relay-deploy
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pinned: this job holds FLY_API_TOKEN
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
 
       - name: Deploy
         run: flyctl deploy . --config src/GameTimer.Relay/fly.toml --dockerfile src/GameTimer.Relay/Dockerfile --remote-only --ha=false

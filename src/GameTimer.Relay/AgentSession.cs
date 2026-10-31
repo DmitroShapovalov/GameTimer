@@ -21,6 +21,7 @@ internal sealed class AgentSession
     private bool _registered;
     private readonly long _connected;
     private long _lastReceived, _lastSent, _lastRegister, _closingSince;
+    private int _controlQueued, _pongQueued;
 
     /// <summary>The routes this socket holds; guarded by the <see cref="Registry"/> lock.</summary>
     public HashSet<string> Routes { get; } = new(StringComparer.Ordinal);
@@ -43,7 +44,7 @@ internal sealed class AgentSession
         {
             await ReceiveLoopAsync().ConfigureAwait(false);
         }
-        catch (Exception) { /* aborted or broken */ }
+        catch (Exception e) { _s.Unexpected(e); }
         finally
         {
             _s.Agents.TryRemove(this, out _);
@@ -60,6 +61,7 @@ internal sealed class AgentSession
             await Task.WhenAny(send, Task.Delay(_s.Options.CloseEchoWait)).ConfigureAwait(false);
             _ws.Abort();
             await send.ConfigureAwait(false);
+            WsIo.Drain(_out, Release);
         }
     }
 
@@ -67,7 +69,7 @@ internal sealed class AgentSession
     {
         while (true)
         {
-            var (kind, data) = await WsIo.ReceiveAsync(_ws, Frames.MaxFrame).ConfigureAwait(false);
+            var (kind, data) = await WsIo.ReceiveAsync(_ws, Frames.MaxFrame, _s).ConfigureAwait(false);
             Volatile.Write(ref _lastReceived, _s.Time.GetTimestamp());
             switch (kind)
             {
@@ -78,7 +80,10 @@ internal sealed class AgentSession
                     Close(1003);
                     break;
                 case Received.TooBig:
-                    Close(1009);
+                    Close(1002); // longer than any frame (§10.2)
+                    break;
+                case Received.Overloaded:
+                    Close(1013);
                     break;
                 default:
                     if (!IsClosing) Handle(data!);
@@ -109,7 +114,8 @@ internal sealed class AgentSession
                 break;
             case FrameType.Ping:
                 if (f.Length > 1 + Frames.MaxPingData) { Close(1002); break; }
-                Enqueue(Frames.Pong(f.AsSpan(1)), owner: null);
+                // One pong waiting is enough: an agent that pings without reading can't grow the queue
+                if (Interlocked.Exchange(ref _pongQueued, 1) == 0) Enqueue(Frames.Pong(f.AsSpan(1)), owner: null);
                 break;
             case FrameType.Pong:
                 if (f.Length > 1 + Frames.MaxPingData) Close(1002);
@@ -190,7 +196,23 @@ internal sealed class AgentSession
     /// <summary>Tells the agent that a stream ended (§10.2 <c>close</c>).</summary>
     public void SendClose(uint id, int code) => Enqueue(Frames.Close(id, code), owner: null);
 
-    private bool Enqueue(byte[] frame, HubStream? owner) => _out.Writer.TryWrite(new Out(frame, 0, owner));
+    /// <summary>
+    /// Queues a frame that isn't hub data (open, close, ping, pong) within <see cref="RelayOptions.AgentControlBytes"/>;
+    /// an agent that doesn't read them is closed with 1008.
+    /// </summary>
+    private bool Enqueue(byte[] frame, HubStream? owner)
+    {
+        if (Interlocked.Add(ref _controlQueued, frame.Length) > _s.Options.AgentControlBytes)
+        {
+            Interlocked.Add(ref _controlQueued, -frame.Length);
+            Close(1008);
+            return false;
+        }
+        var o = new Out(frame, 0, owner);
+        if (_out.Writer.TryWrite(o)) return true;
+        Release(o);
+        return false;
+    }
 
     /// <summary>Starts closing this socket with <paramref name="code"/>; the receive loop waits for the echo.</summary>
     public void Close(int code)
@@ -201,6 +223,7 @@ internal sealed class AgentSession
             _closing = true;
             _closingSince = _s.Time.GetTimestamp();
         }
+        _s.Registry.Remove(this); // hubs now get 404 ("PC offline"), not 503
         _out.Writer.TryWrite(new Out(null, code, null));
         _out.Writer.TryComplete();
     }
@@ -213,10 +236,16 @@ internal sealed class AgentSession
 
     private void Release(Out o)
     {
-        if (o.Owner != null && o.Data != null)
+        if (o.Data == null) return;
+        if (o.Owner != null)
         {
             Interlocked.Add(ref o.Owner.ToAgentBuffered, -o.Data.Length);
             _s.Unbuffer(o.Data.Length);
+        }
+        else
+        {
+            Interlocked.Add(ref _controlQueued, -o.Data.Length);
+            if (o.Data[0] == (byte)FrameType.Pong) Volatile.Write(ref _pongQueued, 0);
         }
     }
 

@@ -2,6 +2,8 @@
 #   flyctl deploy . --config src/GameTimer.Relay/fly.toml --dockerfile src/GameTimer.Relay/Dockerfile --ha=false
 app = "gametimer-relay"
 primary_region = "ams"
+# Time to close agents with 1012 on a deploy (the app waits up to 8 s)
+kill_timeout = 10
 
 [env]
   # Fly's proxy puts the client address here; the per-IP limits (§10.4) need it
@@ -17,8 +19,9 @@ primary_region = "ams"
 
   [http_service.concurrency]
     type = "connections"
-    soft_limit = 3000
-    hard_limit = 3500
+    # RelayOptions: at most 400 agent + 600 hub sockets
+    soft_limit = 900
+    hard_limit = 1100
 
   [[http_service.checks]]
     grace_period = "10s"

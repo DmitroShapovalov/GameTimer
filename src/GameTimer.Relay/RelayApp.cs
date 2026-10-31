@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using GameTimer.Protocol.Identity;
 
 namespace GameTimer.Relay;
 
@@ -8,6 +9,7 @@ public static class RelayApp
     public static void ConfigureServices(WebApplicationBuilder builder)
     {
         builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
+        builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(8));
         builder.Services.Configure<RelayOptions>(builder.Configuration.GetSection("Relay"));
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<RelayState>();
@@ -16,6 +18,8 @@ public static class RelayApp
 
     public static void Map(WebApplication app)
     {
+        // Fail at start, not at the first register, if the native crypto library can't be loaded
+        RouteToken.Route(new byte[RouteToken.Size]);
         app.UseWebSockets();
         app.MapGet("/healthz", () => Results.Text("ok"));
         app.Map("/v2/agent", AgentAsync);
@@ -27,20 +31,19 @@ public static class RelayApp
         var s = ctx.RequestServices.GetRequiredService<RelayState>();
         if (!ctx.WebSockets.IsWebSocketRequest) { ctx.Response.StatusCode = 400; return; }
         if (ctx.Request.Headers.ContainsKey("Origin")) { ctx.Response.StatusCode = 403; return; }
-        var key = IpLimits.KeyOf(ctx, s.Options);
-        if (!s.Limits.TryStart(key, agent: true)) { ctx.Response.StatusCode = 429; return; }
-        if (!s.TryTakeSocket()) { ctx.Response.StatusCode = 503; return; }
-        s.Limits.Opened(key, agent: true);
+        if (IpLimits.ClientOf(ctx, s.Options) is not { } client) { ctx.Response.StatusCode = 400; return; }
+        if (!s.Limits.TryStart(client, agent: true)) { ctx.Response.StatusCode = 429; return; }
         try
         {
-            using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
-            await new AgentSession(s, ws, key).RunAsync();
+            if (!s.TryTakeSocket(agent: true)) { ctx.Response.StatusCode = 503; return; }
+            try
+            {
+                using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
+                await new AgentSession(s, ws, client.Key).RunAsync();
+            }
+            finally { s.ReleaseSocket(agent: true); }
         }
-        finally
-        {
-            s.Limits.Closed(key, agent: true);
-            s.ReleaseSocket();
-        }
+        finally { s.Limits.Closed(client, agent: true); }
     }
 
     private static async Task HubAsync(HttpContext ctx)
@@ -48,36 +51,36 @@ public static class RelayApp
         var s = ctx.RequestServices.GetRequiredService<RelayState>();
         // §10.3: the first match of 403, 429, 404, 503 answers the upgrade
         if (ctx.Request.Headers.ContainsKey("Origin")) { ctx.Response.StatusCode = 403; return; }
-        var key = IpLimits.KeyOf(ctx, s.Options);
-        if (s.Limits.NotFoundBlocked(key) || !s.Limits.TryStart(key, agent: false)) { ctx.Response.StatusCode = 429; return; }
-        var route = ctx.Request.RouteValues["route"] as string;
-        var found = ctx.WebSockets.IsWebSocketRequest && IsCanonicalRoute(route) ? s.Registry.Find(route!) : null;
-        if (found is not { } target)
-        {
-            s.Limits.CountNotFound(key);
-            ctx.Response.StatusCode = 404;
-            return;
-        }
-        if (!target.Agent.HasRoom || !s.TryTakeSocket()) { ctx.Response.StatusCode = 503; return; }
-        s.Limits.Opened(key, agent: false);
+        if (IpLimits.ClientOf(ctx, s.Options) is not { } client) { ctx.Response.StatusCode = 400; return; }
+        if (s.Limits.NotFoundBlocked(client) || !s.Limits.TryStart(client, agent: false)) { ctx.Response.StatusCode = 429; return; }
         try
         {
-            using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
-            var stream = new HubStream(s, target.Agent, ws);
-            if (!target.Agent.Open(stream, target.Route))
+            var route = ctx.Request.RouteValues["route"] as string;
+            var found = ctx.WebSockets.IsWebSocketRequest && IsCanonicalRoute(route) ? s.Registry.Find(route!) : null;
+            if (found is not { } target)
             {
-                // The agent went away or filled up in between
-                try { await ws.CloseAsync((WebSocketCloseStatus)1013, null, new CancellationTokenSource(s.Options.CloseEchoWait).Token); }
-                catch (Exception) { }
+                s.Limits.CountNotFound(client);
+                ctx.Response.StatusCode = 404;
                 return;
             }
-            await stream.RunAsync();
+            if (!target.Agent.HasRoom || s.NearlyFull || !s.TryTakeSocket(agent: false)) { ctx.Response.StatusCode = 503; return; }
+            try
+            {
+                using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
+                var stream = new HubStream(s, target.Agent, ws);
+                if (!target.Agent.Open(stream, target.Route))
+                {
+                    // The agent went away or filled up in between
+                    using var cts = new CancellationTokenSource(s.Options.CloseEchoWait);
+                    try { await ws.CloseAsync((WebSocketCloseStatus)1013, null, cts.Token); }
+                    catch (Exception) { }
+                    return;
+                }
+                await stream.RunAsync();
+            }
+            finally { s.ReleaseSocket(agent: false); }
         }
-        finally
-        {
-            s.Limits.Closed(key, agent: false);
-            s.ReleaseSocket();
-        }
+        finally { s.Limits.Closed(client, agent: false); }
     }
 
     /// <summary>26 characters of the uppercase base32 alphabet whose last 2 bits are zero (§10.1).</summary>
@@ -91,7 +94,10 @@ public static class RelayApp
     }
 }
 
-/// <summary>Runs the periodic checks of every agent socket and its streams, and trims the per-IP windows.</summary>
+/// <summary>
+/// Runs the periodic checks of every agent socket and its streams, trims the per-IP table, logs counts
+/// (never addresses or routes), and closes agents with 1012 when the relay stops (a deploy).
+/// </summary>
 internal sealed class Sweeper : BackgroundService
 {
     private readonly RelayState _s;
@@ -101,6 +107,7 @@ internal sealed class Sweeper : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stop)
     {
         using var timer = new PeriodicTimer(_s.Options.Sweep);
+        var lastStats = _s.Time.GetTimestamp();
         try
         {
             while (await timer.WaitForNextTickAsync(stop))
@@ -108,11 +115,24 @@ internal sealed class Sweeper : BackgroundService
                 foreach (var agent in _s.Agents.Keys)
                 {
                     try { agent.Tick(); }
-                    catch (Exception) { /* one broken socket must not stop the others */ }
+                    catch (Exception e) { _s.Unexpected(e); } // one broken socket must not stop the others
                 }
                 _s.Limits.Cleanup();
+                if (_s.Time.GetElapsedTime(lastStats) >= _s.Options.StatsEvery)
+                {
+                    lastStats = _s.Time.GetTimestamp();
+                    _s.Log.LogInformation("Relay: {Agents} agent sockets, {Hubs} hub sockets, {Routes} routes, {Buffered} bytes queued",
+                        _s.AgentSockets, _s.HubSockets, _s.Registry.Count, _s.Buffered);
+                }
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        foreach (var agent in _s.Agents.Keys) agent.Close(1012); // service restart: agents reconnect
+        for (int i = 0; i < 30 && !_s.Agents.IsEmpty; i++) await Task.Delay(100, CancellationToken.None);
+        await base.StopAsync(cancellationToken);
     }
 }

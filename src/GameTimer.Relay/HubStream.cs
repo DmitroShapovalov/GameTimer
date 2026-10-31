@@ -37,7 +37,7 @@ internal sealed class HubStream
         {
             while (true)
             {
-                var (kind, data) = await WsIo.ReceiveAsync(_ws, Frames.MaxNoise).ConfigureAwait(false);
+                var (kind, data) = await WsIo.ReceiveAsync(_ws, Frames.MaxNoise, _s).ConfigureAwait(false);
                 if (kind == Received.Close)
                 {
                     int code = (int)(_ws.CloseStatus ?? WebSocketCloseStatus.NormalClosure);
@@ -47,18 +47,20 @@ internal sealed class HubStream
                 if (Terminated) continue; // waiting for the hub's echo of our close
                 if (kind == Received.Text) { Terminate(1003, Frames.MapCode(1003)); continue; }
                 if (kind == Received.TooBig) { Terminate(1009, Frames.MapCode(1009)); continue; }
+                if (kind == Received.Overloaded) { Terminate(1013, 1013); continue; }
                 if (data!.Length == 0) continue; // never a Noise message; nothing to forward
                 Volatile.Write(ref _lastData, _s.Time.GetTimestamp());
                 if (!_agent.SendFromHub(this, data)) Terminate(1013, 1013);
             }
         }
-        catch (Exception) { /* aborted or dropped */ }
+        catch (Exception e) { _s.Unexpected(e); }
         finally
         {
             Terminate(hubCode: 1001, agentCode: 1001); // a hub that just drops (no-op if already ended)
             await Task.WhenAny(send, Task.Delay(_s.Options.CloseEchoWait)).ConfigureAwait(false);
             _ws.Abort();
             await send.ConfigureAwait(false);
+            WsIo.Drain(_out, Sent);
         }
     }
 
