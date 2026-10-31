@@ -1,4 +1,5 @@
-"""Writes protocol-vectors.json: protocol v2 ids, pairing codes and encodings (docs/protocol.md §4.4, §4.5, §8.2).
+"""Writes protocol-vectors.json: protocol v2 ids, pairing codes, discovery tags, relay route tokens and encodings
+(docs/protocol.md §4.4, §4.5, §8.2, §9, §10).
 
 An independent third implementation (Python hashlib / base64) that both the C# and the Kotlin tests check against.
 Run: python3 gen_protocol_vectors.py
@@ -25,6 +26,14 @@ def tag(ak, date):
     return b32(d[:8])
 
 
+def claim(ak, date):
+    return hashlib.blake2b(b"GameTimer route v2" + date.encode(), digest_size=32, key=ak).digest()[:16]
+
+
+def route(c):
+    return hashlib.blake2b(b"GameTimer route id v2" + c, digest_size=32).digest()[:16]
+
+
 def code(h):
     n = int.from_bytes(hashlib.blake2b(b"GameTimer pair code v2" + h, digest_size=32).digest()[:4], "big")
     return "%06d" % (n % 1000000)
@@ -38,13 +47,16 @@ hashes = [bytes(64), bytes(range(64)),
 data = [b"", b"f", b"fo", b"foo", b"foob", b"fooba", b"foobar", bytes([0xFB, 0xFF, 0xFE]), bytes(range(16))]
 
 out = {
-    "_about": "Protocol v2 encodings and derivations (docs/protocol.md §4.4, §4.5, §8.2), computed "
+    "_about": "Protocol v2 encodings and derivations (docs/protocol.md §4.4, §4.5, §8.2, §9, §10), computed "
               "independently with Python hashlib/base64 by gen_protocol_vectors.py.",
     "ids": [{"publicKey": k.hex(), "agentId": ident(b"GameTimer agent id v2", k),
              "hubId": ident(b"GameTimer hub id v2", k)} for k in keys],
     "pairingCodes": [{"handshakeHash": h.hex(), "code": code(h)} for h in hashes],
     "discoveryTags": [{"ak": ak.hex(), "date": date, "tag": tag(ak, date)}
                       for ak in [bytes(32), bytes(range(32))] for date in ["2026-10-24", "2027-01-01"]],
+    "routeTokens": [{"ak": ak.hex(), "date": date, "claim": claim(ak, date).hex(), "route": route(claim(ak, date)).hex(),
+                     "token": b32(route(claim(ak, date)))}
+                    for ak in [bytes(32), bytes(range(32))] for date in ["2026-10-24", "2027-01-01", "2028-02-29"]],
     "base32": [{"hex": d.hex(), "text": b32(d)} for d in data],
     "base64url": [{"hex": d.hex(), "text": b64u(d)} for d in data],
 }
