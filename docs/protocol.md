@@ -597,8 +597,9 @@ pinned at pairing.
 - One small relay can be overloaded by someone with many addresses (fake agents and hubs need no
   secret): the relay path then fails for everyone until it passes. Denial of service only; the LAN
   keeps working. Accepted for now; watched through the relay's counts and more machines if needed.
-- The relay doesn't log request paths (they contain routes) and keeps IP addresses in its logs for a
-  few days at most. This is stated in the privacy note.
+- The relay doesn't log request paths (they contain routes), IP addresses or tokens: only counts and
+  errors. Its host (Fly.io) keeps app logs for up to 7 days. This is stated in the privacy note
+  (`docs/PRIVACY.md`).
 
 ### 10.6 Push wake-ups
 
@@ -625,8 +626,9 @@ like after any reconnect (§12), so it shows the same notifications it would at 
   push service as a data message `{ "t": "wake" }`, high priority, 10 minutes to live, one collapse key.
   At most 20 per agent socket, 30 per IP (4× per /24 or /48) and 600 in total per minute, and one per
   token every 20 s across the relay; over that, or without a push account, it is dropped silently. Tokens the push
-  service rejects as unknown are not tried again. The relay keeps no token after the call (only short-
-  lived hashes for the limits) and doesn't log it.
+  service rejects as unknown are not tried again. The relay keeps no token after the call: only short
+  hashes, for the limits and of the tokens rejected as unknown (in memory, until it restarts at the
+  latest); it doesn't log tokens.
 - **Turned off.** When the PC owner turns "Control from anywhere" off, every hub with a token (and no
   session) is woken once more before the relay connection closes, so a phone that relied on wake-ups
   connects (at home), sees `remoteAccess: false` and watches on its own again.

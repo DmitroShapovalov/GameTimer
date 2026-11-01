@@ -37,6 +37,8 @@ class GameTimerApp : Application() {
         store = HubStore(this)
         hub = LinkHub(this, store)
         Push.init(this)
-        Push.refresh(this) { hub.pushTokenChanged() }
+        // Firebase is asked for a token only once a paired PC has "Control from anywhere" on (docs/PRIVACY.md);
+        // until then the app doesn't contact Google at all
+        if (store.agents.value.any { it.remoteAccess }) Push.refresh(this) { hub.pushTokenChanged() }
     }
 }

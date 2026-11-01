@@ -4,6 +4,13 @@ Scope: whether the phone remote (an HTTP server the app runs on the home network
 take control of the PC, plus the local files, the "protection from closing" feature, and dependencies.
 This is a review of the code in this repository, not a formal audit.
 
+> **Since v1.7 / v1.8** the Android parent app talks to the PC over the encrypted protocol v2 (Noise, keys pinned at
+> pairing), at home directly and, with "Control from anywhere" on, through a relay that can't read or change anything.
+> Its threat model (what a compromised relay, network or lost phone can and can't do) is in
+> [`protocol.md`](protocol.md) (§10.5, §10.6 and §11), and what leaves the home and who sees it in
+> [`PRIVACY.md`](PRIVACY.md). This review below covers the older phone web page (v1 API), which stays for already
+> paired phones, and the PC side.
+
 ## What the remote can and cannot do
 
 The embedded server exposes a **fixed, small set of actions**, nothing more:

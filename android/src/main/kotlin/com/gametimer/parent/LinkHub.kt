@@ -197,7 +197,9 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         val caps = (hello["capabilities"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: return
         if ("push" !in caps) return
         val events = wantedPushEvents()
-        val token = wantedPushToken()?.takeIf { events.isNotEmpty() }
+        // Only a PC with "Control from anywhere" on can use the token (§10.6): the others never get it
+        val remote = store.agents.value.firstOrNull { it.agentId == agentId }?.remoteAccess == true
+        val token = wantedPushToken()?.takeIf { events.isNotEmpty() && remote }
         val body = buildJsonObject {
             if (token != null) {
                 put("token", token)
@@ -253,6 +255,10 @@ class LinkHub(private val context: Context, private val store: HubStore) {
             scope.launch {
                 withContext(storeWriter) { store.updateRemoteAccess(agentId, on) }
                 MonitorService.update(context) // push may now cover every PC (or no longer)
+                // The first PC with remote access: only now does the phone register with Firebase; either way
+                // that PC gets (or drops) the token
+                if (on) Push.refresh(context) { pushTokenChanged() }
+                pushTokenChanged()
             }
         }
         return AgentLink(agent, key, connector, appName, scope, locator, relay, onRemoteAccess, onMoved).also {
