@@ -54,7 +54,8 @@ service come into play; until a paired PC has it on, the app doesn't ask Google 
 **The relay** (`gametimer-relay.fly.dev`, in Amsterdam) passes encrypted messages between the phone
 and the PC when they are not on the same network. Nothing is written to disk. In memory it holds only
 what a live connection needs, short-lived counters per address for its limits, and short hashes of push
-tokens (about 20 seconds; tokens Google reports as unknown until the relay restarts). What it can see:
+tokens for its rate limits and of tokens Google reports as unknown (until the relay restarts at the
+latest). What it can see:
 
 - IP addresses, when the PC and the phones connect, and the size and timing of messages;
 - that one PC talks to a given number of phones. The routes it uses for a PC change every day, but the
