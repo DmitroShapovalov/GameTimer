@@ -61,7 +61,8 @@ public partial class MainWindow : FluentWindow
         IsVisibleChanged += (_, _) => { if (!IsVisible) SetUnlocked(false); };
         // The whole app losing focus (not just this window: the overlay or a dialog may have had it)
         System.Windows.Application.Current.Activated += (_, _) => _appActive = true;
-        System.Windows.Application.Current.Deactivated += (_, _) => { _appActive = false; SetUnlocked(false); };
+        // (not while our own prompt is open: the system's Windows Hello prompt is another app)
+        System.Windows.Application.Current.Deactivated += (_, _) => { _appActive = false; if (!_verifying) SetUnlocked(false); };
         _settingsService = settingsService;
         _settings = settings;
 
@@ -1586,19 +1587,8 @@ public partial class MainWindow : FluentWindow
 
     private void Schedule_Toggle(object sender, RoutedEventArgs e) => ApplyScheduleFromUi();
     private void Schedule_Text(object sender, TextChangedEventArgs e) => ApplyScheduleFromUi();
-    private async void ScheduleEnabled_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_isLoading || !IsUnlocked) return;
-        if (ScheduleEnabledToggle.IsChecked != true && _settings.ScheduleEnabled && !await RequireAuth(fresh: true))
-        {
-            // Turning the schedule off frees the child the most: always asked; refused → back on
-            _isLoading = true;
-            ScheduleEnabledToggle.IsChecked = true;
-            _isLoading = false;
-            return;
-        }
-        ApplyScheduleFromUi();
-    }
+    // Under the unlock like every schedule edit (a day edit can free as much as switching it off)
+    private void ScheduleEnabled_Changed(object sender, RoutedEventArgs e) => ApplyScheduleFromUi();
 
     private void ApplyScheduleFromUi()
     {
@@ -1630,7 +1620,7 @@ public partial class MainWindow : FluentWindow
 
     private void UpdateScheduleLock()
     {
-        // Locked again: show what is saved, not a half-typed value that was never applied
+        // Locked again: the editor shows what is saved
         if (!IsUnlocked && ScheduleEditPanel != null && ScheduleEditPanel.IsEnabled) LoadScheduleToUi();
         if (ScheduleEditPanel != null) ScheduleEditPanel.IsEnabled = IsUnlocked;
         if (ScheduleUnlockButton != null) ScheduleUnlockButton.Content = Loc.Get(IsUnlocked ? "Sched_Lock" : "Sched_Unlock");
@@ -1716,6 +1706,7 @@ public partial class MainWindow : FluentWindow
     private System.Windows.Threading.DispatcherTimer? _lockTimer;
 
     private bool _appActive = true;
+    private bool _verifying;
 
     private bool IsUnlocked => _unlockedUntil != 0 && Environment.TickCount64 < _unlockedUntil;
 
@@ -1766,10 +1757,13 @@ public partial class MainWindow : FluentWindow
     private async Task<bool> RequireAuth(string promptKey = "AuthPrompt", Window? owner = null, bool fresh = false)
     {
         if (!fresh && IsUnlocked) return true;
-        bool ok = await VerifyParent(promptKey, owner);
-        if (ok && !fresh)
+        bool ok;
+        _verifying = true;
+        try { ok = await VerifyParent(promptKey, owner); }
+        finally { _verifying = false; }
+        if (ok && !fresh) SetUnlocked(true);
+        if (IsUnlocked)
         {
-            SetUnlocked(true);
             // The system prompt is another process: if focus went to another app (the game) instead of back
             // here, this action still runs but the unlock doesn't outlive it
             _ = Dispatcher.InvokeAsync(async () =>
