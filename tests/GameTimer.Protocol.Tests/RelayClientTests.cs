@@ -322,7 +322,12 @@ public class RelayClientTests
         Assert.Equal(new[] { "token-C" }, await WokenBy(() => rig.Agent.Host.Publish("ev.history", Hist("stopped"))));
         // Automatic events (source system) wake nobody, alerts neither (§10.6)
         Assert.Empty(await WokenBy(() => rig.Agent.Host.Publish("ev.history", Hist("started", "system"))));
-        Assert.Empty(await WokenBy(() => rig.Agent.Host.Publish("ev.alert", new JsonObject { ["minutes"] = 5 })));
+        Assert.Empty(await WokenBy(() => rig.Agent.Host.Publish("ev.alert", new JsonObject { ["minutes"] = 5 }))); // nobody asked
+        await a.RequestAsync("push.set", new JsonObject { ["token"] = "token-A2", ["events"] = new JsonArray("alert") }, withRid: true);
+        await a.End.CloseAsync();
+        for (int i = 0; i < 100 && rig.Agent.Host.LiveSessionCount > 0; i++) await Task.Delay(20);
+        Assert.Equal(new[] { "token-A2" }, await WokenBy(() => rig.Agent.Host.Publish("ev.alert", new JsonObject { ["minutes"] = 5 })));
+        (a, _) = await TestHub.ConnectAsync(rig.Agent.Host, keyA);
         // Time's up: B now; C not yet (30 s since its last wake-up; a trailing one would follow)
         Assert.Equal(new[] { "token-B" }, await WokenBy(() => rig.Agent.Host.Publish("ev.history", Hist("expired", "system"))));
         // Nothing at all while remote access is off

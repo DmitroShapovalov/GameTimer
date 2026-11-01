@@ -291,7 +291,7 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 | `peers.list` | `peers` | — | any | — | `peers[]` |
 | `peers.revoke` | `peers` | ✓ | admin (or self) | `peer` (hub id) | `peers[]` |
 | `peers.setRole` | `peers` | ✓ | admin | `peer` (hub id), `role` (`admin` / `parent`) | `peers[]` |
-| `push.set` | `push` | ✓ | any | `token`: this hub's push token (1..4096 printable ASCII), or `null` = none; optional `events`: what may wake it (≤ 16 history types or `peerAdded`; absent = all) (§10.6) | `{}` |
+| `push.set` | `push` | ✓ | any | `token`: this hub's push token (1..4096 printable ASCII), or `null` = none; optional `events`: what may wake it (≤ 16 history types, `peerAdded` or `alert`; absent = all but `alert`) (§10.6) | `{}` |
 
 `peers[]` entries: `id`, `name`, `role`, `pairedAt`, `lastSeen`, `current` (= this is the hub making
 the request).
@@ -614,8 +614,8 @@ like after any reconnect (§12), so it shows the same notifications it would at 
 - **When.** Only while "Control from anywhere" is on and the agent's relay socket is up: on an
   `ev.history` whose type the hub asked for — automatic ones (source `system`) only for `expired`,
   `closed`, `tampered` — and on a new parent app (`peerAdded`); for each such hub with a token and **no
-  live session**, never the hub that caused the event. `ev.alert` wakes nobody (it isn't in the
-  history, so a woken phone couldn't show it). At most one wake-up per token every 30 s; events in
+  live session**, never the hub that caused the event. `ev.alert` wakes only hubs that list `alert`
+  explicitly (it isn't in the history: a woken phone shows it from the timer state it gets, §7.1). At most one wake-up per token every 30 s; events in
   between give one trailing wake-up, dropped if the hub connected after the last of them. A hub
   whose session is just closing when an event happens counts as connected (it catches up on its next
   connect).

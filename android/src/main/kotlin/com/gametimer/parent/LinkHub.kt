@@ -179,6 +179,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
 
     /** The token or the notification setting changed: tell the PCs that are online now (the others on connect). */
     fun pushTokenChanged() {
+        MonitorService.update(context) // with a token, push may cover every PC
         store.agents.value.forEach { a ->
             val l = links[a.agentId] ?: return@forEach
             val online = l.status.value as? LinkStatus.Online ?: return@forEach
@@ -245,7 +246,10 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         // has "Control from anywhere" on (learned from its hello and stored with the PC)
         val relay = RelayPath(RelayPath.DEFAULT_URL, connector, onLocalNetwork = { onLan }, allowed = { relayAllowed })
         val onRemoteAccess: (Boolean) -> Unit = { on ->
-            scope.launch(storeWriter) { store.updateRemoteAccess(agentId, on) }
+            scope.launch {
+                withContext(storeWriter) { store.updateRemoteAccess(agentId, on) }
+                MonitorService.update(context) // push may now cover every PC (or no longer)
+            }
         }
         return AgentLink(agent, key, connector, appName, scope, locator, relay, onRemoteAccess, onMoved).also {
             links[agentId] = it
@@ -314,6 +318,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
                         me = me.copy(hubId = ((it.hello["you"] as? JsonObject)?.get("id") as? JsonPrimitive)?.content)
                         compare()
                         notifier.catchUp(agent, api, me, link.state.value?.json?.str("now"), notify = shouldNotify(agent.agentId))
+                        if (waking) notifier.soonFromState(agent, link.state.value)
                         caughtUp.value += agent.agentId to android.os.SystemClock.elapsedRealtime()
                         syncPushToken(agent.agentId, link, it.hello)
                     }

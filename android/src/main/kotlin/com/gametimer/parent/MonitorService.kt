@@ -15,8 +15,9 @@ import kotlinx.coroutines.launch
 /**
  * Keeps the links to the paired PCs open while the app is closed, so [Notifier] can tell the parent
  * when the time is up, a warning point is reached, something suspicious or someone else's action
- * happened. Android requires a (quiet) ongoing notification for that. It only works where the PCs are
- * reachable — the home network; away from home the links just stay offline (Phase B adds a relay).
+ * happened. Android requires a (quiet) ongoing notification for that. Only needed for PCs that push
+ * wake-ups don't cover (no "Control from anywhere", or no push in this build): see [wanted]. It only
+ * works on the home network; away from home those links stay offline.
  */
 class MonitorService : Service() {
     private val app get() = application as GameTimerApp
@@ -60,11 +61,18 @@ class MonitorService : Service() {
     companion object {
         private const val ONGOING_ID = 1
 
-        // Enabled, a PC paired, and allowed to notify (watching without notifying would only cost battery)
+        /**
+         * Enabled, a PC paired, allowed to notify (watching without notifying would only cost battery) — and
+         * some PC isn't covered by push wake-ups (protocol §10.6: it has "Control from anywhere" on and this
+         * phone has a push token). When push covers every PC, nothing stays open in the background: no
+         * ongoing notification, the PCs wake the phone when there is news.
+         */
         fun wanted(context: Context): Boolean {
             val app = context.applicationContext as GameTimerApp
-            return NotifySettings(context).background && app.store.agents.value.isNotEmpty() &&
-                androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+            val agents = app.store.agents.value
+            return NotifySettings(context).background && agents.isNotEmpty() &&
+                androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+                !(Push.token(context) != null && agents.all { it.remoteAccess })
         }
 
         /** Starts or stops watching in the background, per [wanted]. */

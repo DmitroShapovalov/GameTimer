@@ -41,7 +41,7 @@ class NotifySettings(context: Context) {
      */
     enum class Category(val key: String, val wakeEvents: List<String>) {
         TimeUp("timeUp", listOf("expired")),         // the time ran out (or was ended): the PC locked / logged off / shut down
-        Soon("soon", emptyList()),                   // a warning point on the PC ("5 min left"): live only, not in the history
+        Soon("soon", listOf("alert")),               // a warning point on the PC ("5 min left"): live only; woken → from the state
         Suspicious("suspicious", listOf("closed", "tampered", "peerAdded")), // closed while a timer ran; tampered; a parent app added
         Others("others", listOf("started", "stopped", "reset", "extended", "scheduleSkipped")), // someone else's action
     }
@@ -122,6 +122,21 @@ class Notifier(private val context: Context) {
         if (notify) show(agent, e, me, pcNow = null)
     }
 
+    /**
+     * After a push wake-up (protocol §10.6): a warning point isn't in the history, so it is told from the timer
+     * state — "about N min left" — once per timer run (by its target time), and only near the end.
+     */
+    fun soonFromState(agent: PairedAgent, state: com.gametimer.protocol.hub.AgentState?) {
+        if (state == null || !state.isRunning || !settings.isOn(NotifySettings.Category.Soon)) return
+        val left = state.remainingSecondsNow()
+        if (left <= 0 || left > SOON_WITHIN) return
+        val run = (state.timer?.get("targetTime") as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return
+        val key = agent.agentId + "|" + run
+        if (seen.getString("soon", null) == key) return
+        seen.edit().putString("soon", key).apply()
+        post(agent, NotifySettings.Category.Soon, context.getString(R.string.ntf_soon, (left + 59) / 60), tag = "soon")
+    }
+
     fun alert(agent: PairedAgent, minutes: Int?) {
         if (minutes == null || !settings.isOn(NotifySettings.Category.Soon)) return
         post(agent, NotifySettings.Category.Soon, context.getString(R.string.ntf_soon, minutes), tag = "soon")
@@ -198,6 +213,9 @@ class Notifier(private val context: Context) {
     }
 
     companion object {
+        /** A woken phone tells "time almost up" only within this many seconds of the end. */
+        private const val SOON_WITHIN = 15 * 60
+
         const val CHANNEL_MONITOR = "monitor"
         const val CHANNEL_TIMER = "timer"
         const val CHANNEL_SECURITY = "security"
