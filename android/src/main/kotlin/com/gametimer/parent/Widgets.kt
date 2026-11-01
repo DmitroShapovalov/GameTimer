@@ -19,7 +19,17 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import android.text.format.DateFormat
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerLayoutType
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.TextButton
@@ -28,7 +38,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -218,5 +227,25 @@ fun ColorSwatches(label: String, value: String, onChange: (String) -> Unit) {
             confirmButton = { TextButton(onClick = { custom = false; onChange(text) }, enabled = hexColor(text) != null) { Text(stringResource(R.string.ok)) } },
             dismissButton = { TextButton(onClick = { custom = false }) { Text(stringResource(R.string.cancel)) } },
         )
+    }
+}
+
+/** The Material clock picker in a dialog; [minutes] since midnight in and out. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimeDialog(minutes: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    val context = LocalContext.current
+    val state = rememberTimePickerState(minutes / 60, minutes % 60, DateFormat.is24HourFormat(context))
+    // Always the vertical clock, scrollable: in landscape the wide layout doesn't fit a dialog
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                TimePicker(state, layoutType = TimePickerLayoutType.Vertical)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = { onPick(state.hour * 60 + state.minute) }) { Text(stringResource(R.string.ok)) }
+                }
+            }
+        }
     }
 }
