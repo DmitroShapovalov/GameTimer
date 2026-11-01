@@ -298,9 +298,21 @@ public sealed partial class RemoteServer
 
                 case "timer.setEnd":
                 {
-                    if (!Int(m, "hours", out var eh) || !Int(m, "minutes", out var em)) return Reply.Error("bad_request");
-                    if (eh is < 0 or > 23 || em is < 0 or > 59) return Reply.Error("invalid_time");
-                    return t.SetEnd(eh, em, ActionSource.Phone, context.HubName) switch
+                    // minor 2: inSeconds (a duration from now, picked in the phone's own time zone); minor 1: hours + minutes on the PC's clock
+                    SetEndResult result;
+                    if (m.TryGetProperty("inSeconds", out _))
+                    {
+                        if (!Int(m, "inSeconds", out var secs)) return Reply.Error("bad_request");
+                        if (secs is < 1 or > 86400) return Reply.Error("invalid_time");
+                        result = t.SetEndIn(TimeSpan.FromSeconds(secs), ActionSource.Phone, context.HubName);
+                    }
+                    else
+                    {
+                        if (!Int(m, "hours", out var eh) || !Int(m, "minutes", out var em)) return Reply.Error("bad_request");
+                        if (eh is < 0 or > 23 || em is < 0 or > 59) return Reply.Error("invalid_time");
+                        result = t.SetEnd(eh, em, ActionSource.Phone, context.HubName);
+                    }
+                    return result switch
                     {
                         SetEndResult.Ok => Ok("state", State()),
                         SetEndResult.NotRunning => Reply.Error("not_running"),
