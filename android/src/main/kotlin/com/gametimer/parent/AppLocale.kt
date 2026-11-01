@@ -15,9 +15,9 @@ import java.util.Locale
  *
  * Android 13+ keeps it as the per-app language ([LocaleManager]): the system applies it to every
  * activity and service and shows it in Android's settings too (res/xml/locales_config.xml).
- * Older Android versions have no such thing, so the choice is stored here and every context the
- * app shows text from is wrapped: the application ([localizedApp]), the activity and the services
- * ([wrap] in their attachBaseContext).
+ * Older Android versions have no such thing, so the choice is stored here, and the two contexts the app
+ * shows text from are wrapped: the application ([localizedApp]: notifications, the services' ongoing
+ * notifications) and the activity ([wrap] in its attachBaseContext).
  */
 object AppLocale {
     /** "" is the phone's system language; the rest are the languages the app is translated into. */
@@ -55,7 +55,32 @@ object AppLocale {
         activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, tag).commit()
         stored = tag
         Locale.setDefault(locale(tag) ?: systemLocale())
+        changed(activity.applicationContext)
         activity.recreate()
+    }
+
+    /**
+     * At start: Android 12 and older get the default locale (dates in notifications) even when no screen
+     * was opened (a push or boot start); Android 13+ takes over a choice stored before the phone was updated.
+     */
+    fun init(app: Context) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val old = prefs.getString(KEY, "") ?: ""
+            if (old.isNotEmpty()) {
+                val manager = app.getSystemService(LocaleManager::class.java)
+                if (manager != null && manager.applicationLocales.isEmpty && old in choices) manager.applicationLocales = LocaleList.forLanguageTags(old)
+                prefs.edit().remove(KEY).apply()
+            }
+        } else {
+            Locale.setDefault(locale(legacy(app)) ?: systemLocale())
+        }
+    }
+
+    /** The language changed: notification channel names and the ongoing notification follow it. */
+    fun changed(app: Context) {
+        Notifier.createChannels(app)
+        MonitorService.update(app)
     }
 
     /** Android 12 and older: [base] showing text in the chosen language; unchanged for the system language and on 13+. */
@@ -63,7 +88,8 @@ object AppLocale {
         if (Build.VERSION.SDK_INT >= 33) return base
         val locale = locale(legacy(base)) ?: return base
         Locale.setDefault(locale) // dates and day names (java.time) follow the default locale
-        return base.createConfigurationContext(Configuration(base.resources.configuration).apply { setLocales(LocaleList(locale)) })
+        // Only the locale is overridden: everything else (dark mode, orientation) still follows the system
+        return base.createConfigurationContext(Configuration().apply { setLocales(LocaleList(locale)) })
     }
 
     /**
@@ -74,15 +100,16 @@ object AppLocale {
     fun localizedApp(base: Context): Context = if (Build.VERSION.SDK_INT >= 33) base else LocalizedContext(base)
 
     private class LocalizedContext(base: Context) : ContextWrapper(base) {
-        @Volatile private var cache: Pair<String, Resources>? = null
+        private var cache: Pair<String, Resources>? = null
 
-        fun invalidate() { cache = null }
+        @Synchronized fun invalidate() { cache = null }
 
-        override fun getResources(): Resources {
+        // Synchronized: a worker thread building notifications must not put back resources made before an invalidate
+        @Synchronized override fun getResources(): Resources {
             val tag = legacy(baseContext)
             val locale = locale(tag) ?: return super.getResources()
             cache?.let { (t, r) -> if (t == tag) return r }
-            val config = Configuration(super.getResources().configuration).apply { setLocales(LocaleList(locale)) }
+            val config = Configuration().apply { setLocales(LocaleList(locale)) }
             return createConfigurationContext(config).resources.also { cache = tag to it }
         }
     }
