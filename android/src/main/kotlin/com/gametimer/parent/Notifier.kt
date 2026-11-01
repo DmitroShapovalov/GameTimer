@@ -41,7 +41,7 @@ class NotifySettings(context: Context) {
      */
     enum class Category(val key: String, val wakeEvents: List<String>) {
         TimeUp("timeUp", listOf("expired")),         // the time ran out (or was ended): the PC locked / logged off / shut down
-        Soon("soon", emptyList()),                   // a warning point on the PC ("5 min left"): live only, not in the history
+        Soon("soon", listOf("alert")),               // a warning point on the PC ("5 min left"): live only; woken → from the state
         Suspicious("suspicious", listOf("closed", "tampered", "peerAdded")), // closed while a timer ran; tampered; a parent app added
         Others("others", listOf("started", "stopped", "reset", "extended", "scheduleSkipped")), // someone else's action
     }
@@ -65,7 +65,7 @@ class Notifier(private val context: Context) {
         createChannels(context)
     }
 
-    fun forget(agentId: String) = seen.edit().remove(agentId).apply()
+    fun forget(agentId: String) = seen.edit().remove(agentId).remove("soon/$agentId").apply()
 
     /** Forget everything (a new hub identity: the PCs must be paired again). */
     fun forgetAll() = seen.edit().clear().apply()
@@ -122,8 +122,35 @@ class Notifier(private val context: Context) {
         if (notify) show(agent, e, me, pcNow = null)
     }
 
-    fun alert(agent: PairedAgent, minutes: Int?) {
+    /**
+     * After a push wake-up (protocol §10.6): a warning point isn't in the history, so it is told from the timer
+     * state — "about N min left" — once per timer run (by its target time), and only near the end.
+     */
+    fun soonFromState(agent: PairedAgent, state: com.gametimer.protocol.hub.AgentState?) {
+        if (state == null || !state.isRunning || !settings.isOn(NotifySettings.Category.Soon)) return
+        val left = state.remainingSecondsNow()
+        if (left <= 0 || left > SOON_WITHIN) return
+        val run = (state.timer?.get("targetTime") as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return
+        val minutes = (left + 59) / 60
+        if (!newSoon(agent.agentId, run, minutes)) return
+        post(agent, NotifySettings.Category.Soon, context.getString(R.string.ntf_soon, minutes), tag = "soon")
+    }
+
+    /**
+     * Per PC and timer run: a "minutes left" notice only when it is meaningfully less than the last one told
+     * (each warning point once, whether it came live or after a wake-up).
+     */
+    private fun newSoon(agentId: String, run: String?, minutes: Int): Boolean {
+        val key = "soon/$agentId"
+        val last = seen.getString(key, null)?.split('|')
+        if (last != null && last.size == 2 && last[0] == (run ?: "") && minutes >= (last[1].toIntOrNull() ?: Int.MAX_VALUE) - 1) return false
+        seen.edit().putString(key, (run ?: "") + "|" + minutes).apply()
+        return true
+    }
+
+    fun alert(agent: PairedAgent, minutes: Int?, run: String? = null) {
         if (minutes == null || !settings.isOn(NotifySettings.Category.Soon)) return
+        if (!newSoon(agent.agentId, run, minutes)) return
         post(agent, NotifySettings.Category.Soon, context.getString(R.string.ntf_soon, minutes), tag = "soon")
     }
 
@@ -198,6 +225,9 @@ class Notifier(private val context: Context) {
     }
 
     companion object {
+        /** A woken phone tells "time almost up" only within this many seconds of the end. */
+        private const val SOON_WITHIN = 15 * 60
+
         const val CHANNEL_MONITOR = "monitor"
         const val CHANNEL_TIMER = "timer"
         const val CHANNEL_SECURITY = "security"

@@ -308,6 +308,7 @@ public sealed partial class AgentHost : IDisposable
     public void Publish(string type, JsonObject body, RequestOrigin? causedBy = null)
     {
         if (type == "ev.history") RaiseWake(body["event"] as JsonObject);
+        else if (type == "ev.alert") RaiseWake("alert", null, onlyIfAsked: true);
         if (!type.StartsWith("ev.", StringComparison.Ordinal)) throw new ArgumentException("events start with ev.", nameof(type));
         var message = new JsonObject { ["t"] = type };
         foreach (var (k, v) in body) message[k] = v?.DeepClone();
@@ -347,23 +348,36 @@ public sealed partial class AgentHost : IDisposable
         RaiseWake(type, causedBy);
     }
 
-    private void RaiseWake(string kind, string? causedBy)
+    private void RaiseWake(string kind, string? causedBy, bool onlyIfAsked = false)
     {
         if (!RemoteAccess || WakeNeeded is not { } handlers) return;
-        var tokens = PushTokensToWake(kind, causedBy);
+        var tokens = PushTokensToWake(kind, causedBy, onlyIfAsked);
         if (tokens.Count == 0) return;
         try { handlers(tokens); } catch (Exception) { /* the relay client's business */ }
     }
 
-    private List<string> PushTokensToWake(string? kind, string? causedBy)
+    private List<string> PushTokensToWake(string? kind, string? causedBy, bool onlyIfAsked = false)
     {
         lock (_lock)
         {
             var live = _sessions.Select(s => s.HubId).ToHashSet();
             return _state.Peers
                 .Where(p => p.PushToken != null && !live.Contains(p.Id) && p.Id != causedBy
-                            && (kind == null || p.PushEvents == null || p.PushEvents.Contains(kind)))
+                            && (kind == null || (p.PushEvents == null ? !onlyIfAsked : p.PushEvents.Contains(kind))))
                 .Select(p => p.PushToken!).ToList();
+        }
+    }
+
+    /// <summary>
+    /// "Control from anywhere" was just turned off (§10.6): every hub with a push token is woken once more, so
+    /// a phone that relied on wake-ups connects (at home) and learns it must watch on its own again.
+    /// </summary>
+    public IReadOnlyList<string> PushTokensForFarewell()
+    {
+        lock (_lock)
+        {
+            var live = _sessions.Select(s => s.HubId).ToHashSet();
+            return _state.Peers.Where(p => p.PushToken != null && !live.Contains(p.Id)).Select(p => p.PushToken!).ToList();
         }
     }
 

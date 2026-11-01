@@ -39,6 +39,18 @@ object Push {
 
     fun save(context: Context, token: String) = prefs(context).edit().putString("token", token).apply()
 
+    /** The token a PC confirmed with push.set (null: none confirmed, or this phone asked for none). */
+    fun acked(context: Context, agentId: String): String? = prefs(context).getString("acked/$agentId", null)
+
+    fun setAcked(context: Context, agentId: String, token: String?) =
+        prefs(context).edit().apply { if (token != null) putString("acked/$agentId", token) else remove("acked/$agentId") }.apply()
+
+    /** Push wake-ups cover this PC: it has remote access on and confirmed this phone's current token. */
+    fun covers(context: Context, agent: com.gametimer.protocol.hub.PairedAgent): Boolean {
+        val token = token(context) ?: return false
+        return agent.remoteAccess && acked(context, agent.agentId) == token
+    }
+
     /** Asks Firebase for the token (on app start); a new one reaches the PCs on their next session. */
     fun refresh(context: Context, onToken: () -> Unit) {
         if (!configured) return

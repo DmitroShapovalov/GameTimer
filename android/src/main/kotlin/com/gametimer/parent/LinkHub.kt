@@ -127,6 +127,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
     // ---------------- push wake-ups away from home (protocol §10.6) ----------------
 
     private var waking = false
+    private var wakeSinceNanos = 0L
     private var wakes = 0
 
     /** When each PC's history was last caught up (after a connect), to know a wake-up has done its job. */
@@ -141,6 +142,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         if (!NotifySettings(context).background) return@withContext
         try { loadKey() } catch (e: Exception) { return@withContext }
         val since = android.os.SystemClock.elapsedRealtime()
+        wakeSinceNanos = android.os.SystemClock.elapsedRealtimeNanos()
         wakes++
         waking = true
         relayAllowed = true
@@ -179,6 +181,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
 
     /** The token or the notification setting changed: tell the PCs that are online now (the others on connect). */
     fun pushTokenChanged() {
+        MonitorService.update(context) // with a token, push may cover every PC
         store.agents.value.forEach { a ->
             val l = links[a.agentId] ?: return@forEach
             val online = l.status.value as? LinkStatus.Online ?: return@forEach
@@ -201,7 +204,9 @@ class LinkHub(private val context: Context, private val store: HubStore) {
                 put("events", JsonArray(events.map { JsonPrimitive(it) }))
             } else put("token", JsonNull)
         }
-        link.send("push.set", body)
+        val ok = link.send("push.set", body) is com.gametimer.protocol.hub.RequestOutcome.Ok
+        Push.setAcked(context, agentId, if (ok) token else null)
+        MonitorService.update(context) // covered by push now, or not any more
     }
 
     private fun watchNetwork() {
@@ -245,7 +250,10 @@ class LinkHub(private val context: Context, private val store: HubStore) {
         // has "Control from anywhere" on (learned from its hello and stored with the PC)
         val relay = RelayPath(RelayPath.DEFAULT_URL, connector, onLocalNetwork = { onLan }, allowed = { relayAllowed })
         val onRemoteAccess: (Boolean) -> Unit = { on ->
-            scope.launch(storeWriter) { store.updateRemoteAccess(agentId, on) }
+            scope.launch {
+                withContext(storeWriter) { store.updateRemoteAccess(agentId, on) }
+                MonitorService.update(context) // push may now cover every PC (or no longer)
+            }
         }
         return AgentLink(agent, key, connector, appName, scope, locator, relay, onRemoteAccess, onMoved).also {
             links[agentId] = it
@@ -263,6 +271,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
             withTimeoutOrNull(3_000) { link.send("push.set", buildJsonObject { put("token", JsonNull) }, resendWindow = 3.seconds) }
         }
         link?.stop()
+        Push.setAcked(context, agentId, null)
         if (removed) {
             seenPeers.edit().remove(agentId).apply()
             notifier.forget(agentId)
@@ -314,6 +323,11 @@ class LinkHub(private val context: Context, private val store: HubStore) {
                         me = me.copy(hubId = ((it.hello["you"] as? JsonObject)?.get("id") as? JsonPrimitive)?.content)
                         compare()
                         notifier.catchUp(agent, api, me, link.state.value?.json?.str("now"), notify = shouldNotify(agent.agentId))
+                        if (waking && shouldNotify(agent.agentId)) {
+                            // a state from this session (not an older one still cached)
+                            val st = withTimeoutOrNull(3_000) { link.state.first { s -> s != null && s.receivedAtNanos >= wakeSinceNanos } }
+                            notifier.soonFromState(agent, st)
+                        }
                         caughtUp.value += agent.agentId to android.os.SystemClock.elapsedRealtime()
                         syncPushToken(agent.agentId, link, it.hello)
                     }
@@ -323,7 +337,8 @@ class LinkHub(private val context: Context, private val store: HubStore) {
                 when (ev.str("t")) {
                     "ev.peers" -> compare()
                     "ev.history" -> notifier.liveEvent(agent, ev["event"] as? JsonObject, me, notify = shouldNotify(agent.agentId))
-                    "ev.alert" -> if (shouldNotify(agent.agentId)) notifier.alert(agent, (ev["minutes"] as? JsonPrimitive)?.content?.toIntOrNull())
+                    "ev.alert" -> if (shouldNotify(agent.agentId)) notifier.alert(agent, (ev["minutes"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                        (link.state.value?.timer?.get("targetTime") as? JsonPrimitive)?.content)
                 }
             }
         }

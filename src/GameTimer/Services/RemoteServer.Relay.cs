@@ -42,7 +42,16 @@ public sealed partial class RemoteServer
         // §7.2: a new rev either way (a parent app may cache settings by rev); ev.settings while running
         if (_app != null) V2SettingsChanged(settings: true, schedule: false);
         else _v2Backend!.SettingsRev++;
-        if (!on) await Agent.EndRelaySessionsAsync(); // §10.2: bye remote_off is out before the relay stops; LAN stays
+        if (!on)
+        {
+            await Agent.EndRelaySessionsAsync(); // §10.2: bye remote_off is out before the relay stops; LAN stays
+            // §10.6: phones that relied on wake-ups are woken once more, so they learn to watch on their own
+            if (_relay is { } relay && Agent.PushTokensForFarewell() is { Count: > 0 } tokens)
+            {
+                relay.WakeNow(tokens);
+                await Task.Delay(TimeSpan.FromSeconds(1.5)); // let the frames go out before the relay stops
+            }
+        }
         await UpdateRelayAsync();
     }
 
