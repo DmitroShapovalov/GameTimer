@@ -163,8 +163,9 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(if (running) formatSeconds(seconds) else "00:00", fontSize = 44.sp, fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold, color = if (running) MaterialTheme.colorScheme.onSurface else colors.timeUp)
-                    if (running) timer?.str("targetTime")?.let {
-                        Text(stringResource(R.string.ends_short, shortTime(it)), style = MaterialTheme.typography.bodyMedium,
+                    // The end on the phone's own clock (now + time left): the PC's clock and zone may differ
+                    if (running) phoneEnd(seconds).let {
+                        Text(stringResource(R.string.ends_short, it), style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -243,9 +244,9 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     }
 
     if (pickEnd) {
-        val now = remember { java.time.LocalTime.now() }
-        val target = timer?.str("targetTime")?.let { runCatching { java.time.OffsetDateTime.parse(it).atZoneSameInstant(java.time.ZoneId.systemDefault()) }.getOrNull() }
-        TimeDialog((target?.hour ?: now.hour) * 60 + (target?.minute ?: now.minute), onDismiss = { pickEnd = false }) { picked ->
+        // Starts at the current end on the phone's clock (now + time left), not the PC's targetTime
+        val start = remember { java.time.LocalTime.now().plusSeconds(seconds.toLong()) }
+        TimeDialog(start.hour * 60 + start.minute, onDismiss = { pickEnd = false }) { picked ->
             pickEnd = false
             // The time is picked on the phone's clock, in the phone's time zone; newer PCs get it as a duration
             // from now, so the PC's own time zone and clock don't matter (older ones get the clock time)
@@ -285,8 +286,13 @@ private fun secondsUntil(minutes: Int): Int {
     var target = now.with(java.time.LocalTime.of(minutes / 60, minutes % 60))
     if (!target.isAfter(now)) target = target.plusDays(1)
     // Up to 25 h on the night the clocks go back: sent as is, the PC refuses what is out of range
-    return java.time.Duration.between(now, target).seconds.toInt()
+    // Rounded up and a second more, so the end isn't a moment before the picked minute after the trip to the PC
+    return ((java.time.Duration.between(now, target).toMillis() + 999) / 1000 + 1).toInt()
 }
+
+/** The end of a timer with [secondsLeft] to go, on the phone's clock (short local time). */
+private fun phoneEnd(secondsLeft: Int): String =
+    java.time.LocalTime.now().plusSeconds(secondsLeft.toLong()).format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))
 
 /** A ring over a track: [fraction] (0..1) of it drawn in [color], clockwise from the top. */
 @Composable
