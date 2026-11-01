@@ -45,6 +45,13 @@ public class AgentApi(private val link: AgentLink) {
     public suspend fun setEnd(hour: Int, minute: Int): RequestOutcome =
         link.send("timer.setEnd", buildJsonObject { put("hours", hour); put("minutes", minute) })
 
+    /**
+     * The running timer now ends [seconds] (1..86400) from now: the hub turns the time the parent picked
+     * into a duration with its own clock and time zone. Needs [supportsEndIn] (minor 2); older agents take [setEnd].
+     */
+    public suspend fun setEndIn(seconds: Int): RequestOutcome =
+        link.send("timer.setEnd", buildJsonObject { put("inSeconds", seconds) })
+
     public suspend fun extend(minutes: Int): RequestOutcome = link.send("timer.extend", buildJsonObject { put("minutes", minutes) })
 
     public suspend fun acknowledgeInterruption(): RequestOutcome = link.send("interruption.ack", JsonObject(emptyMap()))
@@ -119,7 +126,12 @@ public class AgentApi(private val link: AgentLink) {
         public const val BAD_REPLY: String = "bad_reply"
 
         /** The agent speaks protocol minor ≥ 1 (§6): [lift], [endNow] and [setEnd] are available. */
-        public fun supportsTimerControls(hello: JsonObject): Boolean =
-            ((hello["minor"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 0) >= 1
+        public fun supportsTimerControls(hello: JsonObject): Boolean = minor(hello) >= 1
+
+        /** The agent speaks protocol minor ≥ 2: [setEndIn] is available. */
+        public fun supportsEndIn(hello: JsonObject): Boolean = minor(hello) >= 2
+
+        private fun minor(hello: JsonObject): Int =
+            (hello["minor"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 0
     }
 }

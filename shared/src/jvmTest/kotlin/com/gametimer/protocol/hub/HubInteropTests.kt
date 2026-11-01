@@ -477,4 +477,22 @@ class HubInteropTests {
         val past = java.time.LocalTime.now().minusMinutes(5)
         assertEquals(RequestOutcome.Refused("invalid_time"), a.setEnd(past.hour, past.minute))
     }
+
+    @Test
+    fun endAtAsDuration(): Unit = runBlocking {
+        val (a, l) = api()
+        assertTrue(AgentApi.supportsEndIn(l.awaitOnline().hello)) // minor 2 on both sides
+        assertIs<RequestOutcome.Ok>(a.startInterval(0, 30))
+        // 90 minutes from now, whatever the PC's time zone or clock
+        assertIs<RequestOutcome.Ok>(a.setEndIn(90 * 60))
+        val left = l.state.value!!.remainingSecondsNow()
+        assertTrue(left in (90 * 60 - 60)..(90 * 60), "remaining $left")
+        // Earlier is fine; more than 12 h ahead (and later than now) is refused, as are 0 and > 24 h
+        assertIs<RequestOutcome.Ok>(a.setEndIn(10 * 60))
+        assertEquals(RequestOutcome.Refused("invalid_time"), a.setEndIn(13 * 3600))
+        assertEquals(RequestOutcome.Refused("invalid_time"), a.setEndIn(0))
+        assertEquals(RequestOutcome.Refused("invalid_time"), a.setEndIn(86401))
+        assertIs<RequestOutcome.Ok>(a.endNow())
+        assertEquals(RequestOutcome.Refused("not_running"), a.setEndIn(600))
+    }
 }

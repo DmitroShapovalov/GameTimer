@@ -189,12 +189,22 @@ sealed class SimBackend : IAgentBackend
                 case "timer.setEnd":
                 {
                     if (!_clock.IsRunning) return Err("not_running");
-                    if (!m.TryGetProperty("hours", out var hp) || !hp.TryGetInt32(out var h)
-                        || !m.TryGetProperty("minutes", out var mp) || !mp.TryGetInt32(out var mi)) return Err("bad_request");
-                    if (h is < 0 or > 23 || mi is < 0 or > 59) return Err("invalid_time");
                     var now = DateTime.Now;
-                    var target = now.Date.AddHours(h).AddMinutes(mi);
-                    if (target <= now) target = target.AddDays(1);
+                    DateTime target;
+                    if (m.TryGetProperty("inSeconds", out var ip)) // minor 2: a duration from now
+                    {
+                        if (!ip.TryGetInt32(out var secs)) return Err("bad_request");
+                        if (secs is < 1 or > 86400) return Err("invalid_time");
+                        target = now.AddSeconds(secs);
+                    }
+                    else
+                    {
+                        if (!m.TryGetProperty("hours", out var hp) || !hp.TryGetInt32(out var h)
+                            || !m.TryGetProperty("minutes", out var mp) || !mp.TryGetInt32(out var mi)) return Err("bad_request");
+                        if (h is < 0 or > 23 || mi is < 0 or > 59) return Err("invalid_time");
+                        target = now.Date.AddHours(h).AddMinutes(mi);
+                        if (target <= now) target = target.AddDays(1);
+                    }
                     if (target - now > TimeSpan.FromHours(12) && (target - now).TotalSeconds > Remaining()) return Err("invalid_time");
                     // (the simulator has no schedule cap: availableSeconds is a fixed 7200)
                     int before = Remaining();

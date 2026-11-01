@@ -285,16 +285,27 @@ public sealed class TimerController
     }
 
     /// <summary>
-    /// Moves the end of a running timer to the next hour:minute on the wall clock. A later end can't pass
-    /// what the schedule still allows today (then it ends at that limit). Logged as an extend by the change.
+    /// Moves the end of a running timer to the next hour:minute on this PC's wall clock (the PC's own UI).
+    /// See <see cref="SetEndIn"/>.
     /// </summary>
     public SetEndResult SetEnd(int hour, int minute, ActionSource source = ActionSource.Pc, string? device = null)
     {
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) { _dispatcher.VerifyAccess(); return IsRunning ? SetEndResult.InvalidTime : SetEndResult.NotRunning; }
+        return SetEndIn(UntilNext(hour, minute), source, device);
+    }
+
+    /// <summary>
+    /// The running timer now ends <paramref name="target"/> from now. The phone sends this (protocol minor 2):
+    /// it turns the time the parent picked into a duration with its own clock and time zone, so neither the
+    /// PC's time zone nor its clock (which the child may have changed) matter. A later end can't pass what
+    /// the schedule still allows today (then it ends at that limit). Logged as an extend by the change.
+    /// </summary>
+    public SetEndResult SetEndIn(TimeSpan target, ActionSource source = ActionSource.Pc, string? device = null)
+    {
         _dispatcher.VerifyAccess();
         if (!IsRunning) return SetEndResult.NotRunning;
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return SetEndResult.InvalidTime;
-        var target = UntilNext(hour, minute);
-        // "20:00" typed at 20:05 means "earlier", not "tomorrow": more than 12 h ahead is refused
+        if (target <= TimeSpan.Zero || target > TimeSpan.FromHours(24)) return SetEndResult.InvalidTime;
+        // "20:00" picked at 20:05 means "earlier", not "tomorrow": more than 12 h ahead is refused
         if (target > TimeSpan.FromHours(12) && target > _timer.Remaining) return SetEndResult.InvalidTime;
         var dec = CurrentSchedule();
         if (dec.Restricts && target > _timer.Remaining && target.TotalSeconds > dec.AvailableSeconds)

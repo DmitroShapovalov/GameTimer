@@ -226,7 +226,8 @@ supports and the hub adapts.
 
 **Minor versions.** `0`: the initial set. `1` (agent v1.7.1): `timer.end`, `timer.setEnd`,
 `timer.stop` with `skipScheduleToday`, and the schedule status `skippedToday`. A hub shows those
-controls only when `hello.minor` ≥ 1.
+controls only when `hello.minor` ≥ 1. `2` (agent v1.8.0): `timer.setEnd` with `inSeconds`; a hub
+sends it only when `hello.minor` ≥ 2 and falls back to `hours` + `minutes` otherwise.
 
 **Capabilities** — the hub renders a control only if the agent lists the capability. Names are
 stable; a breaking change gets a new name (`timer2`).
@@ -281,7 +282,7 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 | `timer.stop` | `timer` | ✓ | any | optional `skipScheduleToday` (minor 1): also set the daily schedule aside until midnight, or until a timer started during the lift runs out | `state`; `not_running` if there was nothing to stop or lift |
 | `timer.extend` | `timer` | ✓ | any | `minutes` (±) | `state` |
 | `timer.end` | `timer` | ✓ | any | — (minor 1): the running timer ends now, as if its time ran out (the expiry action runs) | `state` |
-| `timer.setEnd` | `timer` | ✓ | any | `hours` + `minutes` (minor 1): the running timer now ends at that local time of day on the agent (the next one), capped by today's schedule | `state`; `invalid_time` if that is more than 12 h ahead (a time just passed means "earlier", not "tomorrow"); `schedule_limit` if the schedule allows no later end |
+| `timer.setEnd` | `timer` | ✓ | any | either `inSeconds` (minor 2, 1–86400): the running timer now ends that many seconds after the agent gets the request — the hub turns the time the parent picked into a duration with its own clock and time zone, so the agent's time zone and clock (which the child may change) don't matter; or `hours` + `minutes` (minor 1): the next such local time of day on the agent. Capped by today's schedule | `state`; `invalid_time` if the end is more than 12 h ahead and later than the current one (a time just passed means "earlier", not "tomorrow"), or out of range; `schedule_limit` if the schedule allows no later end |
 | `interruption.ack` | `timer` | ✓ | any | — | `state` |
 | `settings.get` | `settings` | — | any | — | `settings` (incl. `rev`) |
 | `settings.put` | `settings` | ✓ | any | any subset of the v1 settings fields, optional `ifRev` | `settings` |

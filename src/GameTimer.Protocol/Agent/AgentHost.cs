@@ -18,7 +18,7 @@ namespace GameTimer.Protocol.Agent;
 public sealed partial class AgentHost : IDisposable
 {
     public const int ProtocolMajor = 2;
-    public const int ProtocolMinor = 1; // 1: timer.end, timer.setEnd, timer.stop skipScheduleToday, schedule status skippedToday
+    public const int ProtocolMinor = 2; // 1: timer.end, timer.setEnd, timer.stop skipScheduleToday, schedule status skippedToday; 2: timer.setEnd inSeconds
 
     // §3 limits
     public static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(5);

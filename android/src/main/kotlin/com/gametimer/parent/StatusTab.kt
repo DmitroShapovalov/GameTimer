@@ -244,7 +244,10 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         val target = timer?.str("targetTime")?.let { runCatching { java.time.OffsetDateTime.parse(it).atZoneSameInstant(java.time.ZoneId.systemDefault()) }.getOrNull() }
         TimeDialog((target?.hour ?: now.hour) * 60 + (target?.minute ?: now.minute), onDismiss = { pickEnd = false }) { picked ->
             pickEnd = false
-            run { api.setEnd(picked / 60, picked % 60) }
+            val endIn = (status as? LinkStatus.Online)?.let { AgentApi.supportsEndIn(it.hello) } == true
+            // The time is picked on the phone's clock, in the phone's time zone; newer PCs get it as a duration
+            // from now, so the PC's own time zone and clock don't matter (older ones get the clock time)
+            if (endIn) run { api.setEndIn(secondsUntil(picked)) } else run { api.setEnd(picked / 60, picked % 60) }
         }
     }
 
@@ -269,6 +272,14 @@ private fun timerLength(events: List<com.gametimer.protocol.hub.HistoryEvent>): 
         }
     }
     return null
+}
+
+/** Seconds from now until the next time the phone's clock shows [minutes] past midnight (tomorrow if passed). */
+private fun secondsUntil(minutes: Int): Int {
+    val now = java.time.ZonedDateTime.now()
+    var target = now.with(java.time.LocalTime.of(minutes / 60, minutes % 60))
+    if (!target.isAfter(now)) target = target.plusDays(1)
+    return java.time.Duration.between(now, target).seconds.toInt().coerceIn(1, 86400)
 }
 
 /** A ring over a track: [fraction] (0..1) of it drawn in [color], clockwise from the top. */
