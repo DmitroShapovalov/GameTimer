@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 class MonitorService : Service() {
     private val app get() = application as GameTimerApp
 
+    override fun attachBaseContext(newBase: android.content.Context) = super.attachBaseContext(AppLocale.wrap(newBase))
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

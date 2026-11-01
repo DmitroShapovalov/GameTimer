@@ -90,6 +90,8 @@ class PushService : FirebaseMessagingService() {
 /** Runs one wake-up (connect, catch up, notify) as a short, silent foreground service, then stops. */
 class WakeService : android.app.Service() {
     private val app get() = application as GameTimerApp
+
+    override fun attachBaseContext(newBase: android.content.Context) = super.attachBaseContext(AppLocale.wrap(newBase))
     private var running = 0
     private var lastStartId = 0
 
