@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -82,12 +83,19 @@ private fun HistoryFilter.accepts(e: HistoryEvent) = when (this) {
 private fun localTime(e: HistoryEvent): ZonedDateTime? =
     runCatching { OffsetDateTime.parse(e.time).atZoneSameInstant(ZoneId.systemDefault()) }.getOrNull()
 
+/** An event with a key of its own (events have no id; two may be alike) and its local time, read once. */
+private class Shown(val key: Long, val event: HistoryEvent) {
+    val time: ZonedDateTime? = localTime(event)
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val api = remember(agent.agentId) { AgentApi(link) }
     val scope = rememberCoroutineScope()
-    val events = remember { mutableStateListOf<HistoryEvent>() }
+    val events = remember { mutableStateListOf<Shown>() }
+    var keys by remember { mutableStateOf(0L) }
+    fun shown(list: List<HistoryEvent>) = list.map { Shown(keys++, it) }
     var next by remember { mutableStateOf<String?>(null) }
     var loadedOnce by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
@@ -98,7 +106,7 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         val gen = ++generation
         val r = api.history()
         if (r is ApiResult.Ok && gen == generation) {
-            events.clear(); events.addAll(r.value.events); next = r.value.next.takeIf { r.value.more }; loadedOnce = true
+            events.clear(); events.addAll(shown(r.value.events)); next = r.value.next.takeIf { r.value.more }; loadedOnce = true
         }
     }
     val online = link.status.collectStateValue() is LinkStatus.Online
@@ -107,18 +115,34 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     LaunchedEffect(link) {
         link.events.filter { it.type() == "ev.history" }.collect { ev ->
             val e = (ev["event"] as? JsonObject)?.let { runCatching { HistoryJson.decodeFromJsonElement(HistoryEvent.serializer(), it) }.getOrNull() }
-            if (e != null && loadedOnce) events.add(0, e) else reload()
+            // the same event may already be there when a reload raced with it
+            if (e != null && loadedOnce) { if (events.take(10).none { it.event == e }) events.add(0, Shown(keys++, e)) } else reload()
         }
     }
     if (!loadedOnce) return Loading()
 
-    // Newest first, as the PC sends them; an event whose time can't be read stays with the day above it
-    val today = LocalDate.now()
-    val shown = events.filter { filter.accepts(it) }
-    val groups = buildList<Pair<LocalDate?, MutableList<HistoryEvent>>> {
-        shown.forEach { e ->
-            val day = localTime(e)?.toLocalDate() ?: lastOrNull()?.first
-            if (isEmpty() || last().first != day) add(day to mutableListOf(e)) else last().second.add(e)
+    // "Today" moves on at midnight even while the screen stays open
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val untilMidnight = java.time.Duration.between(java.time.LocalDateTime.now(), today.plusDays(1).atStartOfDay()).toMillis()
+            kotlinx.coroutines.delay(untilMidnight.coerceAtLeast(1_000) + 500)
+            today = LocalDate.now()
+        }
+    }
+    // Newest first, as the PC sends them. One group per day, in the order the days first appear (a PC
+    // clock set back can't split a day in two); an event whose time can't be read joins the day above it
+    val groups by remember {
+        derivedStateOf {
+            val byDay = LinkedHashMap<LocalDate?, MutableList<Shown>>()
+            var last: LocalDate? = null
+            events.forEach { e ->
+                if (!filter.accepts(e.event)) return@forEach
+                val day = e.time?.toLocalDate() ?: last
+                byDay.getOrPut(day) { mutableListOf() }.add(e)
+                last = day
+            }
+            byDay.toList()
         }
     }
     val todayText = stringResource(R.string.hist_today)
@@ -135,11 +159,13 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 }
             }
         }
-        if (shown.isEmpty()) item(key = "empty") {
-            Text(stringResource(R.string.history_empty), Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        if (groups.isEmpty()) item(key = "empty") {
+            // With a filter on, older pages may still hold such events: say so, the button below loads them
+            Text(stringResource(if (filter != HistoryFilter.All && next != null) R.string.hist_none_loaded else R.string.history_empty),
+                Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
         }
-        groups.forEachIndexed { index, (day, list) ->
-            stickyHeader(key = "day-$index-$day") {
+        groups.forEach { (day, list) ->
+            stickyHeader(key = "day-$day") {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
                     Text(
                         when (day) {
@@ -154,7 +180,7 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                     )
                 }
             }
-            items(list) { e -> EventRow(e, localTime(e)?.format(timeFormat) ?: "") }
+            items(list, key = { it.key }) { e -> EventRow(e.event, e.time?.format(timeFormat) ?: "") }
         }
         next?.let { cursor ->
             item(key = "more") {
@@ -166,7 +192,7 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                         scope.launch {
                             when (val r = api.history(before = cursor)) {
                                 is ApiResult.Ok -> if (gen == generation && next == cursor) {
-                                    events.addAll(r.value.events); next = r.value.next.takeIf { r.value.more }
+                                    events.addAll(shown(r.value.events)); next = r.value.next.takeIf { r.value.more }
                                 }
                                 is ApiResult.Failed -> {
                                     val refused = r.outcome as? RequestOutcome.Refused

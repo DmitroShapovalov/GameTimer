@@ -102,6 +102,7 @@
     <string name="hist_alerts">Тревоги</string>
     <string name="hist_today">Сегодня</string>
     <string name="hist_yesterday">Вчера</string>
+    <string name="hist_none_loaded">Среди загруженных событий таких нет</string>
     <string name="ev_started">Запущен: %1$s (%2$s)</string>
     <string name="ev_stopped">Остановлен</string>
     <string name="ev_reset">Сброшен</string>

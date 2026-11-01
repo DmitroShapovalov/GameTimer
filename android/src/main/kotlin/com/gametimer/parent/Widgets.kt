@@ -1,6 +1,5 @@
 package com.gametimer.parent
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -17,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 /** A choice from a short list as a dropdown (one field with the current value), instead of a column of radio buttons. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,7 +60,7 @@ fun <T> Dropdown(
 data class StateColors(val good: Color, val changed: Color, val timeUp: Color, val alert: Color, val neutral: Color) {
     companion object {
         @Composable
-        fun current(): StateColors = if (isSystemInDarkTheme())
+        fun current(): StateColors = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f)
             StateColors(Color(0xFF66BB6A), Color(0xFF64B5F6), Color(0xFFFFA726), Color(0xFFEF5350), MaterialTheme.colorScheme.onSurfaceVariant)
         else
             StateColors(Color(0xFF2E7D32), Color(0xFF1565C0), Color(0xFFE65100), Color(0xFFC62828), MaterialTheme.colorScheme.onSurfaceVariant)

@@ -102,6 +102,7 @@
     <string name="hist_alerts">Alerts</string>
     <string name="hist_today">Today</string>
     <string name="hist_yesterday">Yesterday</string>
+    <string name="hist_none_loaded">Nothing of this kind among the loaded events</string>
     <string name="ev_started">Started: %1$s (%2$s)</string>
     <string name="ev_stopped">Stopped</string>
     <string name="ev_reset">Reset</string>

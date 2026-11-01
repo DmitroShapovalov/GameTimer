@@ -99,9 +99,10 @@
     <string name="load_more">Meer laden</string>
     <string name="hist_all">Alles</string>
     <string name="hist_timer">Timer</string>
-    <string name="hist_alerts">Meldingen</string>
+    <string name="hist_alerts">Waarschuwingen</string>
     <string name="hist_today">Vandaag</string>
     <string name="hist_yesterday">Gisteren</string>
+    <string name="hist_none_loaded">Niets van deze soort bij de geladen gebeurtenissen</string>
     <string name="ev_started">Gestart: %1$s (%2$s)</string>
     <string name="ev_stopped">Gestopt</string>
     <string name="ev_reset">Gereset</string>

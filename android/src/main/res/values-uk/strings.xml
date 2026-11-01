@@ -99,9 +99,10 @@
     <string name="load_more">Завантажити ще</string>
     <string name="hist_all">Усі</string>
     <string name="hist_timer">Таймер</string>
-    <string name="hist_alerts">Тривоги</string>
+    <string name="hist_alerts">Попередження</string>
     <string name="hist_today">Сьогодні</string>
     <string name="hist_yesterday">Учора</string>
+    <string name="hist_none_loaded">Серед завантажених подій таких немає</string>
     <string name="ev_started">Запущено: %1$s (%2$s)</string>
     <string name="ev_stopped">Зупинено</string>
     <string name="ev_reset">Скинуто</string>
