@@ -84,6 +84,8 @@
     <string name="color_green">Обычный</string>
     <string name="color_yellow">Предупреждение</string>
     <string name="color_red">Тревога</string>
+    <string name="set_appearance">Вид таймера</string>
+    <string name="color_custom">Свой…</string>
     <string name="set_alerts">Звуковые сигналы (минут до конца)</string>
     <string name="alert_item">за %1$d мин</string>
     <string name="alert_add">Добавить</string>

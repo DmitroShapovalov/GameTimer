@@ -84,6 +84,8 @@
     <string name="color_green">Normal</string>
     <string name="color_yellow">Warning</string>
     <string name="color_red">Alert</string>
+    <string name="set_appearance">Countdown look</string>
+    <string name="color_custom">Custom…</string>
     <string name="set_alerts">Sound alerts (minutes before the end)</string>
     <string name="alert_item">%1$d min before</string>
     <string name="alert_add">Add</string>
