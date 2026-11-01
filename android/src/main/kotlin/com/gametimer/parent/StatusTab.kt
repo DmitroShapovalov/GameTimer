@@ -106,7 +106,13 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     var liftAsk by remember { mutableStateOf(false) }
     var pickEnd by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
-    LaunchedEffect(running) { if (!running) { pickEnd = false; menu = false } } // the timer ended meanwhile: nothing to move
+    // The timer ended meanwhile: nothing left to move, end or confirm (a lift dialog opened with no timer stays)
+    var wasRunning by remember { mutableStateOf(running) }
+    LaunchedEffect(running) {
+        if (!running) { pickEnd = false; menu = false }
+        if (wasRunning && !running) { confirm = null; liftAsk = false }
+        wasRunning = running
+    }
     val confirmLiftText = stringResource(R.string.confirm_lift)
     // No schedule today: lifting is just stopping the timer; otherwise ask about today's schedule
     val askLift: () -> Unit = {
@@ -116,18 +122,17 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val prefs = remember { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
     var step by rememberSaveable { mutableIntStateOf(prefs.getInt("step", 15).takeIf { it in STEPS } ?: 15) }
 
-    // The ring is the time left against the longest time left seen for this timer (the PC doesn't
-    // send the full length): full at the start or after a +, emptying towards the end
-    val ringPrefs = remember { context.getSharedPreferences("ring", Context.MODE_PRIVATE) }
-    var total by remember(agent.agentId) { mutableIntStateOf(ringPrefs.getInt(agent.agentId, 0)) }
-    LaunchedEffect(state, running) {
-        if (running) {
-            val left = state.remainingSecondsNow()
-            if (left > total) { total = left; ringPrefs.edit().putInt(agent.agentId, left).apply() }
-        } else if (state != null && total != 0) {
-            total = 0; ringPrefs.edit().remove(agent.agentId).apply()
-        }
+    // The ring is the time left against the timer's whole length. The state doesn't carry the length,
+    // so it is read from the history: the last "started" plus the − / + after it. Read again whenever
+    // the end moves; without history (or before it arrives) the longest time left seen here stands in.
+    var total by remember(agent.agentId) { mutableIntStateOf(0) }
+    var longest by remember(agent.agentId) { mutableIntStateOf(0) }
+    val targetTime = timer?.str("targetTime")
+    LaunchedEffect(running, targetTime) {
+        if (!running) { total = 0; longest = 0; return@LaunchedEffect }
+        total = (api.history(limit = 30) as? ApiResult.Ok)?.value?.events?.let { timerLength(it) } ?: 0
     }
+    androidx.compose.runtime.SideEffect { if (running && seconds > longest) longest = seconds }
 
     val colors = StateColors.current()
     val zoneColor = when {
@@ -150,7 +155,7 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         }
 
         if (running || expired) {
-            val fraction = if (running) seconds.toFloat() / maxOf(total, seconds, 1) else 0f
+            val fraction = if (running) seconds.toFloat() / maxOf(if (total > 0) total else longest, seconds, 1) else 0f
             TimeRing(fraction, zoneColor, Modifier.size(220.dp)) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(if (running) formatSeconds(seconds) else "00:00", fontSize = 44.sp, fontFamily = FontFamily.Monospace,
@@ -201,11 +206,12 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     if (controls) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.end_at_button)) }, onClick = { menu = false; pickEnd = true })
-                        DropdownMenuItem(text = { Text(stringResource(R.string.end_now), color = MaterialTheme.colorScheme.error) },
+                        DropdownMenuItem(text = { Text(stringResource(R.string.end_at_button)) }, enabled = online,
+                            onClick = { menu = false; pickEnd = true })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.end_now), color = MaterialTheme.colorScheme.error) }, enabled = online,
                             onClick = { menu = false; confirm = endMessage to { api.endNow() } })
                     } else {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.stop), color = MaterialTheme.colorScheme.error) },
+                        DropdownMenuItem(text = { Text(stringResource(R.string.stop), color = MaterialTheme.colorScheme.error) }, enabled = online,
                             onClick = { menu = false; confirm = stopMessage to { api.stop() } })
                     }
                 }
@@ -247,6 +253,22 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             confirmButton = { TextButton(onClick = { confirm = null; run(action) }) { Text(stringResource(R.string.yes)) } },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text(stringResource(R.string.cancel)) } })
     }
+}
+
+/**
+ * The running timer's length in seconds from the newest history (newest first): the last "started" plus
+ * every − / + recorded after it; null when the timer's start isn't among these events.
+ */
+private fun timerLength(events: List<com.gametimer.protocol.hub.HistoryEvent>): Int? {
+    var changes = 0
+    for (e in events) {
+        when (e.type) {
+            "extended" -> changes += e.minutes ?: 0
+            "started" -> return ((e.minutes ?: return null) + changes).takeIf { it > 0 }?.times(60)
+            "stopped", "reset", "expired" -> return null // a newer end: the current timer started after these events
+        }
+    }
+    return null
 }
 
 /** A ring over a track: [fraction] (0..1) of it drawn in [color], clockwise from the top. */
