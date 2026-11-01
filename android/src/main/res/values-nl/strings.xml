@@ -84,6 +84,8 @@
     <string name="color_green">Normaal</string>
     <string name="color_yellow">Waarschuwing</string>
     <string name="color_red">Alarm</string>
+    <string name="set_appearance">Uiterlijk van de timer</string>
+    <string name="color_custom">Eigen…</string>
     <string name="set_alerts">Geluidssignalen (minuten voor het einde)</string>
     <string name="alert_item">%1$d min ervoor</string>
     <string name="alert_add">Toevoegen</string>

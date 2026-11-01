@@ -20,7 +20,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -353,12 +362,15 @@ private fun StartForm(context: Context, online: Boolean, onStart: (Boolean, Int,
 
 // ---------------------------------------------------------------- settings
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val api = remember(agent.agentId) { AgentApi(link) }
     val ed = remember(agent.agentId) { vm.editors(agent.agentId) }
     val online = link.status.collectStateValue() is LinkStatus.Online
-    var newAlert by remember { mutableStateOf("") }
+    var addingAlert by remember { mutableStateOf(false) }
+    var appearance by rememberSaveable { mutableStateOf(false) }
+    val minShort = stringResource(R.string.min_short)
     val conflictText = stringResource(R.string.conflict)
     val savedText = stringResource(R.string.saved)
     val invalidText = stringResource(R.string.err_settings)
@@ -373,46 +385,46 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (!online) Text(stringResource(R.string.offline_hint), color = MaterialTheme.colorScheme.error)
         SectionLabel(stringResource(R.string.set_action))
-        listOf("lock", "logoff", "shutdown").forEach { a ->
-            Row(Modifier.fillMaxWidth().selectable(selected = e.action == a, onClick = { change(e.copy(action = a)) }), verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = e.action == a, onClick = { change(e.copy(action = a)) })
-                Text(actionText(a))
-            }
+        Dropdown(stringResource(R.string.set_action), listOf("lock", "logoff", "shutdown").map { it to actionText(it) }, e.action) {
+            change(e.copy(action = it))
         }
-        SectionLabel(stringResource(R.string.set_thresholds))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            NumberText(stringResource(R.string.set_yellow), ed.yellowText, Modifier.weight(1f)) { ed.yellowText = it; ed.settingsDirty = true }
-            NumberText(stringResource(R.string.set_red), ed.redText, Modifier.weight(1f)) { ed.redText = it; ed.settingsDirty = true }
-        }
-        SectionLabel(stringResource(R.string.set_colors))
-        ColorField(stringResource(R.string.color_green), e.colorGreen) { change(e.copy(colorGreen = it)) }
-        ColorField(stringResource(R.string.color_yellow), e.colorYellow) { change(e.copy(colorYellow = it)) }
-        ColorField(stringResource(R.string.color_red), e.colorRed) { change(e.copy(colorRed = it)) }
         SectionLabel(stringResource(R.string.set_alerts))
-        if (e.alertPoints.isEmpty()) Text(stringResource(R.string.no_alerts))
-        e.alertPoints.forEach { a ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(a.enabled, { on -> change(e.copy(alertPoints = e.alertPoints.map { if (it == a) it.copy(enabled = on) else it })) })
-                Text(stringResource(R.string.alert_item, a.minutes), Modifier.weight(1f))
-                TextButton(onClick = { change(e.copy(alertPoints = e.alertPoints - a)) }) { Text(stringResource(R.string.remove)) }
+        if (e.alertPoints.isEmpty()) Text(stringResource(R.string.no_alerts), style = MaterialTheme.typography.bodyMedium)
+        // A chip per alert: tap switches it on / off, the cross removes it
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            e.alertPoints.forEach { a ->
+                FilterChip(
+                    selected = a.enabled,
+                    onClick = { change(e.copy(alertPoints = e.alertPoints.map { if (it == a) it.copy(enabled = !a.enabled) else it })) },
+                    label = { Text(stringResource(R.string.alert_item, a.minutes)) },
+                    trailingIcon = {
+                        Icon(Icons.Filled.Close, stringResource(R.string.remove), Modifier.size(18.dp)
+                            .clickable { change(e.copy(alertPoints = e.alertPoints - a)) })
+                    },
+                )
             }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(newAlert, { v -> newAlert = v.filter { it.isDigit() }.take(4) }, label = { Text(stringResource(R.string.minutes)) },
-                singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.width(140.dp))
-            OutlinedButton(onClick = {
-                val m = newAlert.toIntOrNull()
-                if (m == null || m !in 1..1440 || e.alertPoints.any { it.minutes == m } || e.alertPoints.size >= 20) vm.say(invalidText)
-                else { change(e.copy(alertPoints = (e.alertPoints + AlertPoint(m, true)).sortedByDescending { it.minutes })); newAlert = "" }
-            }) { Text(stringResource(R.string.alert_add)) }
+            if (e.alertPoints.size < 20) AssistChip(onClick = { addingAlert = true }, label = { Text(stringResource(R.string.alert_add)) },
+                leadingIcon = { Icon(Icons.Filled.Add, null, Modifier.size(18.dp)) })
         }
         SectionLabel(stringResource(R.string.set_language))
-        listOf("en" to "English", "ru" to "Русский", "nl" to "Nederlands", "uk" to "Українська").forEach { (code, name) ->
-            Row(Modifier.fillMaxWidth().selectable(selected = e.language == code, onClick = { change(e.copy(language = code)) }),
-                verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = e.language == code, onClick = { change(e.copy(language = code)) })
-                Text(name)
+        Dropdown(stringResource(R.string.set_language), AppLocale.names.toList(), e.language) { change(e.copy(language = it)) }
+        // The countdown's look is set once and rarely changed: folded by default
+        Row(Modifier.fillMaxWidth().clickable { appearance = !appearance }.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(stringResource(R.string.set_appearance))
+            Spacer(Modifier.weight(1f))
+            Icon(if (appearance) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null, tint = MaterialTheme.colorScheme.primary)
+        }
+        if (appearance) {
+            Text(stringResource(R.string.set_thresholds), style = MaterialTheme.typography.bodyMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Stepper(stringResource(R.string.set_yellow), ed.yellowText.toIntOrNull()?.coerceIn(1, 1440) ?: 1, 1..1440, Modifier.weight(1f),
+                    text = { "$it $minShort" }, stepOf = ::minuteStep) { ed.yellowText = it.toString(); ed.settingsDirty = true }
+                Stepper(stringResource(R.string.set_red), ed.redText.toIntOrNull()?.coerceIn(1, 1440) ?: 1, 1..1440, Modifier.weight(1f),
+                    text = { "$it $minShort" }, stepOf = ::minuteStep) { ed.redText = it.toString(); ed.settingsDirty = true }
             }
+            ColorSwatches(stringResource(R.string.color_green), e.colorGreen) { change(e.copy(colorGreen = it)) }
+            ColorSwatches(stringResource(R.string.color_yellow), e.colorYellow) { change(e.copy(colorYellow = it)) }
+            ColorSwatches(stringResource(R.string.color_red), e.colorRed) { change(e.copy(colorRed = it)) }
         }
         Spacer(Modifier.height(8.dp))
         Button(onClick = {
@@ -428,32 +440,17 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             }
         }, enabled = online && ed.settingsDirty && !ed.settingsSaving) { Text(stringResource(R.string.save)) }
     }
+    if (addingAlert) NumberDialog(stringResource(R.string.set_alerts), 5, 1..1440, stringResource(R.string.alert_add), onDismiss = { addingAlert = false }) { m ->
+        addingAlert = false
+        if (e.alertPoints.any { it.minutes == m } || e.alertPoints.size >= 20) vm.say(invalidText)
+        else change(e.copy(alertPoints = (e.alertPoints + AlertPoint(m, true)).sortedByDescending { it.minutes }))
+    }
 }
 
 private fun settingsValid(s: AgentSettings): Boolean =
     s.yellowThreshold in 1..1440 && s.redThreshold in 1..1440 &&
         listOf(s.colorGreen, s.colorYellow, s.colorRed).all { parseColor(it) != null } && s.alertPoints.size <= 20 &&
         s.alertPoints.all { it.minutes in 1..1440 } && s.alertPoints.map { it.minutes }.toSet().size == s.alertPoints.size
-
-/** A number field over the text the user typed (validated on save, marked while out of range). */
-@Composable
-private fun NumberText(label: String, text: String, modifier: Modifier, onChange: (String) -> Unit) {
-    OutlinedTextField(text, { v -> onChange(v.filter { it.isDigit() }.take(4)) },
-        label = { Text(label) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        isError = text.toIntOrNull()?.let { it !in 1..1440 } ?: true, modifier = modifier)
-}
-
-@Composable
-private fun ColorField(label: String, value: String, onChange: (String) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(32.dp).background(parseColor(value) ?: Color.Transparent, RoundedCornerShape(6.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp)))
-        OutlinedTextField(value, { v ->
-            val hex = v.trim().uppercase().filter { it == '#' || it.isDigit() || it in 'A'..'F' }
-            onChange(("#" + hex.removePrefix("#").replace("#", "")).take(7))
-        }, label = { Text(label) }, singleLine = true, isError = parseColor(value) == null, modifier = Modifier.weight(1f))
-    }
-}
 
 // ---------------------------------------------------------------- schedule
 

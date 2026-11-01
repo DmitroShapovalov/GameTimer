@@ -84,6 +84,8 @@
     <string name="color_green">Звичайний</string>
     <string name="color_yellow">Попередження</string>
     <string name="color_red">Тривога</string>
+    <string name="set_appearance">Вигляд таймера</string>
+    <string name="color_custom">Свій…</string>
     <string name="set_alerts">Звукові сигнали (хвилин до кінця)</string>
     <string name="alert_item">за %1$d хв</string>
     <string name="alert_add">Додати</string>
