@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +31,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerLayoutType
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -79,6 +81,9 @@ private fun duration(minutes: Int, h: String, min: String): String = when {
 
 /** A day as numbers; text that can't be read (an old half-typed value) falls back to a whole free day. */
 private data class Day(val allowed: Boolean, val limit: Int, val from: Int, val to: Int) {
+    /** The PC treats an empty or reversed window as the whole day (no overnight windows): refused here instead. */
+    val badWindow get() = allowed && to <= from
+
     fun edit() = PcEditors.DayEdit(allowed, limit.toString(), PcEditors.clock(from), PcEditors.clock(to))
 
     companion object {
@@ -96,6 +101,7 @@ fun ScheduleTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val conflictText = stringResource(R.string.conflict)
     val savedText = stringResource(R.string.saved)
     val invalidText = stringResource(R.string.err_schedule)
+    val badWindowText = stringResource(R.string.sched_bad_window)
     var editing by rememberSaveable { mutableStateOf<Int?>(null) }
 
     ReloadOn(link, "ev.schedule") {
@@ -144,13 +150,19 @@ fun ScheduleTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 WindowBar(d, dim, Modifier.weight(1f).height(12.dp))
                 Text(
                     when {
+                        d.badWindow -> stringResource(R.string.sched_check)
                         !d.allowed -> stringResource(R.string.sched_off)
                         d.limit == 0 -> stringResource(R.string.sched_no_limit)
                         else -> duration(d.limit, h, min)
                     },
-                    Modifier.width(72.dp).padding(end = 8.dp),
+                    Modifier.widthIn(min = 72.dp).padding(start = 8.dp, end = 8.dp),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (d.allowed && !dim) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    color = when {
+                        d.badWindow -> MaterialTheme.colorScheme.error
+                        d.allowed && !dim -> MaterialTheme.colorScheme.onSurface
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     textAlign = androidx.compose.ui.text.style.TextAlign.End,
                 )
             }
@@ -164,6 +176,7 @@ fun ScheduleTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 if (limit == null || from == null || to == null) null else DaySchedule(d.allowed, limit, from, to)
             }
             if (week.any { it == null }) { vm.say(invalidText); return@Button }
+            if (week.any { it!!.allowed && it.windowEndMinutes <= it.windowStartMinutes }) { vm.say(badWindowText); return@Button }
             val toSave = loaded.copy(enabled = ed.scheduleEnabled, week = week.map { it!! })
             ed.scheduleSaving = true
             vm.launchSave {
@@ -232,11 +245,24 @@ private fun DayEditor(wd: Int, day: Day, onChange: (Day) -> Unit, onCopy: (List<
                         Text("–")
                         OutlinedButton(onClick = { picking = false }) { Text(PcEditors.clock(day.to)) }
                     }
+                    if (day.badWindow) Text(stringResource(R.string.sched_bad_window), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error)
                 }
-                Stepper(stringResource(R.string.sched_daily_limit), day.limit, 0..1440,
-                    text = { if (it == 0) "—" else duration(it, h, min) }, stepOf = { 15 }) { onChange(day.copy(limit = it)) }
-                Text(stringResource(if (day.limit == 0) R.string.sched_no_limit_hint else R.string.sched_limit_hint),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // "No limit" is a switch of its own: − on the stepper never lifts the limit by reaching 0
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.sched_daily_limit), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    Switch(day.limit > 0, { on -> onChange(day.copy(limit = if (on) 120 else 0)) })
+                }
+                if (day.limit > 0) {
+                    Stepper(stringResource(R.string.sched_daily_limit), day.limit, 15..1440,
+                        text = { duration(it, h, min) }, stepOf = { 15 }) { onChange(day.copy(limit = it)) }
+                    val window = if (day.to > day.from) day.to - day.from else 1440
+                    Text(stringResource(if (day.limit > window) R.string.sched_limit_over_window else R.string.sched_limit_hint),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text(stringResource(R.string.sched_no_limit_hint), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(R.string.sched_copy_to), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -269,10 +295,11 @@ private fun DayEditor(wd: Int, day: Day, onChange: (Day) -> Unit, onCopy: (List<
 private fun TimeDialog(minutes: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
     val context = LocalContext.current
     val state = rememberTimePickerState(minutes / 60, minutes % 60, DateFormat.is24HourFormat(context))
+    // Always the vertical clock, scrollable: in landscape the wide layout doesn't fit a dialog
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                TimePicker(state)
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                TimePicker(state, layoutType = TimePickerLayoutType.Vertical)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                     TextButton(onClick = { onPick(state.hour * 60 + state.minute) }) { Text(stringResource(R.string.ok)) }

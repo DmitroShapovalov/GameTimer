@@ -91,7 +91,7 @@
     <string name="alert_add">Добавить</string>
     <string name="no_alerts">Сигналов нет</string>
     <string name="err_settings">Проверьте значения: пороги 1–1440, цвета в виде #RRGGBB, сигналы 1–1440 без повторов.</string>
-    <string name="sched_enable">Расписание на день</string>
+    <string name="sched_enable">Расписание на неделю</string>
     <string name="sched_hint">Нажмите на день, чтобы изменить его. ПК получит изменения после сохранения.</string>
     <string name="hours_short">ч</string>
     <string name="sched_off">Без игр</string>
@@ -107,7 +107,10 @@
     <string name="sched_every_day">Каждый день</string>
     <string name="sched_copied">Скопировано</string>
     <string name="sched_done">Готово</string>
-    <string name="err_schedule">Проверьте время: ЧЧ:ММ от 00:00 до 24:00, минуты 0–1440.</string>
+    <string name="sched_check">Проверьте</string>
+    <string name="sched_bad_window">Конец должен быть позже начала (через полночь нельзя).</string>
+    <string name="sched_limit_over_window">Лимит больше разрешённых часов: игра закончится по часам.</string>
+    <string name="err_schedule">ПК не принял расписание: проверьте часы и лимиты.</string>
     <string name="history_empty">Событий пока нет</string>
     <string name="load_more">Загрузить ещё</string>
     <string name="hist_all">Все</string>

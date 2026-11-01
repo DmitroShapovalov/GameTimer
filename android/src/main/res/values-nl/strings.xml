@@ -91,7 +91,7 @@
     <string name="alert_add">Toevoegen</string>
     <string name="no_alerts">Geen signalen</string>
     <string name="err_settings">Controleer de waarden: drempels 1–1440, kleuren als #RRGGBB, signalen 1–1440 en uniek.</string>
-    <string name="sched_enable">Dagschema</string>
+    <string name="sched_enable">Weekschema</string>
     <string name="sched_hint">Tik op een dag om die te wijzigen. De pc krijgt de wijzigingen als je opslaat.</string>
     <string name="hours_short">u</string>
     <string name="sched_off">Niet gamen</string>
@@ -107,7 +107,10 @@
     <string name="sched_every_day">Elke dag</string>
     <string name="sched_copied">Gekopieerd</string>
     <string name="sched_done">Klaar</string>
-    <string name="err_schedule">Controleer de tijden: UU:MM tussen 00:00 en 24:00, minuten 0–1440.</string>
+    <string name="sched_check">Controleren</string>
+    <string name="sched_bad_window">Het einde moet later zijn dan het begin (niet over middernacht).</string>
+    <string name="sched_limit_over_window">De limiet is langer dan de toegestane uren: de uren beëindigen het gamen eerst.</string>
+    <string name="err_schedule">De pc heeft het schema niet geaccepteerd: controleer de uren en de limieten.</string>
     <string name="history_empty">Nog geen gebeurtenissen</string>
     <string name="load_more">Meer laden</string>
     <string name="hist_all">Alles</string>

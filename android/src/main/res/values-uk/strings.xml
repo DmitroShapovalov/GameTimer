@@ -91,7 +91,7 @@
     <string name="alert_add">Додати</string>
     <string name="no_alerts">Сигналів немає</string>
     <string name="err_settings">Перевірте значення: пороги 1–1440, кольори як #RRGGBB, сигнали 1–1440 без повторів.</string>
-    <string name="sched_enable">Розклад на день</string>
+    <string name="sched_enable">Розклад на тиждень</string>
     <string name="sched_hint">Натисніть на день, щоб змінити його. ПК отримає зміни після збереження.</string>
     <string name="hours_short">год</string>
     <string name="sched_off">Без ігор</string>
@@ -107,7 +107,10 @@
     <string name="sched_every_day">Щодня</string>
     <string name="sched_copied">Скопійовано</string>
     <string name="sched_done">Готово</string>
-    <string name="err_schedule">Перевірте час: ГГ:ХХ від 00:00 до 24:00, хвилини 0–1440.</string>
+    <string name="sched_check">Перевірте</string>
+    <string name="sched_bad_window">Кінець має бути пізніше за початок (через північ не можна).</string>
+    <string name="sched_limit_over_window">Ліміт більший за дозволені години: гра закінчиться за годинами.</string>
+    <string name="err_schedule">ПК не прийняв розклад: перевірте години та ліміти.</string>
     <string name="history_empty">Подій поки немає</string>
     <string name="load_more">Завантажити ще</string>
     <string name="hist_all">Усі</string>

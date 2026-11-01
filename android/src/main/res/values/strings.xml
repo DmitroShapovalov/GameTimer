@@ -91,7 +91,7 @@
     <string name="alert_add">Add</string>
     <string name="no_alerts">No alerts</string>
     <string name="err_settings">Check the values: thresholds 1–1440, colours as #RRGGBB, alerts 1–1440 and unique.</string>
-    <string name="sched_enable">Daily schedule</string>
+    <string name="sched_enable">Weekly schedule</string>
     <string name="sched_hint">Tap a day to change it. The PC gets the changes when you save.</string>
     <string name="hours_short">h</string>
     <string name="sched_off">No gaming</string>
@@ -107,7 +107,10 @@
     <string name="sched_every_day">Every day</string>
     <string name="sched_copied">Copied</string>
     <string name="sched_done">Done</string>
-    <string name="err_schedule">Check the times: HH:MM between 00:00 and 24:00, minutes 0–1440.</string>
+    <string name="sched_check">Check</string>
+    <string name="sched_bad_window">The end must be later than the start (no overnight hours).</string>
+    <string name="sched_limit_over_window">The limit is longer than the allowed hours: the hours end gaming first.</string>
+    <string name="err_schedule">The PC did not accept the schedule: check the hours and the limits.</string>
     <string name="history_empty">No events yet</string>
     <string name="load_more">Load more</string>
     <string name="hist_all">All</string>
