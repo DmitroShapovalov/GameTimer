@@ -368,6 +368,19 @@ public sealed partial class AgentHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// "Control from anywhere" was just turned off (§10.6): every hub with a push token is woken once more, so
+    /// a phone that relied on wake-ups connects (at home) and learns it must watch on its own again.
+    /// </summary>
+    public IReadOnlyList<string> PushTokensForFarewell()
+    {
+        lock (_lock)
+        {
+            var live = _sessions.Select(s => s.HubId).ToHashSet();
+            return _state.Peers.Where(p => p.PushToken != null && !live.Contains(p.Id)).Select(p => p.PushToken!).ToList();
+        }
+    }
+
     /// <summary>Now by this host's clock (the time a held-back wake-up's event happened, for <see cref="StillToWake"/>).</summary>
     public DateTimeOffset Now => _time.GetUtcNow();
 

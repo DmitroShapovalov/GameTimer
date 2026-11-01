@@ -626,6 +626,9 @@ like after any reconnect (§12), so it shows the same notifications it would at 
   token every 20 s across the relay; over that, or without a push account, it is dropped silently. Tokens the push
   service rejects as unknown are not tried again. The relay keeps no token after the call (only short-
   lived hashes for the limits) and doesn't log it.
+- **Turned off.** When the PC owner turns "Control from anywhere" off, every hub with a token (and no
+  session) is woken once more before the relay connection closes, so a phone that relied on wake-ups
+  connects (at home), sees `remoteAccess: false` and watches on its own again.
 - **Phone.** On a wake-up it runs a short foreground service: connects to its PCs (LAN or relay,
   §10.3) for at most ~15 s, catches up and lets go.
 - **What it costs in privacy.** The push token is a stable id of the phone: the relay sees it at every

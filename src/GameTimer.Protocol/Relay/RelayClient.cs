@@ -109,6 +109,13 @@ public sealed class RelayClient : IAsyncDisposable
     // Not connected: nothing to do (the phones catch up when they next connect)
     private void OnWakeNeeded(IReadOnlyList<string> tokens) => Volatile.Read(ref _current)?.Wake(tokens);
 
+    /// <summary>Wakes these phones now, past the 30 s pacing (the farewell when remote access goes off, §10.6).</summary>
+    public void WakeNow(IReadOnlyList<string> tokens)
+    {
+        if (Volatile.Read(ref _current) is not { } c) return;
+        foreach (var t in tokens) c.SendWakeNow(t);
+    }
+
     private static async Task<WebSocket> DefaultConnectAsync(Uri url, CancellationToken cancel)
     {
         var ws = new ClientWebSocket(); // no Origin header: the relay refuses browsers (§10.3)
@@ -208,6 +215,8 @@ public sealed class RelayClient : IAsyncDisposable
             }
             foreach (var t in due) SendSoon(RelayFrames.WakeFrame(t));
         }
+
+        public void SendWakeNow(string token) => SendSoon(RelayFrames.WakeFrame(token));
 
         private void SendPendingWakes(long now)
         {

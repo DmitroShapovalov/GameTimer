@@ -65,7 +65,7 @@ class Notifier(private val context: Context) {
         createChannels(context)
     }
 
-    fun forget(agentId: String) = seen.edit().remove(agentId).apply()
+    fun forget(agentId: String) = seen.edit().remove(agentId).remove("soon/$agentId").apply()
 
     /** Forget everything (a new hub identity: the PCs must be paired again). */
     fun forgetAll() = seen.edit().clear().apply()
@@ -131,14 +131,26 @@ class Notifier(private val context: Context) {
         val left = state.remainingSecondsNow()
         if (left <= 0 || left > SOON_WITHIN) return
         val run = (state.timer?.get("targetTime") as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return
-        val key = agent.agentId + "|" + run
-        if (seen.getString("soon", null) == key) return
-        seen.edit().putString("soon", key).apply()
-        post(agent, NotifySettings.Category.Soon, context.getString(R.string.ntf_soon, (left + 59) / 60), tag = "soon")
+        val minutes = (left + 59) / 60
+        if (!newSoon(agent.agentId, run, minutes)) return
+        post(agent, NotifySettings.Category.Soon, context.getString(R.string.ntf_soon, minutes), tag = "soon")
     }
 
-    fun alert(agent: PairedAgent, minutes: Int?) {
+    /**
+     * Per PC and timer run: a "minutes left" notice only when it is meaningfully less than the last one told
+     * (each warning point once, whether it came live or after a wake-up).
+     */
+    private fun newSoon(agentId: String, run: String?, minutes: Int): Boolean {
+        val key = "soon/$agentId"
+        val last = seen.getString(key, null)?.split('|')
+        if (last != null && last.size == 2 && last[0] == (run ?: "") && minutes >= (last[1].toIntOrNull() ?: Int.MAX_VALUE) - 1) return false
+        seen.edit().putString(key, (run ?: "") + "|" + minutes).apply()
+        return true
+    }
+
+    fun alert(agent: PairedAgent, minutes: Int?, run: String? = null) {
         if (minutes == null || !settings.isOn(NotifySettings.Category.Soon)) return
+        if (!newSoon(agent.agentId, run, minutes)) return
         post(agent, NotifySettings.Category.Soon, context.getString(R.string.ntf_soon, minutes), tag = "soon")
     }
 

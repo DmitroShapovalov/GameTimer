@@ -63,8 +63,8 @@ class MonitorService : Service() {
 
         /**
          * Enabled, a PC paired, allowed to notify (watching without notifying would only cost battery) — and
-         * some PC isn't covered by push wake-ups (protocol §10.6: it has "Control from anywhere" on and this
-         * phone has a push token). When push covers every PC, nothing stays open in the background: no
+         * some PC isn't covered by push wake-ups (protocol §10.6: it has "Control from anywhere" on and has
+         * confirmed this phone's current push token). When push covers every PC, nothing stays open in the background: no
          * ongoing notification, the PCs wake the phone when there is news.
          */
         fun wanted(context: Context): Boolean {
@@ -72,7 +72,7 @@ class MonitorService : Service() {
             val agents = app.store.agents.value
             return NotifySettings(context).background && agents.isNotEmpty() &&
                 androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled() &&
-                !(Push.token(context) != null && agents.all { it.remoteAccess })
+                !agents.all { Push.covers(context, it) }
         }
 
         /** Starts or stops watching in the background, per [wanted]. */
