@@ -97,6 +97,12 @@
     <string name="err_schedule">Проверьте время: ЧЧ:ММ от 00:00 до 24:00, минуты 0–1440.</string>
     <string name="history_empty">Событий пока нет</string>
     <string name="load_more">Загрузить ещё</string>
+    <string name="hist_all">Все</string>
+    <string name="hist_timer">Таймер</string>
+    <string name="hist_alerts">Тревоги</string>
+    <string name="hist_today">Сегодня</string>
+    <string name="hist_yesterday">Вчера</string>
+    <string name="hist_none_loaded">Среди загруженных событий таких нет</string>
     <string name="ev_started">Запущен: %1$s (%2$s)</string>
     <string name="ev_stopped">Остановлен</string>
     <string name="ev_reset">Сброшен</string>

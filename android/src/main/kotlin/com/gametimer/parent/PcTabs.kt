@@ -94,12 +94,12 @@ private fun ReloadOn(link: AgentLink, vararg events: String, load: suspend () ->
 }
 
 @Composable
-private fun <T> kotlinx.coroutines.flow.StateFlow<T>.collectStateValue(): T {
+internal fun <T> kotlinx.coroutines.flow.StateFlow<T>.collectStateValue(): T {
     val v by this.collectAsState()
     return v
 }
 
-private fun JsonObject.type(): String? = (this["t"] as? JsonPrimitive)?.content
+internal fun JsonObject.type(): String? = (this["t"] as? JsonPrimitive)?.content
 
 private fun JsonObject.str(name: String): String? = (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
@@ -114,7 +114,7 @@ private fun shortTime(iso: String?): String =
         ?.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)) ?: ""
 
 @Composable
-private fun actionText(action: String?): String = stringResource(
+internal fun actionText(action: String?): String = stringResource(
     when (action) {
         "shutdown" -> R.string.act_shutdown
         "logoff" -> R.string.act_logoff
@@ -526,101 +526,6 @@ private fun SmallField(label: String, value: String, type: KeyboardType, modifie
         keyboardOptions = KeyboardOptions(keyboardType = type), modifier = modifier)
 }
 
-// ---------------------------------------------------------------- history
-
-@Composable
-fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
-    val api = remember(agent.agentId) { AgentApi(link) }
-    val scope = rememberCoroutineScope()
-    val events = remember { mutableStateListOf<HistoryEvent>() }
-    var next by remember { mutableStateOf<String?>(null) }
-    var loadedOnce by remember { mutableStateOf(false) }
-    var loadingMore by remember { mutableStateOf(false) }
-    var generation by remember { mutableIntStateOf(0) } // a reload makes older "load more" results stale
-
-    suspend fun reload() {
-        val gen = ++generation
-        val r = api.history()
-        if (r is ApiResult.Ok && gen == generation) {
-            events.clear(); events.addAll(r.value.events); next = r.value.next.takeIf { r.value.more }; loadedOnce = true
-        }
-    }
-    val online = link.status.collectStateValue() is LinkStatus.Online
-    LaunchedEffect(online) { if (online) reload() }
-    // A new event is put on top; the pages below stay as they are (their cursors remain valid)
-    LaunchedEffect(link) {
-        link.events.filter { it.type() == "ev.history" }.collect { ev ->
-            val e = (ev["event"] as? JsonObject)?.let { runCatching { HistoryJson.decodeFromJsonElement(HistoryEvent.serializer(), it) }.getOrNull() }
-            if (e != null && loadedOnce) events.add(0, e) else reload()
-        }
-    }
-    if (!loadedOnce) return Loading()
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (events.isEmpty()) Text(stringResource(R.string.history_empty))
-        events.forEach { e ->
-            Column {
-                Row {
-                    Text(shortDateTime(e.time), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    Text(who(e), style = MaterialTheme.typography.bodySmall)
-                }
-                Text(eventText(e))
-            }
-            HorizontalDivider()
-        }
-        next?.let { cursor ->
-            OutlinedButton(onClick = {
-                if (loadingMore) return@OutlinedButton
-                loadingMore = true
-                val gen = generation
-                scope.launch {
-                    when (val r = api.history(before = cursor)) {
-                        is ApiResult.Ok -> if (gen == generation && next == cursor) {
-                            events.addAll(r.value.events); next = r.value.next.takeIf { r.value.more }
-                        }
-                        is ApiResult.Failed -> {
-                            val refused = r.outcome as? RequestOutcome.Refused
-                            if (refused?.code == "bad_request") reload() // the cursor was trimmed from the log: start over
-                            else vm.say(vm.outcomeText(r.outcome))
-                        }
-                        else -> Unit
-                    }
-                    loadingMore = false
-                }
-            }, enabled = !loadingMore) { Text(stringResource(R.string.load_more)) }
-        }
-    }
-}
-
-private val HistoryJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-
-@Composable
-private fun who(e: HistoryEvent): String = when (e.source) {
-    "pc" -> stringResource(R.string.who_pc)
-    "phone" -> e.device.orEmpty()
-    else -> stringResource(R.string.who_system)
-}
-
-@Composable
-private fun eventText(e: HistoryEvent): String = when (e.type) {
-    "started" -> {
-        val m = e.minutes ?: 0
-        val dur = if (m >= 60) "%d:%02d".format(m / 60, m % 60) else "$m ${stringResource(R.string.min_short)}"
-        stringResource(R.string.ev_started, dur, stringResource(if (e.mode == "absolute") R.string.ev_mode_until else R.string.ev_mode_interval))
-    }
-    "stopped" -> stringResource(R.string.ev_stopped)
-    "reset" -> stringResource(R.string.ev_reset)
-    "extended" -> if ((e.minutes ?: 0) >= 0) stringResource(R.string.ev_plus, e.minutes ?: 0) else stringResource(R.string.ev_minus, -(e.minutes ?: 0))
-    "expired" -> stringResource(R.string.ev_expired, actionText(e.action))
-    "resumed" -> stringResource(R.string.ev_resumed)
-    "closed" -> stringResource(R.string.ev_closed)
-    "tampered" -> stringResource(R.string.ev_tampered)
-    "updated" -> stringResource(R.string.ev_updated)
-    "scheduleSkipped" -> stringResource(R.string.ev_sched_skipped)
-    "scheduleRestored" -> stringResource(R.string.ev_sched_restored)
-    else -> e.type
-}
-
 // ---------------------------------------------------------------- parents
 
 @Composable
@@ -715,6 +620,6 @@ fun ParentsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink, onSelfRem
 }
 
 @Composable
-private fun Loading() {
+internal fun Loading() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 }
