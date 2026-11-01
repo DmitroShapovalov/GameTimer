@@ -92,10 +92,21 @@
     <string name="no_alerts">Geen signalen</string>
     <string name="err_settings">Controleer de waarden: drempels 1–1440, kleuren als #RRGGBB, signalen 1–1440 en uniek.</string>
     <string name="sched_enable">Dagschema</string>
-    <string name="sched_hint">Per dag: toegestaan of niet, minuten per dag (0 = geen limiet) en de uren waarin de timer mag lopen.</string>
-    <string name="sched_limit_label">Min</string>
-    <string name="sched_from">Van</string>
-    <string name="sched_to">Tot</string>
+    <string name="sched_hint">Tik op een dag om die te wijzigen. De pc krijgt de wijzigingen als je opslaat.</string>
+    <string name="hours_short">u</string>
+    <string name="sched_off">Niet gamen</string>
+    <string name="sched_no_limit">Geen limiet</string>
+    <string name="sched_allowed">Gamen toegestaan</string>
+    <string name="sched_window_label">Toegestane uren</string>
+    <string name="sched_daily_limit">Daglimiet</string>
+    <string name="sched_no_limit_hint">Geen daglimiet: alleen de toegestane uren gelden.</string>
+    <string name="sched_limit_hint">Totale speeltijd voor de dag, binnen de toegestane uren.</string>
+    <string name="sched_copy_to">Deze dag kopiëren naar</string>
+    <string name="sched_weekdays">Werkdagen</string>
+    <string name="sched_weekend">Weekend</string>
+    <string name="sched_every_day">Elke dag</string>
+    <string name="sched_copied">Gekopieerd</string>
+    <string name="sched_done">Klaar</string>
     <string name="err_schedule">Controleer de tijden: UU:MM tussen 00:00 en 24:00, minuten 0–1440.</string>
     <string name="history_empty">Nog geen gebeurtenissen</string>
     <string name="load_more">Meer laden</string>

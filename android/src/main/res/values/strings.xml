@@ -92,10 +92,21 @@
     <string name="no_alerts">No alerts</string>
     <string name="err_settings">Check the values: thresholds 1–1440, colours as #RRGGBB, alerts 1–1440 and unique.</string>
     <string name="sched_enable">Daily schedule</string>
-    <string name="sched_hint">Per day: allowed or not, minutes per day (0 = no limit), and the hours when the timer may run.</string>
-    <string name="sched_limit_label">Min</string>
-    <string name="sched_from">From</string>
-    <string name="sched_to">To</string>
+    <string name="sched_hint">Tap a day to change it. The PC gets the changes when you save.</string>
+    <string name="hours_short">h</string>
+    <string name="sched_off">No gaming</string>
+    <string name="sched_no_limit">No limit</string>
+    <string name="sched_allowed">Gaming allowed</string>
+    <string name="sched_window_label">Allowed hours</string>
+    <string name="sched_daily_limit">Daily limit</string>
+    <string name="sched_no_limit_hint">No daily limit: only the allowed hours apply.</string>
+    <string name="sched_limit_hint">Total gaming time for the day, within the allowed hours.</string>
+    <string name="sched_copy_to">Copy this day to</string>
+    <string name="sched_weekdays">Weekdays</string>
+    <string name="sched_weekend">Weekend</string>
+    <string name="sched_every_day">Every day</string>
+    <string name="sched_copied">Copied</string>
+    <string name="sched_done">Done</string>
     <string name="err_schedule">Check the times: HH:MM between 00:00 and 24:00, minutes 0–1440.</string>
     <string name="history_empty">No events yet</string>
     <string name="load_more">Load more</string>
