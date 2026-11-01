@@ -625,8 +625,9 @@ like after any reconnect (§12), so it shows the same notifications it would at 
   push service as a data message `{ "t": "wake" }`, high priority, 10 minutes to live, one collapse key.
   At most 20 per agent socket, 30 per IP (4× per /24 or /48) and 600 in total per minute, and one per
   token every 20 s across the relay; over that, or without a push account, it is dropped silently. Tokens the push
-  service rejects as unknown are not tried again. The relay keeps no token after the call (only short-
-  lived hashes for the limits) and doesn't log it.
+  service rejects as unknown are not tried again. The relay keeps no token after the call: only short
+  hashes, for the limits (about 20 s) and of the tokens rejected as unknown (until it restarts); it
+  doesn't log tokens.
 - **Turned off.** When the PC owner turns "Control from anywhere" off, every hub with a token (and no
   session) is woken once more before the relay connection closes, so a phone that relied on wake-ups
   connects (at home), sees `remoteAccess: false` and watches on its own again.

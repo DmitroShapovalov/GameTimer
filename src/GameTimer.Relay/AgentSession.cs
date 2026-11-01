@@ -141,6 +141,7 @@ internal sealed class AgentSession
     }
 
     private readonly Queue<long> _wakeTimes = new();
+    // Per token hash (never the token itself, which is dropped once the push call is made), only for WakeSameTokenEvery
     private readonly Dictionary<string, long> _wakeLast = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -154,10 +155,10 @@ internal sealed class AgentSession
         if (_s.Time.GetElapsedTime(_connected, now) < _s.Options.WakeAfterConnected) return;
         while (_wakeTimes.Count > 0 && _s.Time.GetElapsedTime(_wakeTimes.Peek(), now) >= TimeSpan.FromMinutes(1)) _wakeTimes.Dequeue();
         if (_wakeTimes.Count >= _s.Options.WakesPerAgentPerMinute) return;
-        if (_wakeLast.TryGetValue(token, out var last) && _s.Time.GetElapsedTime(last, now) < _s.Options.WakeSameTokenEvery) return;
-        if (_wakeLast.Count >= 64)
-            foreach (var old in _wakeLast.Where(kv => _s.Time.GetElapsedTime(kv.Value, now) >= _s.Options.WakeSameTokenEvery).Select(kv => kv.Key).ToList())
-                _wakeLast.Remove(old);
+        var key = RelayState.TokenKey(token);
+        foreach (var old in _wakeLast.Where(kv => _s.Time.GetElapsedTime(kv.Value, now) >= _s.Options.WakeSameTokenEvery).Select(kv => kv.Key).ToList())
+            _wakeLast.Remove(old);
+        if (_wakeLast.ContainsKey(key)) return;
         if (_wakeLast.Count >= 64) return;
         if (!_s.Limits.TryWake(_client) || !_s.TryWakeTotal() || !_s.TryWakeToken(token)) return;
         if (!_s.Push.TryWake(token))
@@ -166,7 +167,7 @@ internal sealed class AgentSession
             return;
         }
         _wakeTimes.Enqueue(now);
-        _wakeLast[token] = now;
+        _wakeLast[key] = now;
     }
 
     private void Register(byte[] f)

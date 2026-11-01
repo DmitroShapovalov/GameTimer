@@ -70,7 +70,8 @@ internal sealed class RelayState
     private readonly Dictionary<string, long> _tokenWakes = new(StringComparer.Ordinal);
     private const int MaxTokenWakes = 20_000;
 
-    private static string TokenKey(string token) =>
+    /// <summary>A short hash of a push token: the relay keeps this for its limits, never the token itself.</summary>
+    internal static string TokenKey(string token) =>
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(token)), 0, 16);
 
     public void ForgetWakeToken(string token)

@@ -65,9 +65,10 @@ The output will be in `bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/`.
 The Android app controls GameTimer on one or more PCs. Install the `.apk` from the release page (Android 8 or newer; allow
 installing apps from your browser when Android asks).
 
-**Pairing.** On the PC: **Settings** → turn on **Phone control** (Windows Hello) → **Connect phone**, and scan the QR code
-with the app (the **+** button). The phone shows a 6-digit code; type it on the PC and confirm with Windows Hello. The phone
-and the PC must be on the same Wi-Fi for pairing. The first phone becomes the **admin** (it can add and remove other
+**Pairing.** On the PC: **Settings** → turn on **Phone control** (Windows Hello; the first time, Windows also asks for
+administrator rights once to add a firewall rule for the home network) → **Connect phone**, and scan the QR code with the
+app (the **+** button). The code works once, for 2 minutes. The phone shows a 6-digit code; type it on the PC and confirm
+with Windows Hello. The phone and the PC must be on the same Wi-Fi for pairing. The first phone becomes the **admin** (it can add and remove other
 parents); others are **parents**.
 
 In the app, each PC has four pages:
@@ -80,18 +81,21 @@ In the app, each PC has four pages:
 - **History** — what happened, day by day, with who did it; filter by timer events or alerts.
 - **More** — the PC's settings (action at the end, sound alerts, countdown colours, PC language) and the parents.
 
-**Notifications.** The app tells you when time is up, a few minutes before, and when something looks wrong (the timer app
-was closed, its settings were tampered with, a new parent was added), also when the app is closed. Choose which ones in
-the app's settings (gear on the home screen), where you also pick the app's language.
+**Notifications.** The app tells you when time is up, a few minutes before, when something looks wrong (the timer app
+was closed, its settings were tampered with, a new parent was added) and when another parent or the PC changed the timer.
+Choose which ones in the app's settings (gear on the home screen), where you also pick the app's language. They also arrive
+when the app is closed: at home through a quiet background connection (Wi-Fi), away from home through push wake-ups when
+"Control from anywhere" is on (needs Google Play services).
 
 Everything between the app and the PC is end-to-end encrypted. If the PC gets a new address on your network, the app finds
-it again by itself.
+it again by itself. To remove a PC from the phone, use the ⋮ menu on its page.
 
 ## Control from anywhere
 
 Off by default. On the PC: **Settings** → under Phone control, turn on **Control from anywhere (through the internet)**
-(Windows Hello). Then the paired phones also reach the PC over mobile data or any other network, through a relay. At home
-they still talk directly. Notifications arrive away from home too (Android push).
+(Windows Hello), then open the app once at home so the phones learn it. From then on they also reach the PC over mobile data
+or any other network, through a relay. At home they still talk directly. Notifications arrive away from home too (Android
+push).
 
 The relay only passes encrypted messages along: it can't see the timer, names or the history, or send commands. It stores
 nothing. What it and Google's push service can see (when and how much, not what) is described in
