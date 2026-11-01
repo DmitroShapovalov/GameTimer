@@ -97,6 +97,11 @@
     <string name="err_schedule">Check the times: HH:MM between 00:00 and 24:00, minutes 0–1440.</string>
     <string name="history_empty">No events yet</string>
     <string name="load_more">Load more</string>
+    <string name="hist_all">All</string>
+    <string name="hist_timer">Timer</string>
+    <string name="hist_alerts">Alerts</string>
+    <string name="hist_today">Today</string>
+    <string name="hist_yesterday">Yesterday</string>
     <string name="ev_started">Started: %1$s (%2$s)</string>
     <string name="ev_stopped">Stopped</string>
     <string name="ev_reset">Reset</string>
