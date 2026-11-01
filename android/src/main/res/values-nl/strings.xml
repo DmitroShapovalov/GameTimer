@@ -157,6 +157,8 @@
     <string name="lift_allowed">Volgens het schema is er vandaag nog %1$d min. Het schema ook de rest van vandaag negeren? Het geldt weer om middernacht, of zodra een nieuwe timer die je start afloopt.</string>
     <string name="lift_blocked">Volgens het schema mag er nu niet gegamed worden. Het schema de rest van vandaag negeren? Het geldt weer om middernacht, of zodra een nieuwe timer die je start afloopt.</string>
     <string name="app_settings">Instellingen</string>
+    <string name="app_language">Taal</string>
+    <string name="app_language_system">Systeemstandaard</string>
     <string name="ntf_section">Meldingen</string>
     <string name="ntf_background">Meldingen op de achtergrond</string>
     <string name="ntf_background_hint">Houdt je pc\'s in de gaten terwijl de app gesloten is (er blijft een stil pictogram in het meldingenpaneel).</string>

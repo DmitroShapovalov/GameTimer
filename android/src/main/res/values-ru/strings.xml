@@ -157,6 +157,8 @@
     <string name="lift_allowed">По расписанию сегодня осталось %1$d мин. Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда закончится новый таймер, который вы запустите.</string>
     <string name="lift_blocked">По расписанию сейчас играть нельзя. Не учитывать расписание до конца дня? Оно снова начнёт действовать в полночь или когда закончится новый таймер, который вы запустите.</string>
     <string name="app_settings">Настройки</string>
+    <string name="app_language">Язык</string>
+    <string name="app_language_system">Как в системе</string>
     <string name="ntf_section">Уведомления</string>
     <string name="ntf_background">Уведомлять в фоне</string>
     <string name="ntf_background_hint">Следит за ПК, пока приложение закрыто (в шторке остаётся тихий значок).</string>

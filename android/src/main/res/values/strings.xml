@@ -157,6 +157,8 @@
     <string name="lift_allowed">By the schedule, %1$d min are left today. Ignore the schedule for the rest of today too? It applies again at midnight, or when a new timer you start runs out.</string>
     <string name="lift_blocked">By the schedule, playing isn\'t allowed right now. Ignore the schedule for the rest of today? It applies again at midnight, or when a new timer you start runs out.</string>
     <string name="app_settings">Settings</string>
+    <string name="app_language">Language</string>
+    <string name="app_language_system">System default</string>
     <string name="ntf_section">Notifications</string>
     <string name="ntf_background">Notify in the background</string>
     <string name="ntf_background_hint">Keeps watching your PCs while the app is closed (a quiet icon stays in the notification shade).</string>

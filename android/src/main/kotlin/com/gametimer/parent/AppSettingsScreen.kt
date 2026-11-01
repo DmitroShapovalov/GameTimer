@@ -56,6 +56,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     fun unrestricted() = (context.getSystemService(PowerManager::class.java))?.isIgnoringBatteryOptimizations(context.packageName) == true
     var permission by remember { mutableStateOf(granted()) }
     var battery by remember { mutableStateOf(unrestricted()) }
+    var language by remember { mutableStateOf(AppLocale.current(context)) }
     LifecycleResumeEffect(Unit) {
         val was = permission
         permission = granted(); battery = unrestricted()
@@ -74,6 +75,16 @@ fun AppSettingsScreen(onBack: () -> Unit) {
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.app_language), style = MaterialTheme.typography.titleMedium)
+            val system = stringResource(R.string.app_language_system)
+            Dropdown(
+                label = stringResource(R.string.app_language),
+                options = AppLocale.choices.map { it to (AppLocale.names[it] ?: system) },
+                selected = language,
+            ) { choice ->
+                language = choice
+                context.findActivity()?.let { AppLocale.set(it, choice) }
+            }
             Text(stringResource(R.string.ntf_section), style = MaterialTheme.typography.titleMedium)
             SwitchRow(stringResource(R.string.ntf_background), stringResource(R.string.ntf_background_hint), background) {
                 background = it

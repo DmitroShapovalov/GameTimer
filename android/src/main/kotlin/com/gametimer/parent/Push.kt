@@ -98,7 +98,7 @@ class WakeService : android.app.Service() {
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
         val notification = androidx.core.app.NotificationCompat.Builder(this, Notifier.CHANNEL_MONITOR)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(getString(R.string.wake_title))
+            .setContentTitle(applicationContext.getString(R.string.wake_title)) // the app's language (AppLocale)
             .setSilent(true)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN)
             .build()

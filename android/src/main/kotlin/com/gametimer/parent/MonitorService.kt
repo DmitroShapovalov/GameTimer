@@ -27,8 +27,8 @@ class MonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = NotificationCompat.Builder(this, Notifier.CHANNEL_MONITOR)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(getString(R.string.monitor_title))
-            .setContentText(getString(R.string.monitor_text))
+            .setContentTitle(applicationContext.getString(R.string.monitor_title)) // the app's language (AppLocale)
+            .setContentText(applicationContext.getString(R.string.monitor_text))
             .setContentIntent(Notifier.openApp(this))
             .setOngoing(true)
             .setSilent(true)

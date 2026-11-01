@@ -157,6 +157,8 @@
     <string name="lift_allowed">За розкладом сьогодні лишилося %1$d хв. Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли закінчиться новий таймер, який ви запустите.</string>
     <string name="lift_blocked">За розкладом зараз грати не можна. Не враховувати розклад до кінця дня? Він знову діятиме опівночі або коли закінчиться новий таймер, який ви запустите.</string>
     <string name="app_settings">Налаштування</string>
+    <string name="app_language">Мова</string>
+    <string name="app_language_system">Як у системі</string>
     <string name="ntf_section">Сповіщення</string>
     <string name="ntf_background">Сповіщати у фоні</string>
     <string name="ntf_background_hint">Стежить за ПК, поки застосунок закритий (у шторці лишається тихий значок).</string>
