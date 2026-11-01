@@ -97,7 +97,7 @@ import kotlinx.serialization.json.intOrNull
 
 /** Reloads [load] now and every time the PC sends one of [events]. */
 @Composable
-private fun ReloadOn(link: AgentLink, vararg events: String, load: suspend () -> Unit) {
+internal fun ReloadOn(link: AgentLink, vararg events: String, load: suspend () -> Unit) {
     val online = link.status.collectStateValue() is LinkStatus.Online
     LaunchedEffect(online) { if (online) load() }
     LaunchedEffect(link) { link.events.filter { it.type() in events }.collect { load() } }
@@ -137,7 +137,7 @@ private fun parseColor(hex: String?): Color? =
 
 
 /** "HH:MM" (or "H") → minutes 0..1440, else null. */
-private fun parseClock(text: String): Int? {
+internal fun parseClock(text: String): Int? {
     val parts = text.trim().split(":")
     val h = parts.getOrNull(0)?.toIntOrNull() ?: return null
     val m = if (parts.size > 1 && parts[1].isNotEmpty()) parts[1].toIntOrNull() ?: return null else 0
@@ -463,77 +463,6 @@ private fun settingsValid(s: AgentSettings): Boolean =
     s.yellowThreshold in 1..1440 && s.redThreshold in 1..1440 &&
         listOf(s.colorGreen, s.colorYellow, s.colorRed).all { parseColor(it) != null } && s.alertPoints.size <= 20 &&
         s.alertPoints.all { it.minutes in 1..1440 } && s.alertPoints.map { it.minutes }.toSet().size == s.alertPoints.size
-
-// ---------------------------------------------------------------- schedule
-
-private val DAY_ORDER = listOf(1, 2, 3, 4, 5, 6, 0) // Mon..Sun, index = weekday with 0 = Sunday
-
-@Composable
-fun ScheduleTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
-    val api = remember(agent.agentId) { AgentApi(link) }
-    val ed = remember(agent.agentId) { vm.editors(agent.agentId) }
-    val online = link.status.collectStateValue() is LinkStatus.Online
-    val conflictText = stringResource(R.string.conflict)
-    val savedText = stringResource(R.string.saved)
-    val invalidText = stringResource(R.string.err_schedule)
-
-    ReloadOn(link, "ev.schedule") {
-        val r = api.schedule()
-        if (r is ApiResult.Ok && !ed.scheduleDirty && !ed.scheduleSaving) ed.fillSchedule(r.value)
-    }
-    val loaded = ed.scheduleLoaded
-    if (loaded == null || ed.days.size != 7) return Loading()
-    val days = ed.days
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (!online) Text(stringResource(R.string.offline_hint), color = MaterialTheme.colorScheme.error)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.sched_enable), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            Switch(ed.scheduleEnabled, { ed.scheduleEnabled = it; ed.scheduleDirty = true })
-        }
-        Text(stringResource(R.string.sched_hint), style = MaterialTheme.typography.bodySmall)
-        DAY_ORDER.forEach { wd ->
-            val d = days[wd]
-            HorizontalDivider()
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(java.time.DayOfWeek.of(if (wd == 0) 7 else wd).getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault()),
-                    Modifier.width(44.dp))
-                Checkbox(d.allowed, { days[wd] = d.copy(allowed = it); ed.scheduleDirty = true })
-                SmallField(stringResource(R.string.sched_limit_label), d.limit, KeyboardType.Number, Modifier.weight(1f),
-                    error = d.limit.toIntOrNull()?.let { it !in 0..1440 } ?: true) { days[wd] = d.copy(limit = it.filter(Char::isDigit).take(4)); ed.scheduleDirty = true }
-                SmallField(stringResource(R.string.sched_from), d.from, KeyboardType.Text, Modifier.weight(1.2f),
-                    error = parseClock(d.from) == null) { days[wd] = d.copy(from = it.take(5)); ed.scheduleDirty = true }
-                SmallField(stringResource(R.string.sched_to), d.to, KeyboardType.Text, Modifier.weight(1.2f),
-                    error = parseClock(d.to) == null) { days[wd] = d.copy(to = it.take(5)); ed.scheduleDirty = true }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = {
-            val week = days.map { d ->
-                val limit = d.limit.toIntOrNull()?.takeIf { it in 0..1440 }
-                val from = parseClock(d.from)
-                val to = parseClock(d.to)
-                if (limit == null || from == null || to == null) null else DaySchedule(d.allowed, limit, from, to)
-            }
-            if (week.any { it == null }) { vm.say(invalidText); return@Button }
-            val toSave = loaded.copy(enabled = ed.scheduleEnabled, week = week.map { it!! })
-            ed.scheduleSaving = true
-            vm.launchSave {
-                try { when (val r = api.saveSchedule(toSave)) {
-                    is ApiResult.Ok -> { ed.fillSchedule(r.value); vm.say(savedText) }
-                    is ApiResult.Conflict -> { ed.fillSchedule(r.current); vm.say(conflictText) }
-                    is ApiResult.Failed -> vm.say(vm.outcomeText(r.outcome))
-                } } finally { ed.scheduleSaving = false }
-            }
-        }, enabled = online && ed.scheduleDirty && !ed.scheduleSaving) { Text(stringResource(R.string.save)) }
-    }
-}
-
-@Composable
-private fun SmallField(label: String, value: String, type: KeyboardType, modifier: Modifier, error: Boolean, onChange: (String) -> Unit) {
-    OutlinedTextField(value, onChange, label = { Text(label, fontSize = 11.sp) }, singleLine = true, isError = error,
-        keyboardOptions = KeyboardOptions(keyboardType = type), modifier = modifier)
-}
 
 // ---------------------------------------------------------------- parents
 
