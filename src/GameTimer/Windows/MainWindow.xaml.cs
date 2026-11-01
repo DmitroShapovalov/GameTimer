@@ -41,7 +41,6 @@ public partial class MainWindow : FluentWindow
     private string _timerStateKey = "Timer_NotStarted";
 
     // Schedule tab: editing is gated behind Windows Hello; controls built once in code
-    private bool _scheduleUnlocked;
     private readonly System.Windows.Controls.CheckBox[] _dayAllowed = new System.Windows.Controls.CheckBox[7];
     private readonly Wpf.Ui.Controls.TextBox[] _dayLimit = new Wpf.Ui.Controls.TextBox[7];
     private readonly Wpf.Ui.Controls.TextBox[] _dayFrom = new Wpf.Ui.Controls.TextBox[7];
@@ -56,6 +55,15 @@ public partial class MainWindow : FluentWindow
         GameTimer.Services.V2.WindowsPairingUi pairingUi)
     {
         InitializeComponent();
+        // The parent lock ends when the window is minimized or hidden, or when the user switches to another
+        // app (back to the game): a parent who walks away after adding time leaves nothing unlocked behind
+        StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) SetUnlocked(false); };
+        IsVisibleChanged += (_, _) => { if (!IsVisible) SetUnlocked(false); };
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            // our own dialogs (connect phone, pairing code) keep it; another app doesn't
+            if (!System.Windows.Application.Current.Windows.OfType<Window>().Any(w => w.IsActive)) SetUnlocked(false);
+        }, System.Windows.Threading.DispatcherPriority.Background);
         _settingsService = settingsService;
         _settings = settings;
 
@@ -97,6 +105,7 @@ public partial class MainWindow : FluentWindow
 
     private void ApplyLocalization()
     {
+        UpdateLockUi();
         // Tab headers
         TabTimerText.Text = Loc.Get("Tab_Timer");
         TabDisplayText.Text = Loc.Get("Tab_Display");
@@ -398,7 +407,7 @@ public partial class MainWindow : FluentWindow
         }
 #endif
 
-        // Ctrl+1..4 — switch tabs
+        // Ctrl+1..6 — switch pages (Timer, Schedule, History, Display, Notifications, Settings)
         if (ctrl)
         {
             int tab = e.Key switch
@@ -1214,7 +1223,7 @@ public partial class MainWindow : FluentWindow
     {
         Window owner = OwnedWindows.OfType<ConnectPhoneDialog>().FirstOrDefault() ?? (Window)this;
         PairingCodeDialog? dialog = null;
-        dialog = new PairingCodeDialog(hubName, () => RequireAuth(owner: dialog)) { Owner = owner };
+        dialog = new PairingCodeDialog(hubName, () => RequireAuth(owner: dialog, fresh: true)) { Owner = owner }; // a new parent: always asked
         var registration = cancel.Register(() => Dispatcher.BeginInvoke(dialog.Close));
         dialog.Closed += (_, _) => registration.Dispose();
         dialog.Show();
@@ -1362,7 +1371,7 @@ public partial class MainWindow : FluentWindow
 
     private async void TrayExit()
     {
-        if (ExitNeedsAuth && !await RequireAuth()) return;
+        if (ExitNeedsAuth && !await RequireAuth(fresh: true)) return;
         if (_timer.IsRunning) _timer.Stop();
         CloseApp();
     }
@@ -1384,7 +1393,7 @@ public partial class MainWindow : FluentWindow
         {
             BringToFront();
             bool asked = ExitNeedsAuth;
-            if (asked && !await RequireAuth(uninstall ? "AuthPrompt_Uninstall" : "AuthPrompt_Update"))
+            if (asked && !await RequireAuth(uninstall ? "AuthPrompt_Uninstall" : "AuthPrompt_Update", fresh: true))
                 return; // Setup offers Retry
             if (!SetupSignals.SetupIsWaiting())
             {
@@ -1427,7 +1436,7 @@ public partial class MainWindow : FluentWindow
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
         e.Cancel = true;
-        LockSchedule(); // require Windows Hello again next time the window opens
+        SetUnlocked(false); // require Windows Hello again next time the window opens
         Hide();
         if (_trayIcon != null) _trayIcon.Visible = true;
     }
@@ -1536,7 +1545,7 @@ public partial class MainWindow : FluentWindow
         ScheduleIntro.Text = Loc.Get("Sched_Intro");
         ScheduleEnabledToggle.Content = Loc.Get("Sched_Enable");
         ScheduleHint.Text = Loc.Get("Sched_Hint");
-        ScheduleUnlockButton.Content = Loc.Get(_scheduleUnlocked ? "Sched_Lock" : "Sched_Unlock");
+        ScheduleUnlockButton.Content = Loc.Get(IsUnlocked ? "Sched_Lock" : "Sched_Unlock");
 
         if (_schHeadDay != null) _schHeadDay.Text = Loc.Get("Sched_Col_Day");
         if (_schHeadOn != null) _schHeadOn.Text = Loc.Get("Sched_Col_On");
@@ -1580,7 +1589,7 @@ public partial class MainWindow : FluentWindow
 
     private void ApplyScheduleFromUi()
     {
-        if (_isLoading || !_scheduleUnlocked) return;
+        if (_isLoading || !IsUnlocked) return;
         if (_settings.Week == null || _settings.Week.Count != 7)
             _settings.Week = AppSettings.DefaultWeek();
 
@@ -1599,20 +1608,17 @@ public partial class MainWindow : FluentWindow
         UpdateScheduleStatus();
     }
 
+    // The schedule is editable while the app is unlocked (the parent lock), like every other protected change
     private async void ScheduleUnlock_Click(object sender, RoutedEventArgs e)
     {
-        if (_scheduleUnlocked) { LockSchedule(); return; }
-        if (!await RequireAuth()) return;
-        _scheduleUnlocked = true;
-        ScheduleEditPanel.IsEnabled = true;
-        ScheduleUnlockButton.Content = Loc.Get("Sched_Lock");
+        if (IsUnlocked) { SetUnlocked(false); return; }
+        await RequireAuth();
     }
 
-    private void LockSchedule()
+    private void UpdateScheduleLock()
     {
-        _scheduleUnlocked = false;
-        if (ScheduleEditPanel != null) ScheduleEditPanel.IsEnabled = false;
-        if (ScheduleUnlockButton != null) ScheduleUnlockButton.Content = Loc.Get("Sched_Unlock");
+        if (ScheduleEditPanel != null) ScheduleEditPanel.IsEnabled = IsUnlocked;
+        if (ScheduleUnlockButton != null) ScheduleUnlockButton.Content = Loc.Get(IsUnlocked ? "Sched_Lock" : "Sched_Unlock");
     }
 
     private void UpdateScheduleStatus()
@@ -1685,7 +1691,70 @@ public partial class MainWindow : FluentWindow
 
     #region Authentication
 
-    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt", Window? owner = null)
+    // ---- The parent lock: one Windows Hello unlock covers the parent's changes for a while ----
+
+    /// <summary>How long one unlock lasts at most (owner's choice: 5 minutes); not extended by use.</summary>
+    private static readonly TimeSpan UnlockFor = TimeSpan.FromMinutes(5);
+
+    // Monotonic (TickCount64): changing the system clock can't stretch an unlock. 0 = locked.
+    private long _unlockedUntil;
+    private System.Windows.Threading.DispatcherTimer? _lockTimer;
+
+    private bool IsUnlocked => _unlockedUntil != 0 && Environment.TickCount64 < _unlockedUntil;
+
+    private void SetUnlocked(bool on)
+    {
+        _unlockedUntil = on ? Environment.TickCount64 + (long)UnlockFor.TotalMilliseconds : 0;
+        if (on && _lockTimer == null)
+        {
+            _lockTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _lockTimer.Tick += (_, _) =>
+            {
+                if (_unlockedUntil != 0 && !IsUnlocked) SetUnlocked(false);
+                else UpdateLockUi();
+            };
+        }
+        if (on) _lockTimer!.Start(); else _lockTimer?.Stop();
+        UpdateLockUi();
+        UpdateScheduleLock();
+    }
+
+    private void UpdateLockUi()
+    {
+        if (LockButton == null) return;
+        bool on = IsUnlocked;
+        LockIcon.Symbol = on ? Wpf.Ui.Controls.SymbolRegular.LockOpen24 : Wpf.Ui.Controls.SymbolRegular.LockClosed24;
+        LockTitle.Text = Loc.Get(on ? "Lock_Unlocked" : "Lock_Locked");
+        if (on)
+        {
+            var left = TimeSpan.FromMilliseconds(Math.Max(0, _unlockedUntil - Environment.TickCount64));
+            LockSubtitle.Text = string.Format(Loc.Get("Lock_UnlockedFor"), $"{(int)left.TotalMinutes}:{left.Seconds:00}");
+        }
+        else LockSubtitle.Text = Loc.Get("Lock_ClickToUnlock");
+        LockButton.ToolTip = Loc.Get("Lock_Tooltip");
+    }
+
+    private async void LockButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (IsUnlocked) SetUnlocked(false);
+        else await RequireAuth();
+    }
+
+    /// <summary>
+    /// The parent's check before a change that helps the child. Inside an unlock it passes at once;
+    /// otherwise Windows Hello (or the Windows password) unlocks for <see cref="UnlockFor"/> from now
+    /// (not extended by use, so a child can't keep it open).
+    /// <paramref name="fresh"/> always asks (exit, update, pairing a new phone) and doesn't use the unlock.
+    /// </summary>
+    private async Task<bool> RequireAuth(string promptKey = "AuthPrompt", Window? owner = null, bool fresh = false)
+    {
+        if (!fresh && IsUnlocked) return true;
+        bool ok = await VerifyParent(promptKey, owner);
+        if (ok && !fresh) SetUnlocked(true);
+        return ok;
+    }
+
+    private async Task<bool> VerifyParent(string promptKey, Window? owner)
     {
         try
         {

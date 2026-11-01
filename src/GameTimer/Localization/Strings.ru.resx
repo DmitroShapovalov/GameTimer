@@ -500,4 +500,19 @@
   <data name="RemoteAccess_Waiting" xml:space="preserve">
     <value>Работает, когда включено управление с телефона и привязано приложение родителя.</value>
   </data>
+  <data name="Lock_Locked" xml:space="preserve">
+    <value>Заблокировано</value>
+  </data>
+  <data name="Lock_Unlocked" xml:space="preserve">
+    <value>Разблокировано</value>
+  </data>
+  <data name="Lock_ClickToUnlock" xml:space="preserve">
+    <value>Нажмите, чтобы разблокировать</value>
+  </data>
+  <data name="Lock_UnlockedFor" xml:space="preserve">
+    <value>Заблокируется через {0}</value>
+  </data>
+  <data name="Lock_Tooltip" xml:space="preserve">
+    <value>Изменения, которые дают больше времени, требуют родителя. Одна разблокировка Windows Hello действует 5 минут; переход в другое приложение, сворачивание или закрытие окна снова блокирует.</value>
+  </data>
 </root>

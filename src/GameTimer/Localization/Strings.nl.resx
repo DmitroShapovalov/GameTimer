@@ -500,4 +500,19 @@
   <data name="RemoteAccess_Waiting" xml:space="preserve">
     <value>Werkt als bediening via telefoon aan staat en er een ouder-app gekoppeld is.</value>
   </data>
+  <data name="Lock_Locked" xml:space="preserve">
+    <value>Vergrendeld</value>
+  </data>
+  <data name="Lock_Unlocked" xml:space="preserve">
+    <value>Ontgrendeld</value>
+  </data>
+  <data name="Lock_ClickToUnlock" xml:space="preserve">
+    <value>Klik om te ontgrendelen</value>
+  </data>
+  <data name="Lock_UnlockedFor" xml:space="preserve">
+    <value>Vergrendelt weer over {0}</value>
+  </data>
+  <data name="Lock_Tooltip" xml:space="preserve">
+    <value>Wijzigingen die meer tijd geven, vragen om de ouder. Eén ontgrendeling met Windows Hello geldt 5 minuten; naar een andere app gaan, minimaliseren of sluiten vergrendelt weer.</value>
+  </data>
 </root>

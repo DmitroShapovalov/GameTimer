@@ -500,4 +500,19 @@
   <data name="RemoteAccess_Waiting" xml:space="preserve">
     <value>Works while phone control is on and a parent app is paired.</value>
   </data>
+  <data name="Lock_Locked" xml:space="preserve">
+    <value>Locked</value>
+  </data>
+  <data name="Lock_Unlocked" xml:space="preserve">
+    <value>Unlocked</value>
+  </data>
+  <data name="Lock_ClickToUnlock" xml:space="preserve">
+    <value>Click to unlock</value>
+  </data>
+  <data name="Lock_UnlockedFor" xml:space="preserve">
+    <value>Locks again in {0}</value>
+  </data>
+  <data name="Lock_Tooltip" xml:space="preserve">
+    <value>Changes that give more time need the parent. One Windows Hello unlock covers them for 5 minutes; switching to another app, minimizing or closing this window locks again.</value>
+  </data>
 </root>
