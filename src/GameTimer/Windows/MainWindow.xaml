@@ -56,15 +56,19 @@
                                 <ColumnDefinition Width="220"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <DockPanel Grid.Column="0">
-                                <ContentPresenter DockPanel.Dock="Bottom" Content="{TemplateBinding Tag}"/>
-                                <StackPanel IsItemsHost="True" Margin="8,4,8,0" KeyboardNavigation.TabNavigation="Once"/>
-                            </DockPanel>
+                            <Grid Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Grid.Row="0" IsItemsHost="True" Margin="8,4,8,0" KeyboardNavigation.TabNavigation="Once"/>
+                                <ContentPresenter Grid.Row="1" Content="{TemplateBinding Tag}"/>
+                            </Grid>
                             <!-- The content layer: a lighter surface with a rounded top-left corner, as in Windows 11 Settings -->
                             <Border Grid.Column="1" Background="{DynamicResource LayerFillColorDefaultBrush}"
                                     BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1,1,0,0"
                                     CornerRadius="8,0,0,0">
-                                <ContentPresenter ContentSource="SelectedContent" Margin="16,8,16,0"/>
+                                <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="16,8,16,0"/>
                             </Border>
                         </Grid>
                     </ControlTemplate>

@@ -59,11 +59,9 @@ public partial class MainWindow : FluentWindow
         // app (back to the game): a parent who walks away after adding time leaves nothing unlocked behind
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) SetUnlocked(false); };
         IsVisibleChanged += (_, _) => { if (!IsVisible) SetUnlocked(false); };
-        Deactivated += (_, _) => Dispatcher.BeginInvoke(() =>
-        {
-            // our own dialogs (connect phone, pairing code) keep it; another app doesn't
-            if (!System.Windows.Application.Current.Windows.OfType<Window>().Any(w => w.IsActive)) SetUnlocked(false);
-        }, System.Windows.Threading.DispatcherPriority.Background);
+        // The whole app losing focus (not just this window: the overlay or a dialog may have had it)
+        System.Windows.Application.Current.Activated += (_, _) => _appActive = true;
+        System.Windows.Application.Current.Deactivated += (_, _) => { _appActive = false; SetUnlocked(false); };
         _settingsService = settingsService;
         _settings = settings;
 
@@ -1071,7 +1069,8 @@ public partial class MainWindow : FluentWindow
         TamperToggle.IsEnabled = false;
         try
         {
-            if (!await RequireAuth())
+            // Turning it off always asks: it frees the child the most (or cuts off the parent's phones)
+            if (!await RequireAuth(fresh: !enable))
             {
                 TamperToggle.IsChecked = _settings.TamperProtection;
                 return;
@@ -1107,7 +1106,8 @@ public partial class MainWindow : FluentWindow
         RemoteToggle.IsEnabled = false;
         try
         {
-            if (!await RequireAuth())
+            // Turning it off always asks: it frees the child the most (or cuts off the parent's phones)
+            if (!await RequireAuth(fresh: !enable))
             {
                 RemoteToggle.IsChecked = _settings.RemoteEnabled;
                 return;
@@ -1161,7 +1161,8 @@ public partial class MainWindow : FluentWindow
         RemoteAccessToggle.IsEnabled = false;
         try
         {
-            if (!await RequireAuth())
+            // Turning it off always asks: it frees the child the most (or cuts off the parent's phones)
+            if (!await RequireAuth(fresh: !enable))
             {
                 RemoteAccessToggle.IsChecked = _settings.RemoteAccess;
                 return;
@@ -1234,14 +1235,14 @@ public partial class MainWindow : FluentWindow
     private async void RevokePeer_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: PeerItem peer }) return;
-        if (!await RequireAuth()) return;
+        if (!await RequireAuth(fresh: true)) return; // cutting a parent off: always asked
         _remote.Agent.RevokeByOwner(peer.Id); // closes its sessions at once (bye revoked)
     }
 
     private async void TogglePeerRole_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: PeerItem peer }) return;
-        if (!await RequireAuth()) return;
+        if (!await RequireAuth(fresh: true)) return;
         _remote.Agent.SetRoleByOwner(peer.Id,
             peer.IsAdmin ? GameTimer.Protocol.Agent.PeerRole.Parent : GameTimer.Protocol.Agent.PeerRole.Admin);
     }
@@ -1255,7 +1256,7 @@ public partial class MainWindow : FluentWindow
     private async void RevokeDevice_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: PairedDevice device }) return;
-        if (!await RequireAuth()) return;
+        if (!await RequireAuth(fresh: true)) return;
         _devices.Revoke(device.Id); // its next request gets 401
     }
 
@@ -1585,7 +1586,19 @@ public partial class MainWindow : FluentWindow
 
     private void Schedule_Toggle(object sender, RoutedEventArgs e) => ApplyScheduleFromUi();
     private void Schedule_Text(object sender, TextChangedEventArgs e) => ApplyScheduleFromUi();
-    private void ScheduleEnabled_Changed(object sender, RoutedEventArgs e) => ApplyScheduleFromUi();
+    private async void ScheduleEnabled_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading || !IsUnlocked) return;
+        if (ScheduleEnabledToggle.IsChecked != true && _settings.ScheduleEnabled && !await RequireAuth(fresh: true))
+        {
+            // Turning the schedule off frees the child the most: always asked; refused → back on
+            _isLoading = true;
+            ScheduleEnabledToggle.IsChecked = true;
+            _isLoading = false;
+            return;
+        }
+        ApplyScheduleFromUi();
+    }
 
     private void ApplyScheduleFromUi()
     {
@@ -1617,6 +1630,8 @@ public partial class MainWindow : FluentWindow
 
     private void UpdateScheduleLock()
     {
+        // Locked again: show what is saved, not a half-typed value that was never applied
+        if (!IsUnlocked && ScheduleEditPanel != null && ScheduleEditPanel.IsEnabled) LoadScheduleToUi();
         if (ScheduleEditPanel != null) ScheduleEditPanel.IsEnabled = IsUnlocked;
         if (ScheduleUnlockButton != null) ScheduleUnlockButton.Content = Loc.Get(IsUnlocked ? "Sched_Lock" : "Sched_Unlock");
     }
@@ -1700,6 +1715,8 @@ public partial class MainWindow : FluentWindow
     private long _unlockedUntil;
     private System.Windows.Threading.DispatcherTimer? _lockTimer;
 
+    private bool _appActive = true;
+
     private bool IsUnlocked => _unlockedUntil != 0 && Environment.TickCount64 < _unlockedUntil;
 
     private void SetUnlocked(bool on)
@@ -1750,7 +1767,17 @@ public partial class MainWindow : FluentWindow
     {
         if (!fresh && IsUnlocked) return true;
         bool ok = await VerifyParent(promptKey, owner);
-        if (ok && !fresh) SetUnlocked(true);
+        if (ok && !fresh)
+        {
+            SetUnlocked(true);
+            // The system prompt is another process: if focus went to another app (the game) instead of back
+            // here, this action still runs but the unlock doesn't outlive it
+            _ = Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(1500);
+                if (!_appActive) SetUnlocked(false);
+            });
+        }
         return ok;
     }
 

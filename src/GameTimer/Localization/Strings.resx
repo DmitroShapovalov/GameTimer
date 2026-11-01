@@ -513,6 +513,6 @@
     <value>Locks again in {0}</value>
   </data>
   <data name="Lock_Tooltip" xml:space="preserve">
-    <value>Changes that give more time need the parent. One Windows Hello unlock covers them for 5 minutes; switching to another app, minimizing or closing this window locks again.</value>
+    <value>Changes that give more time or change settings need the parent. One Windows Hello unlock covers them for 5 minutes; switching to another app, minimizing or closing this window locks again.</value>
   </data>
 </root>
