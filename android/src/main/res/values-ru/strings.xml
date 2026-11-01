@@ -49,7 +49,6 @@
     <string name="err_forbidden">это может только админ</string>
     <string name="err_busy">ПК занят, попробуйте снова</string>
     <string name="retry">Повторить</string>
-    <string name="tab_timer">Таймер</string>
     <string name="tab_schedule">Расписание</string>
     <string name="tab_settings">Настройки</string>
     <string name="tab_history">История</string>
@@ -165,6 +164,14 @@
     <string name="plus_n">+%1$d мин</string>
     <string name="end_at_button">Закончить в…</string>
     <string name="end_now">Завершить сейчас</string>
+    <string name="ends_short">Конец в %1$s</string>
+    <string name="then_action">Затем: %1$s</string>
+    <string name="st_running">Идёт</string>
+    <string name="more_actions">Ещё действия</string>
+    <string name="duration">Длительность</string>
+    <string name="tab_status">Статус</string>
+    <string name="tab_more">Ещё</string>
+    <string name="remove_pc">Удалить с этого телефона</string>
     <string name="lift">Снять ограничения</string>
     <string name="lift_today">Снять ограничения на сегодня</string>
     <string name="lift_title">Расписание на сегодня</string>

@@ -49,7 +49,6 @@
     <string name="err_forbidden">alleen een beheerder mag dat</string>
     <string name="err_busy">de pc is bezig, probeer opnieuw</string>
     <string name="retry">Opnieuw</string>
-    <string name="tab_timer">Timer</string>
     <string name="tab_schedule">Schema</string>
     <string name="tab_settings">Instellingen</string>
     <string name="tab_history">Geschiedenis</string>
@@ -165,6 +164,14 @@
     <string name="plus_n">+%1$d min</string>
     <string name="end_at_button">Eindigen om…</string>
     <string name="end_now">Nu beëindigen</string>
+    <string name="ends_short">Eindigt om %1$s</string>
+    <string name="then_action">Daarna: %1$s</string>
+    <string name="st_running">Loopt</string>
+    <string name="more_actions">Meer acties</string>
+    <string name="duration">Duur</string>
+    <string name="tab_status">Status</string>
+    <string name="tab_more">Meer</string>
+    <string name="remove_pc">Van deze telefoon verwijderen</string>
     <string name="lift">Beperkingen opheffen</string>
     <string name="lift_today">Beperkingen voor vandaag opheffen</string>
     <string name="lift_title">Schema van vandaag</string>

@@ -345,4 +345,3 @@ class LinkHub(private val context: Context, private val store: HubStore) {
     }
 }
 
-private fun JsonObject.str(name: String): String? = (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.content

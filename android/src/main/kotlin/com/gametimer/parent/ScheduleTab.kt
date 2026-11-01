@@ -31,7 +31,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TimePickerLayoutType
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -286,25 +285,6 @@ private fun DayEditor(wd: Int, day: Day, onChange: (Day) -> Unit, onCopy: (List<
         TimeDialog(minutes % 1440, onDismiss = { picking = null }) { picked ->
             picking = null
             if (from) onChange(day.copy(from = picked)) else onChange(day.copy(to = if (picked == 0) 1440 else picked))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TimeDialog(minutes: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
-    val context = LocalContext.current
-    val state = rememberTimePickerState(minutes / 60, minutes % 60, DateFormat.is24HourFormat(context))
-    // Always the vertical clock, scrollable: in landscape the wide layout doesn't fit a dialog
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-            Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                TimePicker(state, layoutType = TimePickerLayoutType.Vertical)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                    TextButton(onClick = { onPick(state.hour * 60 + state.minute) }) { Text(stringResource(R.string.ok)) }
-                }
-            }
         }
     }
 }

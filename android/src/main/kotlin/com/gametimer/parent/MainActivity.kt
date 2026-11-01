@@ -29,6 +29,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -380,6 +392,7 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
     }
     val status by link.status.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var moreTab by rememberSaveable { mutableIntStateOf(0) }
     var confirmRemove by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -395,23 +408,49 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } },
-                actions = { TextButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.remove)) } },
+                actions = {
+                    // Removing the PC from this phone is rare: in the overflow menu, still confirmed
+                    var menu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.more_actions)) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.remove_pc)) }, onClick = { menu = false; confirmRemove = true })
+                    }
+                },
             )
+        },
+        bottomBar = {
+            // Status, Schedule, History every day; the PC's settings and its parents under More
+            NavigationBar {
+                listOf(
+                    Triple(R.string.tab_status, Icons.Filled.Home, 0),
+                    Triple(R.string.tab_schedule, Icons.Filled.DateRange, 1),
+                    Triple(R.string.tab_history, Icons.AutoMirrored.Filled.List, 2),
+                    Triple(R.string.tab_more, Icons.Filled.Menu, 3),
+                ).forEach { (label, icon, i) ->
+                    NavigationBarItem(selected = tab == i, onClick = { tab = i }, icon = { Icon(icon, null) },
+                        label = { Text(stringResource(label)) })
+                }
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            val tabs = listOf(R.string.tab_timer, R.string.tab_schedule, R.string.tab_settings, R.string.tab_history, R.string.tab_parents)
-            PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-                tabs.forEachIndexed { i, label -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(stringResource(label)) }) }
-            }
             when (tab) {
-                0 -> TimerTab(vm, agent, link)
+                0 -> StatusTab(vm, agent, link)
                 1 -> ScheduleTab(vm, agent, link)
-                2 -> SettingsTab(vm, agent, link)
-                3 -> HistoryTab(vm, agent, link)
-                // Removing the PC from the list is enough: the screen for a PC that isn't listed goes home by itself
-                else -> ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })
+                2 -> HistoryTab(vm, agent, link)
+                else -> {
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        listOf(R.string.tab_settings, R.string.tab_parents).forEachIndexed { i, label ->
+                            SegmentedButton(selected = moreTab == i, onClick = { moreTab = i }, shape = SegmentedButtonDefaults.itemShape(i, 2)) {
+                                Text(stringResource(label))
+                            }
+                        }
+                    }
+                    // Removing the PC from the list is enough: the screen for a PC that isn't listed goes home by itself
+                    if (moreTab == 0) SettingsTab(vm, agent, link)
+                    else ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })
+                }
             }
         }
     }
