@@ -118,7 +118,7 @@ When it is on, GameTimer works automatically:
 - it locks the PC (your chosen action) when the budget runs out or the allowed hours end, and keeps it locked outside those hours;
 - a manually started timer is capped to what the schedule still allows.
 
-Edit it on the PC in the **Schedule** tab (`Ctrl`+`6`) — unlock with Windows Hello first — or on the phone under **Schedule**. Both show today's state ("45 min left today", or why gaming is blocked). Because turning the schedule off also needs Windows Hello, it can never lock you, the parent, out by surprise.
+Edit it on the PC on the **Schedule** page (`Ctrl`+`2`) — unlock with Windows Hello first — or on the phone under **Schedule**. Both show today's state ("45 min left today", or why gaming is blocked). Because turning the schedule off also needs Windows Hello, it can never lock you, the parent, out by surprise.
 
 ## Protection from closing
 
@@ -136,7 +136,7 @@ The app can keep the running timer even if it is closed, and can make it hard fo
 | `↑` / `↓` | Increase / decrease the focused time value by 1 |
 | `Shift` + `↑` / `↓` | Increase / decrease by 10 |
 | `:` | Jump from the hours field to the minutes field |
-| `Ctrl` + `1`…`6` | Switch tabs |
+| `Ctrl` + `1`…`6` | Switch pages (Timer, Schedule, History, Display, Notifications, Settings) |
 | `Esc` | Hide the window to the system tray |
 
 Only one copy of the app can run at a time — launching it again just brings the existing window to the front.

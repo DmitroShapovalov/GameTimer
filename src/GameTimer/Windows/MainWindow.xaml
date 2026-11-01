@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="GameTimer"
-        Width="500" Height="500"
-        ResizeMode="NoResize"
+        Width="880" Height="620" MinWidth="720" MinHeight="520"
+        WindowBackdropType="Mica"
         WindowStartupLocation="CenterScreen"
         ExtendsContentIntoTitleBar="True"
         Closing="Window_Closing"
@@ -16,6 +16,65 @@
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
             <Setter Property="Margin" Value="0,8,0,4"/>
         </Style>
+        <!-- The navigation pane: items like NavigationViewItem (icon + text, a pill and an accent bar when selected) -->
+        <Style x:Key="NavTabItem" TargetType="TabItem">
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bg" CornerRadius="6" Background="Transparent" Padding="12,9">
+                            <Grid>
+                                <Rectangle x:Name="Bar" Width="3" Height="16" RadiusX="1.5" RadiusY="1.5"
+                                           HorizontalAlignment="Left" Margin="-12,0,0,0" Visibility="Hidden"
+                                           Fill="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+                                <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="NavTabControl" TargetType="TabControl">
+            <Setter Property="ItemContainerStyle" Value="{StaticResource NavTabItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Grid.Row="0" IsItemsHost="True" Margin="8,4,8,0" KeyboardNavigation.TabNavigation="Once"/>
+                                <ContentPresenter Grid.Row="1" Content="{TemplateBinding Tag}"/>
+                            </Grid>
+                            <!-- The content layer: a lighter surface with a rounded top-left corner, as in Windows 11 Settings -->
+                            <Border Grid.Column="1" Background="{DynamicResource LayerFillColorDefaultBrush}"
+                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1,1,0,0"
+                                    CornerRadius="8,0,0,0">
+                                <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="16,8,16,0"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -26,8 +85,24 @@
 
         <ui:TitleBar Grid.Row="0" Title="GameTimer"/>
 
-        <TabControl x:Name="MainTabs" Grid.Row="1" Margin="16,0,16,12">
-
+        <!-- Left navigation like Windows 11 Settings (a TabControl styled as a NavigationView, so every
+             control keeps its name): Timer, Schedule, History on top, the rarely changed pages below,
+             and the parent lock at the bottom of the pane -->
+        <TabControl x:Name="MainTabs" Grid.Row="1" Style="{StaticResource NavTabControl}">
+            <TabControl.Tag>
+                <ui:Button x:Name="LockButton" Appearance="Transparent" HorizontalAlignment="Stretch"
+                           HorizontalContentAlignment="Left" Margin="8,0,8,12" Padding="10,8"
+                           Click="LockButton_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon x:Name="LockIcon" Symbol="LockClosed24" Margin="0,0,10,0"/>
+                        <StackPanel>
+                            <TextBlock x:Name="LockTitle" Text="Locked" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="LockSubtitle" Text="Click to unlock" FontSize="11"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ui:Button>
+            </TabControl.Tag>
             <!-- TAB: Timer -->
             <TabItem>
                 <TabItem.Header>
@@ -125,9 +200,71 @@
                     </WrapPanel>
                 </StackPanel>
             </TabItem>
-
-            <!-- TAB: Display -->
+            <!-- TAB: Schedule -->
             <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Calendar24" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TabScheduleText" Text="Schedule"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16">
+                        <TextBlock x:Name="ScheduleLabel" Text="Daily schedule" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock x:Name="ScheduleIntro" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="A daily time budget and the hours gaming is allowed, per weekday."/>
+                        <ui:InfoBar x:Name="ScheduleStatusBar" IsOpen="True" IsClosable="False"
+                                    Severity="Informational" Margin="0,0,0,12"/>
+                        <ui:Button x:Name="ScheduleUnlockButton" Content="Unlock to edit"
+                                   Click="ScheduleUnlock_Click" Margin="0,0,0,12"/>
+                        <StackPanel x:Name="ScheduleEditPanel" IsEnabled="False">
+                            <ui:ToggleSwitch x:Name="ScheduleEnabledToggle" Content="Enable schedule"
+                                             Checked="ScheduleEnabled_Changed" Unchecked="ScheduleEnabled_Changed"
+                                             Margin="0,0,0,12"/>
+                            <StackPanel x:Name="ScheduleDaysPanel"/>
+                        </StackPanel>
+                        <TextBlock x:Name="ScheduleHint" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,0"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <!-- TAB: History -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="History24" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TabHistoryText" Text="History"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Margin="16,16,16,0">
+                    <TextBlock x:Name="HistoryEmpty" Text="No events yet" Visibility="Collapsed"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="HistoryList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4" >
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding When}" Width="120"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Who}" Margin="8,0,0,0"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+            <!-- TAB: Display -->
+            <!-- The second group, at the bottom of the navigation: rarely changed -->
+            <TabItem Margin="0,24,0,2">
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
                         <ui:SymbolIcon Symbol="PaintBrush24" Margin="0,0,6,0"/>
@@ -215,7 +352,6 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-
             <!-- TAB: Notifications -->
             <TabItem>
                 <TabItem.Header>
@@ -285,7 +421,6 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-
             <!-- TAB: Settings -->
             <TabItem>
                 <TabItem.Header>
@@ -406,70 +541,6 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-
-            <!-- TAB: History -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="History24" Margin="0,0,6,0"/>
-                        <TextBlock x:Name="TabHistoryText" Text="History"/>
-                    </StackPanel>
-                </TabItem.Header>
-                <Grid Margin="16,16,16,0">
-                    <TextBlock x:Name="HistoryEmpty" Text="No events yet" Visibility="Collapsed"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="HistoryList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="0,4" >
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding When}" Width="120"
-                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"/>
-                                        <TextBlock Grid.Column="2" Text="{Binding Who}" Margin="8,0,0,0"
-                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Grid>
-            </TabItem>
-            <!-- TAB: Schedule -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Calendar24" Margin="0,0,6,0"/>
-                        <TextBlock x:Name="TabScheduleText" Text="Schedule"/>
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="16">
-                        <TextBlock x:Name="ScheduleLabel" Text="Daily schedule" Style="{StaticResource SectionLabel}"/>
-                        <TextBlock x:Name="ScheduleIntro" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                   Text="A daily time budget and the hours gaming is allowed, per weekday."/>
-                        <ui:InfoBar x:Name="ScheduleStatusBar" IsOpen="True" IsClosable="False"
-                                    Severity="Informational" Margin="0,0,0,12"/>
-                        <ui:Button x:Name="ScheduleUnlockButton" Content="Unlock to edit"
-                                   Click="ScheduleUnlock_Click" Margin="0,0,0,12"/>
-                        <StackPanel x:Name="ScheduleEditPanel" IsEnabled="False">
-                            <ui:ToggleSwitch x:Name="ScheduleEnabledToggle" Content="Enable schedule"
-                                             Checked="ScheduleEnabled_Changed" Unchecked="ScheduleEnabled_Changed"
-                                             Margin="0,0,0,12"/>
-                            <StackPanel x:Name="ScheduleDaysPanel"/>
-                        </StackPanel>
-                        <TextBlock x:Name="ScheduleHint" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,0"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
         </TabControl>
     </Grid>
 </ui:FluentWindow>

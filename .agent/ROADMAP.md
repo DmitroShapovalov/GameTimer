@@ -219,6 +219,31 @@ For reliable background push notifications ("time is up", "timer was stopped"). 
 
 ---
 
+## Windows app UX (after v1.8.0)
+
+Research (EN + RU): https://claude.ai/artifact/Armiuu9qEfhtVzfVxSURNj — Windows 11 design guidance, Microsoft Family
+Safety, Qustodio, Kaspersky Safe Kids, Windows Clock, Xbox Game Bar. Goal: the Windows app native to Windows 11 and in
+line with the redesigned Android app.
+
+Owner's decisions (2026-11-01):
+- **One unlock** with Windows Hello for **5 minutes** instead of asking at every protected action.
+- **Windows notifications on the child's PC only for what matters to the child's play:** the red zone (critical time
+  left) and when a parent changes the limits (more or less time, lift, schedule). Nothing else.
+- **"Ask for more time"**: the child asks on the PC, the parent answers on the phone. Its own phase after W1–W6
+  (protocol + both apps).
+- **The old phone web page (v1 API) is removed.**
+
+| # | Step | Status |
+|---|---|---|
+| W1 | Shell: resizable window with Mica, left navigation, the parent lock (one unlock, 5 min) | in review |
+| W2 | Status page: ring, state badge, − / + with a step, Lift, More menu; start form without text boxes | ☐ |
+| W3 | Settings and Phones: setting cards applied at once; a Phones page; About | ☐ |
+| W4 | Overlay page: live preview, colour swatches, alert chips and sounds | ☐ |
+| W5 | History and Schedule as on the phone | ☐ |
+| W6 | Windows notifications (red zone, a parent changed the limits; quiet in full screen) and time left in the tray | ☐ |
+| W7 | Remove the old phone web page and the v1 API | ☐ |
+| R1 | "Ask for more time": child on the PC → parent on the phone (+15 / +30 / No) | ☐ |
+
 ## Backlog / known gaps
 
 Tamper resistance (the child uses the same Windows account, which is an administrator):
