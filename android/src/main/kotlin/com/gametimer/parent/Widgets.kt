@@ -3,6 +3,11 @@ package com.gametimer.parent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -103,18 +108,20 @@ fun Stepper(
     enabled: Boolean = true,
     text: (Int) -> String = { it.toString() },
     stepOf: (Int) -> Int = { 1 },
+    isError: Boolean = false,
     onChange: (Int) -> Unit,
 ) {
     var typing by remember { mutableStateOf(false) }
     Column(modifier) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            FilledTonalIconButton(onClick = { onChange((value - stepOf(value - 1)).coerceIn(range)) }, enabled = enabled && value > range.first) {
+            FilledTonalIconButton(onClick = { onChange(stepDown(value, stepOf).coerceIn(range)) }, enabled = enabled && value > range.first) {
                 Text("−", style = MaterialTheme.typography.titleLarge)
             }
             Text(text(value), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center,
+                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.widthIn(min = 72.dp).clickable(enabled = enabled) { typing = true }.padding(horizontal = 8.dp, vertical = 10.dp))
-            FilledTonalIconButton(onClick = { onChange((value + stepOf(value)).coerceIn(range)) }, enabled = enabled && value < range.last) {
+            FilledTonalIconButton(onClick = { onChange(stepUp(value, stepOf).coerceIn(range)) }, enabled = enabled && value < range.last) {
                 Text("+", style = MaterialTheme.typography.titleLarge)
             }
         }
@@ -122,11 +129,31 @@ fun Stepper(
     if (typing) NumberDialog(label, value, range, onDismiss = { typing = false }) { typing = false; onChange(it) }
 }
 
-/** Typing an exact number in [range]; OK only while the text is a number in range. */
+/** − / + land on the step grid: from 62 with steps of 15 down is 60, up is 75; on the grid they move a whole step. */
+internal fun stepUp(value: Int, stepOf: (Int) -> Int): Int {
+    val step = stepOf(value).coerceAtLeast(1)
+    return (Math.floorDiv(value, step) + 1) * step
+}
+
+internal fun stepDown(value: Int, stepOf: (Int) -> Int): Int {
+    val step = stepOf(value - 1).coerceAtLeast(1)
+    val off = Math.floorMod(value, step)
+    return if (off == 0) value - step else value - off
+}
+
+/** Typing an exact number in [range]; OK only while the text is a number in range that [accept]s. */
 @Composable
-fun NumberDialog(title: String, initial: Int, range: IntRange, confirmText: String? = null, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+fun NumberDialog(
+    title: String,
+    initial: Int,
+    range: IntRange,
+    confirmText: String? = null,
+    accept: (Int) -> Boolean = { true },
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+) {
     var text by remember { mutableStateOf(initial.toString()) }
-    val number = text.toIntOrNull()?.takeIf { it in range }
+    val number = text.toIntOrNull()?.takeIf { it in range && accept(it) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -163,11 +190,13 @@ fun ColorSwatches(label: String, value: String, onChange: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically) {
             swatches.forEach { hex ->
                 val selected = hex.equals(value, ignoreCase = true)
-                Box(Modifier.size(36.dp)
+                // The whole 40 dp circle is the touch target; TalkBack reads the colour code and the selection
+                Box(Modifier.size(40.dp).clip(CircleShape)
+                    .selectable(selected = selected, role = Role.RadioButton) { if (!selected) onChange(hex) }
+                    .semantics { contentDescription = hex }
                     .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape)
-                    .padding(if (selected) 5.dp else 2.dp)
-                    .background(hexColor(hex) ?: Color.Transparent, CircleShape)
-                    .clickable { if (!selected) onChange(hex) })
+                    .padding(if (selected) 6.dp else 3.dp)
+                    .background(hexColor(hex) ?: Color.Transparent, CircleShape))
             }
             AssistChip(onClick = { custom = true }, label = { Text(stringResource(R.string.color_custom)) })
         }

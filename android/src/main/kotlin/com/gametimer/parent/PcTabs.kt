@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.Icons
@@ -398,8 +399,11 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                     onClick = { change(e.copy(alertPoints = e.alertPoints.map { if (it == a) it.copy(enabled = !a.enabled) else it })) },
                     label = { Text(stringResource(R.string.alert_item, a.minutes)) },
                     trailingIcon = {
-                        Icon(Icons.Filled.Close, stringResource(R.string.remove), Modifier.size(18.dp)
-                            .clickable { change(e.copy(alertPoints = e.alertPoints - a)) })
+                        // Its own 28 dp target, apart from the chip's toggle
+                        Box(Modifier.size(28.dp).clip(CircleShape).clickable { change(e.copy(alertPoints = e.alertPoints - a)) },
+                            contentAlignment = Alignment.Center) {
+                            Icon(Icons.Filled.Close, stringResource(R.string.remove), Modifier.size(18.dp))
+                        }
                     },
                 )
             }
@@ -408,20 +412,22 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         }
         SectionLabel(stringResource(R.string.set_language))
         Dropdown(stringResource(R.string.set_language), AppLocale.names.toList(), e.language) { change(e.copy(language = it)) }
-        // The countdown's look is set once and rarely changed: folded by default
-        Row(Modifier.fillMaxWidth().clickable { appearance = !appearance }.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // The countdown's look is set once and rarely changed: folded by default, but open while a value
+        // there is wrong (Save would refuse it with nothing visible to fix)
+        val yellowOk = ed.yellowText.toIntOrNull()?.let { it in 1..1440 } == true
+        val redOk = ed.redText.toIntOrNull()?.let { it in 1..1440 } == true
+        val lookOk = yellowOk && redOk && listOf(e.colorGreen, e.colorYellow, e.colorRed).all { parseColor(it) != null }
+        Row(Modifier.fillMaxWidth().clickable(enabled = lookOk) { appearance = !appearance }.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             SectionLabel(stringResource(R.string.set_appearance))
             Spacer(Modifier.weight(1f))
-            Icon(if (appearance) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null, tint = MaterialTheme.colorScheme.primary)
+            if (lookOk) Icon(if (appearance) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null, tint = MaterialTheme.colorScheme.primary)
         }
-        if (appearance) {
+        if (appearance || !lookOk) {
             Text(stringResource(R.string.set_thresholds), style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Stepper(stringResource(R.string.set_yellow), ed.yellowText.toIntOrNull()?.coerceIn(1, 1440) ?: 1, 1..1440, Modifier.weight(1f),
-                    text = { "$it $minShort" }, stepOf = ::minuteStep) { ed.yellowText = it.toString(); ed.settingsDirty = true }
-                Stepper(stringResource(R.string.set_red), ed.redText.toIntOrNull()?.coerceIn(1, 1440) ?: 1, 1..1440, Modifier.weight(1f),
-                    text = { "$it $minShort" }, stepOf = ::minuteStep) { ed.redText = it.toString(); ed.settingsDirty = true }
-            }
+            Stepper(stringResource(R.string.set_yellow), ed.yellowText.toIntOrNull()?.coerceIn(1, 1440) ?: 1, 1..1440,
+                text = { "$it $minShort" }, stepOf = ::minuteStep, isError = !yellowOk) { ed.yellowText = it.toString(); ed.settingsDirty = true }
+            Stepper(stringResource(R.string.set_red), ed.redText.toIntOrNull()?.coerceIn(1, 1440) ?: 1, 1..1440,
+                text = { "$it $minShort" }, stepOf = ::minuteStep, isError = !redOk) { ed.redText = it.toString(); ed.settingsDirty = true }
             ColorSwatches(stringResource(R.string.color_green), e.colorGreen) { change(e.copy(colorGreen = it)) }
             ColorSwatches(stringResource(R.string.color_yellow), e.colorYellow) { change(e.copy(colorYellow = it)) }
             ColorSwatches(stringResource(R.string.color_red), e.colorRed) { change(e.copy(colorRed = it)) }
@@ -440,10 +446,16 @@ fun SettingsTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             }
         }, enabled = online && ed.settingsDirty && !ed.settingsSaving) { Text(stringResource(R.string.save)) }
     }
-    if (addingAlert) NumberDialog(stringResource(R.string.set_alerts), 5, 1..1440, stringResource(R.string.alert_add), onDismiss = { addingAlert = false }) { m ->
-        addingAlert = false
-        if (e.alertPoints.any { it.minutes == m } || e.alertPoints.size >= 20) vm.say(invalidText)
-        else change(e.copy(alertPoints = (e.alertPoints + AlertPoint(m, true)).sortedByDescending { it.minutes }))
+    if (addingAlert) {
+        // Starts at a value not in the list yet; one already there can't be confirmed
+        val taken = e.alertPoints.map { it.minutes }.toSet()
+        val first = listOf(5, 10, 1, 2, 3, 15, 30).firstOrNull { it !in taken } ?: ((1..1440).firstOrNull { it !in taken } ?: 1)
+        NumberDialog(stringResource(R.string.set_alerts), first, 1..1440, stringResource(R.string.alert_add),
+            accept = { it !in taken }, onDismiss = { addingAlert = false }) { m ->
+            addingAlert = false
+            if (e.alertPoints.size >= 20) vm.say(invalidText)
+            else change(e.copy(alertPoints = (e.alertPoints + AlertPoint(m, true)).sortedByDescending { it.minutes }))
+        }
     }
 }
 
