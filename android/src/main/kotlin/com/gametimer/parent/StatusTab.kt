@@ -105,6 +105,9 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val scheduleRestricts = scheduleStatus in setOf("allowed", "outsideWindow", "dayDisabled", "limitReached")
     var liftAsk by remember { mutableStateOf(false) }
     var pickEnd by remember { mutableStateOf(false) }
+    // Whether this PC takes "end at" as a duration (protocol minor 2); kept from the last hello seen
+    var endIn by remember(agent.agentId) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(status) { (status as? LinkStatus.Online)?.let { endIn = AgentApi.supportsEndIn(it.hello) } }
     var menu by remember { mutableStateOf(false) }
     // The timer ended meanwhile: nothing left to move, end or confirm (a lift dialog opened with no timer stays)
     var wasRunning by remember { mutableStateOf(running) }
@@ -244,10 +247,12 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         val target = timer?.str("targetTime")?.let { runCatching { java.time.OffsetDateTime.parse(it).atZoneSameInstant(java.time.ZoneId.systemDefault()) }.getOrNull() }
         TimeDialog((target?.hour ?: now.hour) * 60 + (target?.minute ?: now.minute), onDismiss = { pickEnd = false }) { picked ->
             pickEnd = false
-            val endIn = (status as? LinkStatus.Online)?.let { AgentApi.supportsEndIn(it.hello) } == true
             // The time is picked on the phone's clock, in the phone's time zone; newer PCs get it as a duration
             // from now, so the PC's own time zone and clock don't matter (older ones get the clock time)
-            if (endIn) run { api.setEndIn(secondsUntil(picked)) } else run { api.setEnd(picked / 60, picked % 60) }
+            // (the seconds are counted when the request goes out; what the PC speaks is the last hello seen, so a
+            // reconnect at that moment doesn't fall back to the clock time)
+            if (endIn == true) run { api.setEndIn(secondsUntil(picked)) }
+            else if (endIn == false) run { api.setEnd(picked / 60, picked % 60) }
         }
     }
 
@@ -279,7 +284,8 @@ private fun secondsUntil(minutes: Int): Int {
     val now = java.time.ZonedDateTime.now()
     var target = now.with(java.time.LocalTime.of(minutes / 60, minutes % 60))
     if (!target.isAfter(now)) target = target.plusDays(1)
-    return java.time.Duration.between(now, target).seconds.toInt().coerceIn(1, 86400)
+    // Up to 25 h on the night the clocks go back: sent as is, the PC refuses what is out of range
+    return java.time.Duration.between(now, target).seconds.toInt()
 }
 
 /** A ring over a track: [fraction] (0..1) of it drawn in [color], clockwise from the top. */
