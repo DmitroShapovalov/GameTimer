@@ -12,14 +12,15 @@ A game time limiter for Windows — designed for parents who want to manage thei
 - **Parental protection** — all controls are protected by Windows Hello (PIN / fingerprint / face recognition) with Windows password fallback
 - **System tray** — minimizes to tray on close; exit only from the tray menu (also protected)
 - **Draggable overlay position** — position the timer anywhere on screen via a visual preview
-- **Phone control over home Wi-Fi** — see and control the timer from a phone (start, stop, ±15 min, settings); no cloud, no app store, paired by QR code
+- **Parent app for Android** — the timer, the weekly schedule, the settings and the history of each PC on your phone, end-to-end encrypted, paired by QR code; notifications when time is up or something looks wrong
+- **Control from anywhere** (optional, off by default) — the same app over mobile data or another Wi-Fi, through a relay that can't read anything; no accounts
 - **Daily schedule** — an optional per-weekday time budget and allowed-hours window; GameTimer starts the day's allowance automatically and locks when it runs out or the hours end (off by default)
 - **Multilingual UI** — English (default), Russian, Dutch and Ukrainian, switchable at runtime
 - **Modern look** — Fluent Design (WPF UI) with dark theme
 
 ## Download
 
-Download the latest installer from the [Releases](../../releases/latest) page.
+Download the latest Windows installer and the Android parent app (`.apk`) from the [Releases](../../releases/latest) page.
 
 **Updating.** Just run the new installer while GameTimer is running. Setup asks the app to close; if a
 timer is running or the daily schedule is on, the app first asks for Windows Hello (so a child can't
@@ -59,30 +60,49 @@ The output will be in `bin/Release/net8.0-windows10.0.17763.0/win-x64/publish/`.
 5. When the timer expires, the configured action executes (shutdown / lock / logoff)
 6. To stop or modify the timer, Windows Hello or Windows password authentication is required
 
-## Phone control (home Wi-Fi)
+## Parent app (Android)
 
-The PC app can serve a small web app to your phone. It works only inside your home network and is **off by default**.
+The Android app controls GameTimer on one or more PCs. Install the `.apk` from the release page (Android 8 or newer; allow
+installing apps from your browser when Android asks).
 
-1. In **Settings**, turn on **Phone control** (Windows Hello). The first time, Windows asks for administrator rights once: GameTimer adds a firewall rule that lets only devices on your home network reach it. If you skip that, a warning with an **Allow in firewall** button stays under the switch.
-2. Click **Connect phone** (Windows Hello) and scan the QR code with the phone camera. The phone must be on the same Wi-Fi. The code is valid for 2 minutes and works once.
-3. Give the phone a name and tap **Connect**.
+**Pairing.** On the PC: **Settings** → turn on **Phone control** (Windows Hello) → **Connect phone**, and scan the QR code
+with the app (the **+** button). The phone shows a 6-digit code; type it on the PC and confirm with Windows Hello. The phone
+and the PC must be on the same Wi-Fi for pairing. The first phone becomes the **admin** (it can add and remove other
+parents); others are **parents**.
 
-On the phone you can now:
+In the app, each PC has four pages:
 
-- see the countdown in the same colors as on the PC, with the end time and what happens then;
-- start a timer (duration or time of day), stop it, add or remove 15 minutes;
-- change the expiry action, colors and thresholds, sound alerts and the language;
-- see and remove paired phones.
+- **Status** — the time left as a ring, when it ends and what happens then; − / + with a step you choose; **Lift
+  restrictions** (also for today's schedule); **End at…** and **End now** in the menu. With no timer: start one for a
+  duration or until a time of day.
+- **Schedule** — the week at a glance; tap a day to set its allowed hours and daily limit, then copy it to weekdays,
+  the weekend or every day. Saved to the PC with **Save**.
+- **History** — what happened, day by day, with who did it; filter by timer events or alerts.
+- **More** — the PC's settings (action at the end, sound alerts, countdown colours, PC language) and the parents.
 
-Changes made on the PC show up on the phone immediately, and the other way round.
+**Notifications.** The app tells you when time is up, a few minutes before, and when something looks wrong (the timer app
+was closed, its settings were tampered with, a new parent was added), also when the app is closed. Choose which ones in
+the app's settings (gear on the home screen), where you also pick the app's language.
 
-**Add it to the home screen** (once): Android — Chrome menu ⋮ → *Add to Home screen*; iPhone — Safari → *Share* → *Add to Home Screen*.
+Everything between the app and the PC is end-to-end encrypted. If the PC gets a new address on your network, the app finds
+it again by itself.
 
-**Security.** Only paired phones can control the timer: each gets its own random token, and the PC stores only a hash of it. Requests from outside the home network are refused, and repeated failed attempts are rate-limited. Remove a phone in **Settings** (or from another phone) to cut it off at once. The connection is plain HTTP inside your home network.
+## Control from anywhere
 
-**If the phone shows "PC unreachable":** check that the phone is on the same Wi-Fi and that the PC is on. The address the phone uses is shown under the **Phone control** switch (e.g. `http://192.168.1.20:5123`). If the router gave the PC a new address, connect the phone again with a new QR code and add the new page to the home screen; to avoid this, reserve a fixed address for the PC in the router (DHCP reservation).
+Off by default. On the PC: **Settings** → under Phone control, turn on **Control from anywhere (through the internet)**
+(Windows Hello). Then the paired phones also reach the PC over mobile data or any other network, through a relay. At home
+they still talk directly. Notifications arrive away from home too (Android push).
 
-Developers: the API and WebSocket messages are documented in [`docs/remote-api.http`](docs/remote-api.http).
+The relay only passes encrypted messages along: it can't see the timer, names or the history, or send commands. It stores
+nothing. What it and Google's push service can see (when and how much, not what) is described in
+[`docs/PRIVACY.md`](docs/PRIVACY.md). Turning the option off on the PC disconnects the relay at once.
+
+## Phone web page (older, home Wi-Fi only)
+
+The PC still serves the earlier phone web page for already paired phones: open the address shown under **Phone control**
+on the same Wi-Fi. It can start / stop / extend the timer and change settings. New setups should use the Android app.
+Developers: the old API is documented in [`docs/remote-api.http`](docs/remote-api.http); the encrypted protocol of the
+app in [`docs/protocol.md`](docs/protocol.md).
 
 ## Daily schedule
 
@@ -94,7 +114,7 @@ When it is on, GameTimer works automatically:
 - it locks the PC (your chosen action) when the budget runs out or the allowed hours end, and keeps it locked outside those hours;
 - a manually started timer is capped to what the schedule still allows.
 
-Edit it on the PC in the **Schedule** tab (`Ctrl`+`6`) — unlock with Windows Hello first — or on the phone under **Settings**. Both show today's state ("45 min left today", or why gaming is blocked). Because turning the schedule off also needs Windows Hello, it can never lock you, the parent, out by surprise.
+Edit it on the PC in the **Schedule** tab (`Ctrl`+`6`) — unlock with Windows Hello first — or on the phone under **Schedule**. Both show today's state ("45 min left today", or why gaming is blocked). Because turning the schedule off also needs Windows Hello, it can never lock you, the parent, out by surprise.
 
 ## Protection from closing
 
@@ -119,17 +139,20 @@ Only one copy of the app can run at a time — launching it again just brings th
 
 ## Security
 
-Phone control is off by default, home-network only, and requires pairing with a one-time QR code; each
-phone gets its own token (stored only as a hash). The remote can only start/stop/extend the timer and
-change its settings — there is no way to run other commands through it. For the full threat model, the
-residual risks (e.g. plain HTTP on the LAN) and recommendations, see [`docs/SECURITY.md`](docs/SECURITY.md).
+Phone control is off by default and needs pairing on the PC (QR code, a typed 6-digit code and Windows Hello). The app
+and the PC talk end-to-end encrypted (Noise, keys pinned at pairing); the relay for "Control from anywhere" can't read or
+change anything. The app can only control the timer, the schedule and the settings — there is no way to run other commands
+through it. Threat model and residual risks: [`docs/SECURITY.md`](docs/SECURITY.md); what leaves your home and who sees
+what: [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 ## Tech stack
 
 - .NET 8, WPF
 - [WPF UI](https://github.com/lepoco/wpfui) 3.0.5 (Fluent Design)
 - Windows Hello (`UserConsentVerifier` API)
-- ASP.NET Core (embedded Kestrel) for the phone remote; plain HTML/CSS/JS phone UI
+- ASP.NET Core (embedded Kestrel) for the phone connections; protocol v2 over Noise (libsodium)
+- Android parent app: Kotlin, Jetpack Compose, on a Kotlin Multiplatform core shared with the protocol
+- Relay: ASP.NET Core on Fly.io; push wake-ups through Firebase Cloud Messaging
 - [QRCoder](https://github.com/codebude/QRCoder) for the pairing QR code
 - Single-file self-contained deployment
 

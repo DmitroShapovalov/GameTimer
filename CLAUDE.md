@@ -144,14 +144,23 @@ android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, appli
   MonitorService.kt        connectedDevice foreground service (quiet ongoing notification) keeping the links
                            open in the background, only on Wi-Fi / Ethernet; BootReceiver restarts it;
                            MonitorService.update(): on when enabled, a PC paired and notifications allowed
-  AppSettingsScreen.kt     This phone's settings (gear on the home screen): notifications, permission, battery
+  AppSettingsScreen.kt     This phone's settings (gear on the home screen): app language, notifications, permission, battery
+  AppLocale.kt             The app's own language: Android 13+ per-app locale (LocaleManager, xml/locales_config.xml);
+                           8-12: stored choice, application context (LocalizedContext) + activity wrapped
   MainViewModel.kt         UI state over LinkHub: identity, pairing flow, commands, app lock, messages
   ReAuth.kt                §12 re-auth with the phone's lock (androidx.biometric: strong biometric or PIN, weak on 9-10):
                            app lock after 14 days, check before admin actions (roles, revoking another parent; 60 s grace)
   NsdLocator.kt            Locator on NsdManager: browse _sysmon._tcp, resolve one at a time, match TXT tags
-  MainActivity.kt          Compose screens: PCs list, QR scan (or paste link), pairing code, PC screen with tabs
-  PcTabs.kt                PC tabs (protocol §7.2 via shared AgentApi): Timer (for / until, presets, zone colours,
-                           interruption, schedule chip), Schedule, Settings (rev / conflict), History (paged), Parents (roles, revoke)
+  MainActivity.kt          Compose screens: PCs list, QR scan (or paste link), pairing code, PC screen with a bottom
+                           bar: Status, Schedule, History, More (Settings | Parents); removing the PC in the ⋮ menu
+  StatusTab.kt             Status: time-left ring (length from history: last "started" + − / +), state chip, − / + with
+                           a step, Lift; End at / End now in a menu (End at = setEndIn on minor 2); start form (steppers)
+  ScheduleTab.kt           The week as bars + a bottom-sheet day editor (time pickers, limit switch + stepper, copy to)
+  HistoryTab.kt            History by day (sticky headers, keyed rows), icon + state colour per type, filters, paging
+  PcTabs.kt                Settings (dropdowns, alert chips, folded countdown look; rev / conflict), Parents (roles,
+                           revoke), shared helpers (ReloadOn, JSON accessors, parseClock)
+  Widgets.kt               Dropdown, Stepper (− / + on a step grid, tap to type), NumberDialog, ColorSwatches,
+                           TimeDialog (Material clock), StateColors (green / blue / orange / red, one palette)
   QrScanner.kt             CameraX + ML Kit (on-device) QR reader
   res/values*/strings.xml  EN / RU / NL / UK
   src/androidTest/         On-device test (CI emulator): Keystore key, libsodium JNI, pairing + control of TestAgent

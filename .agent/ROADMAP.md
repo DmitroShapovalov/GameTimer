@@ -71,8 +71,19 @@ peer-to-peer WebRTC (needs a TURN relay anyway), UnifiedPush (too complex to set
 | B2 | **Relay service** `src/GameTimer.Relay` (ASP.NET Core, no storage): agent + hub endpoints, in-memory token registry, stream joining, all limits; deployed to Fly.io | Tests cover joining, unknown tokens, limits, idle close; a test relay runs on Fly.io | ✓ (PR #34; live at gametimer-relay.fly.dev, checked end to end) |
 | B3 | **PC side**: `RelayClient` + `RelayFrameTransport` into `AgentHost`; admission limits per token; "Control from anywhere" setting (Windows Hello), `remoteAccess` in settings | `gt-testhub` controls the real PC through the test relay | ✓ (PR #35) |
 | B4 | **Phone side**: relay connector in `shared` (LAN first, relay after ~2 s or off Wi-Fi), "via internet" status in the app | CI interop test runs Kotlin ↔ C# through a real relay process; the owner's phone controls the PC over mobile data | ✓ (PR #36) |
-| B5 | **Notifications away from home** via FCM: wake-up frame, relay sends the push, the phone connects and catches up history | "Time's up" arrives within a minute on mobile data | in review (needs the Fly secret and the GitHub secret, see the PR) |
-| B6 | **Acceptance + release**: privacy note, README, production relay, real-device checklist | v1.8.0 tagged | ☐ |
+| B5 | **Notifications away from home** via FCM: wake-up frame, relay sends the push, the phone connects and catches up history | "Time's up" arrives within a minute on mobile data | ✓ (PR #37, checked by the owner in v1.8.0-rc1; the ongoing notification goes away once push covers all PCs, PR #38) |
+| B6 | **Acceptance + release**: privacy note (`docs/PRIVACY.md`), README, production relay, real-device checklist | v1.8.0 tagged | in review |
+
+Also in v1.8.0, after the owner tested rc1:
+- **Parent app UX** (PR #39–#43), from a study of Family Link, Microsoft Family Safety, Apple Screen Time, Qustodio and
+  Kaspersky Safe Kids (https://claude.ai/artifact/7Mx4YoCoaem6prV9QxjEDi): app language selector; history by day with
+  colours and filters; dropdowns / steppers / swatches instead of lists and text fields; the week as bars with a day
+  editor; a Status page with a ring and a bottom bar (Status, Schedule, History, More).
+- **End at as a duration** (protocol minor 2): the phone sends `timer.setEnd { inSeconds }`, so the PC's time zone and
+  clock don't matter.
+
+The relay at `gametimer-relay.fly.dev` (one shared-cpu-1x machine in Amsterdam, never stopped, health-checked) is the
+production relay; more machines / regions only when the counts in its log ask for it.
 
 ## Phase 1 — Phone remote over home Wi-Fi (released in v1.2.0)
 

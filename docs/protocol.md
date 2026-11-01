@@ -596,8 +596,9 @@ pinned at pairing.
 - One small relay can be overloaded by someone with many addresses (fake agents and hubs need no
   secret): the relay path then fails for everyone until it passes. Denial of service only; the LAN
   keeps working. Accepted for now; watched through the relay's counts and more machines if needed.
-- The relay doesn't log request paths (they contain routes) and keeps IP addresses in its logs for a
-  few days at most. This is stated in the privacy note.
+- The relay doesn't log request paths (they contain routes), IP addresses or tokens: only counts and
+  errors. Its host (Fly.io) keeps app logs for up to 7 days. This is stated in the privacy note
+  (`docs/PRIVACY.md`).
 
 ### 10.6 Push wake-ups
 
