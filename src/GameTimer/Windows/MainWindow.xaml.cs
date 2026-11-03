@@ -101,7 +101,7 @@ public partial class MainWindow : FluentWindow
         SetupTrayIcon();
         _timer.StateChanged += _ => { _lastTickMinutes = double.NaN; UpdateTrayStatus(); };
         _sessionLog.Added += e => Dispatcher.BeginInvoke(() => NotifyParentChange(e));
-        _scheduleKey = ScheduleKey();
+        _scheduleSnapshot = ScheduleSnapshot();
 
         _isLoading = false;
         ValidateTimerInput();
@@ -328,11 +328,12 @@ public partial class MainWindow : FluentWindow
     private void OnSettingsChanged(object source)
     {
         if (source == this) return;
-        // The schedule changed from a phone: tell the child (after the reload below)
-        var key = ScheduleKey();
-        bool scheduleChanged = key != _scheduleKey;
-        _scheduleKey = key;
-        if (scheduleChanged) Dispatcher.BeginInvoke(NotifyScheduleChanged);
+        // The schedule changed from a phone in a way that matters today: tell the child (after the reload below)
+        var snapshot = ScheduleSnapshot();
+        int today = (int)DateTime.Now.DayOfWeek;
+        bool todayChanged = snapshot[0] != _scheduleSnapshot[0] || snapshot[1 + today] != _scheduleSnapshot[1 + today];
+        _scheduleSnapshot = snapshot;
+        if (todayChanged) Dispatcher.BeginInvoke(NotifyScheduleChanged);
 
         _isLoading = true;
         try
@@ -1754,16 +1755,18 @@ public partial class MainWindow : FluentWindow
     // A change made on this PC is not announced (the parent is right here).
 
     private double _lastTickMinutes = double.NaN;
-    private string _scheduleKey = "";
+    private string[] _scheduleSnapshot = new string[8];
 
-    private string ScheduleKey()
+    // [0] = on / off, [1 + day] = that day (indexed by DayOfWeek), to tell a change that matters today
+    private string[] ScheduleSnapshot()
     {
-        var sb = new System.Text.StringBuilder(_settings.ScheduleEnabled ? "1" : "0");
-        if (_settings.Week != null)
-            foreach (var d in _settings.Week)
-                sb.Append('|').Append(d.Allowed ? 1 : 0).Append(',').Append(d.LimitMinutes)
-                  .Append(',').Append(d.WindowStartMinutes).Append(',').Append(d.WindowEndMinutes);
-        return sb.ToString();
+        var s = new string[8];
+        s[0] = _settings.ScheduleEnabled ? "1" : "0";
+        for (int d = 0; d < 7; d++)
+            s[1 + d] = _settings.Week is { Count: 7 } w
+                ? $"{(w[d].Allowed ? 1 : 0)},{w[d].LimitMinutes},{w[d].WindowStartMinutes},{w[d].WindowEndMinutes}"
+                : "";
+        return s;
     }
 
     // Once when the time left crosses into the red zone (not when a timer starts or resumes inside it)
@@ -1783,6 +1786,8 @@ public partial class MainWindow : FluentWindow
     private void NotifyParentChange(GameTimer.Models.SessionEvent e)
     {
         if (e.Source != GameTimer.Models.ActionSource.Phone) return;
+        // "End now" from a phone is an Extended(-N) followed at once by the expiry: nothing left to tell
+        if (e.Type == GameTimer.Models.SessionEventType.Extended && !_timer.IsRunning) return;
         string left = LimitText(MinutesLeft(_timer.Remaining));
         string? body = e.Type switch
         {
@@ -1824,11 +1829,35 @@ public partial class MainWindow : FluentWindow
         catch { return true; }
     }
 
-    // A Windows notification from the tray icon. Over a full-screen game it stays quiet: the overlay
-    // pulses instead (the timer on screen is what the child sees there).
+    // One phone action can log two events (a lift stops the timer too) or cross into the red zone at
+    // once; a new balloon replaces the previous one, so what arrives together is shown together
+    private string? _pendingTitle;
+    private readonly List<string> _pendingBodies = new();
+    private System.Windows.Threading.DispatcherTimer? _notifyTimer;
+
     private void ShowNotification(string title, string body)
     {
         if (!_settings.WindowsNotifications || _trayIcon == null) return;
+        _pendingTitle ??= title; // the first title (the parent's change, when there is one) leads
+        if (!_pendingBodies.Contains(body)) _pendingBodies.Add(body);
+        if (_notifyTimer == null)
+        {
+            _notifyTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+            _notifyTimer.Tick += (_, _) => { _notifyTimer!.Stop(); FlushNotification(); };
+        }
+        _notifyTimer.Stop();
+        _notifyTimer.Start();
+    }
+
+    // A Windows notification from the tray icon. Over a full-screen game it stays quiet: the overlay
+    // pulses instead (the timer on screen is what the child sees there).
+    private void FlushNotification()
+    {
+        var title = _pendingTitle;
+        var body = string.Join(" ", _pendingBodies);
+        _pendingTitle = null;
+        _pendingBodies.Clear();
+        if (title == null || _trayIcon == null || !_settings.WindowsNotifications) return;
         if (!CanNotify())
         {
             _overlay?.PlayPulse();
@@ -2309,7 +2338,7 @@ public partial class MainWindow : FluentWindow
 
     private void SaveSchedule()
     {
-        _scheduleKey = ScheduleKey(); // a change made here is not announced
+        _scheduleSnapshot = ScheduleSnapshot(); // a change made here is not announced
         SaveSettings();
         _timer.ReevaluateSchedule();
         UpdateScheduleStatus();
