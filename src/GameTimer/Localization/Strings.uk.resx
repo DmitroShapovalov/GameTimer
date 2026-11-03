@@ -527,4 +527,25 @@
   <data name="Until_Time" xml:space="preserve">
     <value>до {0}</value>
   </data>
+  <data name="Tab_Phones" xml:space="preserve">
+    <value>Телефони</value>
+  </data>
+  <data name="Language_Desc" xml:space="preserve">
+    <value>Цієї програми і таймера на екрані</value>
+  </data>
+  <data name="Action_Desc" xml:space="preserve">
+    <value>Що робить ПК, коли час вийшов</value>
+  </data>
+  <data name="ConnectPhone_Title" xml:space="preserve">
+    <value>Підключити телефон</value>
+  </data>
+  <data name="ConnectPhone_Desc" xml:space="preserve">
+    <value>Відскануйте QR-код програмою GameTimer на телефоні</value>
+  </data>
+  <data name="Privacy_Link" xml:space="preserve">
+    <value>Приватність</value>
+  </data>
+  <data name="Source_Link" xml:space="preserve">
+    <value>Вихідний код</value>
+  </data>
 </root>

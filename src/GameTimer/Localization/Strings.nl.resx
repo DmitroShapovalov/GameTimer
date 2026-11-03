@@ -527,4 +527,25 @@
   <data name="Until_Time" xml:space="preserve">
     <value>tot {0}</value>
   </data>
+  <data name="Tab_Phones" xml:space="preserve">
+    <value>Telefoons</value>
+  </data>
+  <data name="Language_Desc" xml:space="preserve">
+    <value>Deze app en de afteltimer</value>
+  </data>
+  <data name="Action_Desc" xml:space="preserve">
+    <value>Wat de pc doet als de tijd om is</value>
+  </data>
+  <data name="ConnectPhone_Title" xml:space="preserve">
+    <value>Telefoon koppelen</value>
+  </data>
+  <data name="ConnectPhone_Desc" xml:space="preserve">
+    <value>Scan de QR-code met de GameTimer-app op de telefoon</value>
+  </data>
+  <data name="Privacy_Link" xml:space="preserve">
+    <value>Privacy</value>
+  </data>
+  <data name="Source_Link" xml:space="preserve">
+    <value>Broncode</value>
+  </data>
 </root>

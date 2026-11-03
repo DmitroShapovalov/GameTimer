@@ -110,6 +110,15 @@ public partial class MainWindow : FluentWindow
         TabDisplayText.Text = Loc.Get("Tab_Display");
         TabNotificationsText.Text = Loc.Get("Tab_Notifications");
         TabSettingsText.Text = Loc.Get("Tab_Settings");
+        TabPhonesText.Text = Loc.Get("Tab_Phones");
+        SettingsHeader.Text = Loc.Get("Tab_Settings");
+        PhonesHeader.Text = Loc.Get("Tab_Phones");
+        LanguageDesc.Text = Loc.Get("Language_Desc");
+        ActionDesc.Text = Loc.Get("Action_Desc");
+        ConnectPhoneTitle.Text = Loc.Get("ConnectPhone_Title");
+        ConnectPhoneDesc.Text = Loc.Get("ConnectPhone_Desc");
+        PrivacyLink.Content = Loc.Get("Privacy_Link");
+        SourceLink.Content = Loc.Get("Source_Link");
         TabHistoryText.Text = Loc.Get("Tab_History");
         TabScheduleText.Text = Loc.Get("Tab_Schedule");
         HistoryEmpty.Text = Loc.Get("History_Empty");
@@ -171,13 +180,14 @@ public partial class MainWindow : FluentWindow
         ActionLock.Content = Loc.Get("Action_Lock");
         ActionLogoff.Content = Loc.Get("Action_Logoff");
         PhoneControlLabel.Text = Loc.Get("PhoneControl");
-        RemoteToggle.Content = Loc.Get("Remote_Toggle");
-        RemoteAccessToggle.Content = Loc.Get("RemoteAccess_Toggle");
+        RemoteToggleText.Text = Loc.Get("Remote_Toggle");
+        RemoteAccessTitle.Text = Loc.Get("RemoteAccess_Toggle");
         ConnectPhoneButton.Content = Loc.Get("ConnectPhone");
         TamperLabel.Text = Loc.Get("Tamper_Label");
-        TamperToggle.Content = Loc.Get("Tamper_Toggle");
+        TamperToggle.ToolTip = Loc.Get("Tamper_Toggle");
         TamperHint.Text = Loc.Get("Tamper_Hint");
         FirewallText.Text = Loc.Get("Remote_FirewallMissing");
+        FirewallInfo.Message = FirewallText.Text;
         FirewallButton.Content = Loc.Get("Remote_FirewallFix");
         PairedDevicesLabel.Text = Loc.Get("PairedDevices");
         NoDevicesText.Text = Loc.Get("PairedDevices_None");
@@ -410,7 +420,7 @@ public partial class MainWindow : FluentWindow
         }
 #endif
 
-        // Ctrl+1..6 — switch pages (Status, Schedule, History, Display, Notifications, Settings)
+        // Ctrl+1..7 — switch pages (Status, Schedule, History, Display, Notifications, Phones, Settings)
         if (ctrl)
         {
             int tab = e.Key switch
@@ -421,6 +431,7 @@ public partial class MainWindow : FluentWindow
                 Key.D4 or Key.NumPad4 => 3,
                 Key.D5 or Key.NumPad5 => 4,
                 Key.D6 or Key.NumPad6 => 5,
+                Key.D7 or Key.NumPad7 => 6,
                 _ => -1
             };
             if (tab >= 0)
