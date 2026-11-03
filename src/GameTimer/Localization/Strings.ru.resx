@@ -329,9 +329,6 @@
   <data name="Tab_Schedule" xml:space="preserve">
     <value>Расписание</value>
   </data>
-  <data name="Sched_Label" xml:space="preserve">
-    <value>Дневное расписание</value>
-  </data>
   <data name="Sched_Intro" xml:space="preserve">
     <value>Дневной лимит времени и часы, когда играть можно, для каждого дня недели. По умолчанию выключено.</value>
   </data>
@@ -339,28 +336,13 @@
     <value>Включить расписание</value>
   </data>
   <data name="Sched_Hint" xml:space="preserve">
-    <value>Когда включено, таймер сам запускает дневной лимит и блокирует ПК, когда время вышло или закончились разрешённые часы. Лимит 0 = без ограничения. Часы 00:00-24:00 = весь день.</value>
+    <value>Когда включено, таймер сам запускает дневной лимит и блокирует ПК, когда время вышло или закончились разрешённые часы. Выберите день, чтобы посмотреть или изменить его.</value>
   </data>
   <data name="Sched_Unlock" xml:space="preserve">
     <value>Разблокировать для изменения</value>
   </data>
   <data name="Sched_Lock" xml:space="preserve">
     <value>Заблокировать</value>
-  </data>
-  <data name="Sched_Col_Day" xml:space="preserve">
-    <value>День</value>
-  </data>
-  <data name="Sched_Col_On" xml:space="preserve">
-    <value>Вкл</value>
-  </data>
-  <data name="Sched_Col_Limit" xml:space="preserve">
-    <value>Мин/день</value>
-  </data>
-  <data name="Sched_Col_From" xml:space="preserve">
-    <value>С</value>
-  </data>
-  <data name="Sched_Col_To" xml:space="preserve">
-    <value>До</value>
   </data>
   <data name="Sched_St_Off" xml:space="preserve">
     <value>Расписание выключено. Таймер управляется вручную.</value>
@@ -547,5 +529,86 @@
   </data>
   <data name="ConnectPhone_NeedsControl" xml:space="preserve">
     <value>Сначала включите управление с телефона</value>
+  </data>
+  <data name="Sched_Allowed" xml:space="preserve">
+    <value>Игры разрешены</value>
+  </data>
+  <data name="Sched_Hours" xml:space="preserve">
+    <value>Разрешённые часы</value>
+  </data>
+  <data name="Sched_DailyLimit" xml:space="preserve">
+    <value>Лимит на день</value>
+  </data>
+  <data name="Sched_NoLimit" xml:space="preserve">
+    <value>Без лимита</value>
+  </data>
+  <data name="Sched_Off" xml:space="preserve">
+    <value>Без игр</value>
+  </data>
+  <data name="Sched_Check" xml:space="preserve">
+    <value>Проверьте</value>
+  </data>
+  <data name="Sched_NoLimitHint" xml:space="preserve">
+    <value>Без лимита на день: действуют только разрешённые часы.</value>
+  </data>
+  <data name="Sched_LimitHint" xml:space="preserve">
+    <value>Сколько всего можно играть за день в разрешённые часы.</value>
+  </data>
+  <data name="Sched_LimitOver" xml:space="preserve">
+    <value>Лимит больше разрешённых часов: игра закончится по часам.</value>
+  </data>
+  <data name="Sched_BadWindow" xml:space="preserve">
+    <value>Конец должен быть позже начала (через полночь нельзя). Не сохранится, пока не исправите.</value>
+  </data>
+  <data name="Sched_TimeFormat" xml:space="preserve">
+    <value>Введите время как ЧЧ:ММ, например 15:30.</value>
+  </data>
+  <data name="Sched_CopyTo" xml:space="preserve">
+    <value>Скопировать этот день на</value>
+  </data>
+  <data name="Sched_Weekdays" xml:space="preserve">
+    <value>Будни</value>
+  </data>
+  <data name="Sched_Weekend" xml:space="preserve">
+    <value>Выходные</value>
+  </data>
+  <data name="Sched_EveryDay" xml:space="preserve">
+    <value>Каждый день</value>
+  </data>
+  <data name="Sched_Copied" xml:space="preserve">
+    <value>Скопировано</value>
+  </data>
+  <data name="Sched_Today" xml:space="preserve">
+    <value>сегодня</value>
+  </data>
+  <data name="HoursShort" xml:space="preserve">
+    <value>ч</value>
+  </data>
+  <data name="Hist_All" xml:space="preserve">
+    <value>Все</value>
+  </data>
+  <data name="Hist_Timer" xml:space="preserve">
+    <value>Таймер</value>
+  </data>
+  <data name="Hist_Alerts" xml:space="preserve">
+    <value>Тревоги</value>
+  </data>
+  <data name="Hist_Today" xml:space="preserve">
+    <value>Сегодня</value>
+  </data>
+  <data name="Hist_Yesterday" xml:space="preserve">
+    <value>Вчера</value>
+  </data>
+  <data name="Hist_NoneOfKind" xml:space="preserve">
+    <value>Среди последних 200 событий таких нет</value>
+  </data>
+  <data name="Sched_From" xml:space="preserve">
+    <value>с</value>
+  </data>
+  <data name="Sched_To" xml:space="preserve">
+    <value>до</value>
+  </data>
+  <data name="Sched_LimitRange" xml:space="preserve">
+    <value>Введите минуты, от 1 до 1440.</value>
   </data>
 </root>
