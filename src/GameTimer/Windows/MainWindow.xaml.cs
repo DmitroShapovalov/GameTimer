@@ -433,9 +433,17 @@ public partial class MainWindow : FluentWindow
         }
 
         // Esc — hide to tray (unless a dropdown is open: then Esc just closes it)
-        if (e.Key == Key.Escape && !LanguageCombo.IsDropDownOpen && !ActionCombo.IsDropDownOpen)
+        if (e.Key == Key.Escape && !LanguageCombo.IsDropDownOpen && !ActionCombo.IsDropDownOpen && !StepCombo.IsDropDownOpen)
         {
             Close(); // Window_Closing turns this into "minimize to tray"
+            e.Handled = true;
+            return;
+        }
+
+        // Enter in the End-at fields sets the new end
+        if (e.Key == Key.Enter && (EndAtHour.IsKeyboardFocusWithin || EndAtMinute.IsKeyboardFocusWithin))
+        {
+            EndAt_Click(EndAtButton, new RoutedEventArgs());
             e.Handled = true;
             return;
         }
@@ -719,17 +727,17 @@ public partial class MainWindow : FluentWindow
 
     // ---- The ring and the lines next to it ----
 
-    // The ring's full length: set when a timer starts (or is resumed), grown by every + seen since,
-    // so it shows the share of this timer that is left
-    private double _ringTotal, _ringLast;
+    // The ring's full length = the time used since this timer started (or was resumed) + the time left,
+    // on the monotonic clock: − / + from here or a phone and clock changes keep it right
+    private long _ringStartedAt;
 
     private void UpdateRing(TimeSpan remaining)
     {
         double left = Math.Max(0, remaining.TotalSeconds);
-        if (_ringTotal <= 0 || left > _ringTotal) _ringTotal = left;
-        else if (left > _ringLast + 2) _ringTotal += left - _ringLast; // more time was given
-        _ringLast = left;
-        DrawRing(_ringTotal > 0 ? left / _ringTotal : 0, ZoneBrush(remaining));
+        if (_ringStartedAt == 0) _ringStartedAt = Environment.TickCount64;
+        double used = (Environment.TickCount64 - _ringStartedAt) / 1000.0;
+        double total = used + left;
+        DrawRing(total > 0 ? left / total : 0, ZoneBrush(remaining));
     }
 
     private void DrawRing(double fraction, Brush brush)
@@ -765,6 +773,16 @@ public partial class MainWindow : FluentWindow
         bool running = _timer.IsRunning;
         EndTimeText.Text = running && _timer.TargetTime is { } end ? string.Format(Loc.Get("Until_Time"), end.ToString("t")) : "";
         ThenText.Text = running ? string.Format(Loc.Get("Then_Action"), Loc.Get("Action_" + _settings.Action)) : "";
+        var dec = _timer.CurrentSchedule();
+        _scheduleLine = dec.Status switch
+        {
+            ScheduleStatus.Allowed => string.Format(Loc.Get("Sched_St_Allowed"), dec.AvailableSeconds / 60),
+            ScheduleStatus.OutsideWindow => Loc.Get("Sched_St_OutsideWindow"),
+            ScheduleStatus.DayDisabled => Loc.Get("Sched_St_DayOff"),
+            ScheduleStatus.LimitReached => Loc.Get("Sched_St_LimitReached"),
+            ScheduleStatus.SkippedToday => Loc.Get("Sched_St_Skipped"),
+            _ => "", // no schedule: nothing to say
+        };
         ScheduleLineText.Text = _scheduleLine;
         ScheduleLineText.Visibility = _scheduleLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         string key = running ? "SystemFillColorSuccessBrush"
@@ -873,13 +891,15 @@ public partial class MainWindow : FluentWindow
         return m >= 60 ? $"{m / 60}:{m % 60:D2}" : $"{m} {Loc.Get("Min")}";
     }
 
+    private TimerState _lastShownState = TimerState.NotStarted;
+
     private void OnTimerStateChanged(TimerState state)
     {
         switch (state)
         {
             case TimerState.Running:
                 ValidationText.Visibility = Visibility.Collapsed;
-                _ringTotal = 0; // a new (or resumed) timer: the ring starts full
+                if (_lastShownState != TimerState.Running) _ringStartedAt = 0; // a new (or resumed) timer: the ring starts full
                 ShowOverlay();
                 UpdateButtonStates(running: true);
                 _timerStateKey = "Timer_Started";
@@ -908,6 +928,8 @@ public partial class MainWindow : FluentWindow
         }
 
         StatusText.Text = Loc.Get(_timerStateKey);
+        if (state != TimerState.Running && _lastShownState == TimerState.Running) FocusTimeInput(); // back to the start form
+        _lastShownState = state;
     }
 
     #endregion
@@ -1757,7 +1779,7 @@ public partial class MainWindow : FluentWindow
                 break;
         }
         ScheduleStatusBar.Message = msg;
-        _scheduleLine = msg; // also next to the ring on the Status page
+        UpdateStatusLines(); // the line next to the ring on the Status page
         ScheduleStatusBar.Severity = sev;
         UpdateButtonStates(_timer.IsRunning); // "Lift restrictions for today" depends on the schedule
     }

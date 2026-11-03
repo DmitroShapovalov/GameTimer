@@ -121,14 +121,11 @@
                                HorizontalAlignment="Right" Margin="0,0,0,12" Visibility="Collapsed"
                                Click="InterruptionDismiss_Click"/>
                     <TextBlock x:Name="StatusHeader" Text="Status" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                    <!-- Ring and actions side by side; on a narrow window the actions go below the ring -->
+                    <WrapPanel>
                         <!-- The ring: the time left against the timer's length (MainWindow.UpdateRing) -->
-                        <Grid Grid.Column="0" Width="200" Height="200" Margin="0,0,32,0" VerticalAlignment="Top">
-                            <Ellipse Stroke="{DynamicResource ControlStrokeColorDefaultBrush}" StrokeThickness="12" Margin="6"/>
+                        <Grid Width="200" Height="200" Margin="0,0,32,16" VerticalAlignment="Top">
+                            <Ellipse Stroke="{DynamicResource ControlStrongStrokeColorDefaultBrush}" StrokeThickness="12" Margin="6" Opacity="0.35"/>
                             <Path x:Name="RingArc" StrokeThickness="12" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                                   Stroke="{DynamicResource SystemFillColorSuccessBrush}"/>
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -138,7 +135,7 @@
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>
                         </Grid>
-                        <StackPanel Grid.Column="1">
+                        <StackPanel Width="340">
                             <Border x:Name="StateBadge" CornerRadius="12" Padding="12,4" HorizontalAlignment="Left"
                                     Background="{DynamicResource SubtleFillColorSecondaryBrush}" Margin="0,0,0,8">
                                 <TextBlock x:Name="StatusText" Text="Timer not started" FontWeight="SemiBold"/>
@@ -149,7 +146,7 @@
 
                             <!-- A running timer: − / + by a chosen step, Lift, and the rarer actions under More -->
                             <StackPanel x:Name="RunningPanel" Visibility="Collapsed">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <WrapPanel Margin="0,0,0,8">
                                     <ui:Button x:Name="MinusButton" Content="−15 min" MinWidth="96" Height="34"
                                                Margin="0,0,8,0" Click="Minus_Click"/>
                                     <ui:Button x:Name="PlusButton" Content="+15 min" MinWidth="96" Height="34"
@@ -158,12 +155,12 @@
                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                                     <ComboBox x:Name="StepCombo" Width="80" VerticalAlignment="Center"
                                               SelectionChanged="StepCombo_Changed"/>
-                                </StackPanel>
+                                </WrapPanel>
                             </StackPanel>
                             <!-- Lift: with a timer, or without one while the schedule limits today -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <ui:Button x:Name="StopButton" Content="Lift restrictions" MinWidth="200" Height="34"
-                                               Margin="0,0,8,0" Click="Stop_Click" IsEnabled="False"/>
+                            <WrapPanel Margin="0,0,0,8">
+                                    <ui:Button x:Name="StopButton" Content="Lift restrictions" MinWidth="160" Height="34"
+                                               Margin="0,0,8,8" Click="Stop_Click" IsEnabled="False"/>
                                     <ui:Button x:Name="MoreButton" Content="More" Height="34" Appearance="Secondary"
                                                Icon="{ui:SymbolIcon MoreHorizontal24}" Click="MoreButton_Click">
                                         <ui:Button.ContextMenu>
@@ -174,7 +171,7 @@
                                             </ContextMenu>
                                         </ui:Button.ContextMenu>
                                     </ui:Button>
-                            </StackPanel>
+                            </WrapPanel>
                             <!-- End at: opened from More -->
                             <StackPanel x:Name="EndAtPanel" Orientation="Horizontal" Visibility="Collapsed" Margin="0,4,0,0">
                                     <TextBlock x:Name="EndAtLabel" Text="End at:" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -236,7 +233,7 @@
                                            Click="Start_Click" Appearance="Primary" FontWeight="SemiBold"/>
                             </StackPanel>
                         </StackPanel>
-                    </Grid>
+                    </WrapPanel>
                 </StackPanel>
                 </ScrollViewer>
             </TabItem>
