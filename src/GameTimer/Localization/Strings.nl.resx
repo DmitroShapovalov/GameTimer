@@ -329,9 +329,6 @@
   <data name="Tab_Schedule" xml:space="preserve">
     <value>Schema</value>
   </data>
-  <data name="Sched_Label" xml:space="preserve">
-    <value>Dagschema</value>
-  </data>
   <data name="Sched_Intro" xml:space="preserve">
     <value>Een dagelijks tijdbudget en de uren waarop spelen mag, per weekdag. Standaard uit.</value>
   </data>
@@ -339,28 +336,13 @@
     <value>Schema inschakelen</value>
   </data>
   <data name="Sched_Hint" xml:space="preserve">
-    <value>Als dit aan staat, start de timer automatisch het tegoed van de dag en vergrendelt hij als dat op is of de toegestane uren voorbij zijn. Limiet 0 = geen budget. Uren 00:00-24:00 = hele dag.</value>
+    <value>Als dit aan staat, start de timer automatisch het tegoed van de dag en vergrendelt hij als dat op is of de toegestane uren voorbij zijn. Kies een dag om die te bekijken of te wijzigen.</value>
   </data>
   <data name="Sched_Unlock" xml:space="preserve">
     <value>Ontgrendelen om te bewerken</value>
   </data>
   <data name="Sched_Lock" xml:space="preserve">
     <value>Vergrendelen</value>
-  </data>
-  <data name="Sched_Col_Day" xml:space="preserve">
-    <value>Dag</value>
-  </data>
-  <data name="Sched_Col_On" xml:space="preserve">
-    <value>Aan</value>
-  </data>
-  <data name="Sched_Col_Limit" xml:space="preserve">
-    <value>Min/dag</value>
-  </data>
-  <data name="Sched_Col_From" xml:space="preserve">
-    <value>Van</value>
-  </data>
-  <data name="Sched_Col_To" xml:space="preserve">
-    <value>Tot</value>
   </data>
   <data name="Sched_St_Off" xml:space="preserve">
     <value>Schema staat uit. De timer wordt handmatig bediend.</value>
@@ -547,5 +529,86 @@
   </data>
   <data name="ConnectPhone_NeedsControl" xml:space="preserve">
     <value>Zet eerst telefoonbediening aan</value>
+  </data>
+  <data name="Sched_Allowed" xml:space="preserve">
+    <value>Gamen toegestaan</value>
+  </data>
+  <data name="Sched_Hours" xml:space="preserve">
+    <value>Toegestane uren</value>
+  </data>
+  <data name="Sched_DailyLimit" xml:space="preserve">
+    <value>Daglimiet</value>
+  </data>
+  <data name="Sched_NoLimit" xml:space="preserve">
+    <value>Geen limiet</value>
+  </data>
+  <data name="Sched_Off" xml:space="preserve">
+    <value>Niet gamen</value>
+  </data>
+  <data name="Sched_Check" xml:space="preserve">
+    <value>Controleren</value>
+  </data>
+  <data name="Sched_NoLimitHint" xml:space="preserve">
+    <value>Geen daglimiet: alleen de toegestane uren gelden.</value>
+  </data>
+  <data name="Sched_LimitHint" xml:space="preserve">
+    <value>Totale speeltijd voor de dag, binnen de toegestane uren.</value>
+  </data>
+  <data name="Sched_LimitOver" xml:space="preserve">
+    <value>De limiet is langer dan de toegestane uren: de uren beëindigen het gamen eerst.</value>
+  </data>
+  <data name="Sched_BadWindow" xml:space="preserve">
+    <value>Het einde moet later zijn dan het begin (niet over middernacht). Wordt pas opgeslagen als dit klopt.</value>
+  </data>
+  <data name="Sched_TimeFormat" xml:space="preserve">
+    <value>Voer de tijd in als UU:MM, bijvoorbeeld 15:30.</value>
+  </data>
+  <data name="Sched_CopyTo" xml:space="preserve">
+    <value>Deze dag kopiëren naar</value>
+  </data>
+  <data name="Sched_Weekdays" xml:space="preserve">
+    <value>Werkdagen</value>
+  </data>
+  <data name="Sched_Weekend" xml:space="preserve">
+    <value>Weekend</value>
+  </data>
+  <data name="Sched_EveryDay" xml:space="preserve">
+    <value>Elke dag</value>
+  </data>
+  <data name="Sched_Copied" xml:space="preserve">
+    <value>Gekopieerd</value>
+  </data>
+  <data name="Sched_Today" xml:space="preserve">
+    <value>vandaag</value>
+  </data>
+  <data name="HoursShort" xml:space="preserve">
+    <value>u</value>
+  </data>
+  <data name="Hist_All" xml:space="preserve">
+    <value>Alles</value>
+  </data>
+  <data name="Hist_Timer" xml:space="preserve">
+    <value>Timer</value>
+  </data>
+  <data name="Hist_Alerts" xml:space="preserve">
+    <value>Waarschuwingen</value>
+  </data>
+  <data name="Hist_Today" xml:space="preserve">
+    <value>Vandaag</value>
+  </data>
+  <data name="Hist_Yesterday" xml:space="preserve">
+    <value>Gisteren</value>
+  </data>
+  <data name="Hist_NoneOfKind" xml:space="preserve">
+    <value>Niets van deze soort bij de laatste 200 gebeurtenissen</value>
+  </data>
+  <data name="Sched_From" xml:space="preserve">
+    <value>van</value>
+  </data>
+  <data name="Sched_To" xml:space="preserve">
+    <value>tot</value>
+  </data>
+  <data name="Sched_LimitRange" xml:space="preserve">
+    <value>Voer de minuten in, van 1 tot 1440.</value>
   </data>
 </root>

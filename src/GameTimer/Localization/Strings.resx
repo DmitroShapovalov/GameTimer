@@ -329,9 +329,6 @@
   <data name="Tab_Schedule" xml:space="preserve">
     <value>Schedule</value>
   </data>
-  <data name="Sched_Label" xml:space="preserve">
-    <value>Daily schedule</value>
-  </data>
   <data name="Sched_Intro" xml:space="preserve">
     <value>A daily time budget and the hours gaming is allowed, per weekday. Off by default.</value>
   </data>
@@ -339,28 +336,13 @@
     <value>Enable schedule</value>
   </data>
   <data name="Sched_Hint" xml:space="preserve">
-    <value>When on, the timer starts the day's allowance automatically and locks when it runs out or the allowed hours end. Limit 0 = no budget. Hours 00:00-24:00 = all day.</value>
+    <value>When on, the timer starts the day's allowance automatically and locks when it runs out or the allowed hours end. Pick a day to see or change it.</value>
   </data>
   <data name="Sched_Unlock" xml:space="preserve">
     <value>Unlock to edit</value>
   </data>
   <data name="Sched_Lock" xml:space="preserve">
     <value>Lock</value>
-  </data>
-  <data name="Sched_Col_Day" xml:space="preserve">
-    <value>Day</value>
-  </data>
-  <data name="Sched_Col_On" xml:space="preserve">
-    <value>On</value>
-  </data>
-  <data name="Sched_Col_Limit" xml:space="preserve">
-    <value>Min/day</value>
-  </data>
-  <data name="Sched_Col_From" xml:space="preserve">
-    <value>From</value>
-  </data>
-  <data name="Sched_Col_To" xml:space="preserve">
-    <value>To</value>
   </data>
   <data name="Sched_St_Off" xml:space="preserve">
     <value>Schedule is off. The timer is controlled manually.</value>
@@ -547,5 +529,86 @@
   </data>
   <data name="ConnectPhone_NeedsControl" xml:space="preserve">
     <value>Turn on phone control first</value>
+  </data>
+  <data name="Sched_Allowed" xml:space="preserve">
+    <value>Gaming allowed</value>
+  </data>
+  <data name="Sched_Hours" xml:space="preserve">
+    <value>Allowed hours</value>
+  </data>
+  <data name="Sched_DailyLimit" xml:space="preserve">
+    <value>Daily limit</value>
+  </data>
+  <data name="Sched_NoLimit" xml:space="preserve">
+    <value>No limit</value>
+  </data>
+  <data name="Sched_Off" xml:space="preserve">
+    <value>No gaming</value>
+  </data>
+  <data name="Sched_Check" xml:space="preserve">
+    <value>Check</value>
+  </data>
+  <data name="Sched_NoLimitHint" xml:space="preserve">
+    <value>No daily limit: only the allowed hours apply.</value>
+  </data>
+  <data name="Sched_LimitHint" xml:space="preserve">
+    <value>Total gaming time for the day, within the allowed hours.</value>
+  </data>
+  <data name="Sched_LimitOver" xml:space="preserve">
+    <value>The limit is longer than the allowed hours: the hours end gaming first.</value>
+  </data>
+  <data name="Sched_BadWindow" xml:space="preserve">
+    <value>The end must be later than the start (no overnight hours). Not saved until fixed.</value>
+  </data>
+  <data name="Sched_TimeFormat" xml:space="preserve">
+    <value>Enter the time as HH:MM, for example 15:30.</value>
+  </data>
+  <data name="Sched_CopyTo" xml:space="preserve">
+    <value>Copy this day to</value>
+  </data>
+  <data name="Sched_Weekdays" xml:space="preserve">
+    <value>Weekdays</value>
+  </data>
+  <data name="Sched_Weekend" xml:space="preserve">
+    <value>Weekend</value>
+  </data>
+  <data name="Sched_EveryDay" xml:space="preserve">
+    <value>Every day</value>
+  </data>
+  <data name="Sched_Copied" xml:space="preserve">
+    <value>Copied</value>
+  </data>
+  <data name="Sched_Today" xml:space="preserve">
+    <value>today</value>
+  </data>
+  <data name="HoursShort" xml:space="preserve">
+    <value>h</value>
+  </data>
+  <data name="Hist_All" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Hist_Timer" xml:space="preserve">
+    <value>Timer</value>
+  </data>
+  <data name="Hist_Alerts" xml:space="preserve">
+    <value>Alerts</value>
+  </data>
+  <data name="Hist_Today" xml:space="preserve">
+    <value>Today</value>
+  </data>
+  <data name="Hist_Yesterday" xml:space="preserve">
+    <value>Yesterday</value>
+  </data>
+  <data name="Hist_NoneOfKind" xml:space="preserve">
+    <value>Nothing of this kind among the last 200 events</value>
+  </data>
+  <data name="Sched_From" xml:space="preserve">
+    <value>from</value>
+  </data>
+  <data name="Sched_To" xml:space="preserve">
+    <value>to</value>
+  </data>
+  <data name="Sched_LimitRange" xml:space="preserve">
+    <value>Enter the minutes, from 1 to 1440.</value>
   </data>
 </root>

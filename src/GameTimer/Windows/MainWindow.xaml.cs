@@ -40,13 +40,15 @@ public partial class MainWindow : FluentWindow
     // Track timer state for localization
     private string _timerStateKey = "Timer_NotStarted";
 
-    // Schedule tab: editing is gated behind Windows Hello; controls built once in code
-    private readonly System.Windows.Controls.CheckBox[] _dayAllowed = new System.Windows.Controls.CheckBox[7];
-    private readonly Wpf.Ui.Controls.TextBox[] _dayLimit = new Wpf.Ui.Controls.TextBox[7];
-    private readonly Wpf.Ui.Controls.TextBox[] _dayFrom = new Wpf.Ui.Controls.TextBox[7];
-    private readonly Wpf.Ui.Controls.TextBox[] _dayTo = new Wpf.Ui.Controls.TextBox[7];
+    // Schedule page: the week overview (a row per day, built once in code) and the editor of the selected day
+    private readonly System.Windows.Controls.RadioButton[] _dayRow = new System.Windows.Controls.RadioButton[7];
     private readonly System.Windows.Controls.TextBlock[] _dayName = new System.Windows.Controls.TextBlock[7];
-    private System.Windows.Controls.TextBlock? _schHeadDay, _schHeadOn, _schHeadLimit, _schHeadFrom, _schHeadTo;
+    private readonly System.Windows.Controls.TextBlock[] _daySummary = new System.Windows.Controls.TextBlock[7];
+    private readonly ColumnDefinition[][] _dayBarCols = new ColumnDefinition[7][];
+    private readonly Border[] _dayBarFill = new Border[7];
+    private int _selectedDay = (int)DateTime.Now.DayOfWeek;
+    // Set while the schedule controls are filled from the settings (their change events must not save)
+    private bool _scheduleUiLoading;
     // Display order Monday..Sunday, mapped to (int)DayOfWeek (0 = Sunday)
     private static readonly int[] ScheduleDayOrder = { 1, 2, 3, 4, 5, 6, 0 };
 
@@ -121,8 +123,11 @@ public partial class MainWindow : FluentWindow
         SourceLink.Content = Loc.Get("Source_Link");
         TabHistoryText.Text = Loc.Get("Tab_History");
         TabScheduleText.Text = Loc.Get("Tab_Schedule");
-        HistoryEmpty.Text = Loc.Get("History_Empty");
-        RefreshHistory();
+        HistoryHeader.Text = Loc.Get("Tab_History");
+        HistFilterAll.Content = Loc.Get("Hist_All");
+        HistFilterTimer.Content = Loc.Get("Hist_Timer");
+        HistFilterAlerts.Content = Loc.Get("Hist_Alerts");
+        RefreshHistory(); // also the empty text
 
         // Timer tab
         ModeLabel.Text = Loc.Get("Mode");
@@ -859,18 +864,129 @@ public partial class MainWindow : FluentWindow
         _timer.AcknowledgeInterruption();
     }
 
-    private sealed record HistoryRow(string When, string Text, string Who);
+    private enum HistoryFilter { All, Timer, Alerts }
+    private HistoryFilter _historyFilter = HistoryFilter.All;
 
-    private void RefreshHistory()
+    private void HistoryFilter_Checked(object sender, RoutedEventArgs e)
     {
-        var rows = _sessionLog.Recent().Select(ToRow).ToList();
-        HistoryList.ItemsSource = rows;
-        HistoryEmpty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _historyFilter = sender == HistFilterAlerts ? HistoryFilter.Alerts
+            : sender == HistFilterTimer ? HistoryFilter.Timer
+            : HistoryFilter.All;
+        RefreshHistory();
     }
 
-    private static HistoryRow ToRow(GameTimer.Models.SessionEvent e)
+    private static bool HistoryAccepts(HistoryFilter filter, GameTimer.Models.SessionEventType type) => filter switch
     {
-        var when = e.Time.LocalDateTime.ToString("g");
+        HistoryFilter.Alerts => IsAlert(type),
+        HistoryFilter.Timer => !IsAlert(type) && type != GameTimer.Models.SessionEventType.Updated,
+        _ => true
+    };
+
+    private static bool IsAlert(GameTimer.Models.SessionEventType type) =>
+        type is GameTimer.Models.SessionEventType.Closed or GameTimer.Models.SessionEventType.Tampered;
+
+    // Grouped by day like on the phone: a header (Today, Yesterday, the date) and a card of the day's events
+    private void RefreshHistory()
+    {
+        if (HistoryPanel == null || _sessionLog == null) return; // a filter chip is checked while the XAML loads
+        var all = _sessionLog.Recent();
+        var shown = all.Where(e => HistoryAccepts(_historyFilter, e.Type)).ToList();
+        var culture = UiCulture();
+
+        HistoryPanel.Children.Clear();
+        DateTime? day = null;
+        System.Windows.Controls.StackPanel? card = null;
+        foreach (var e in shown)
+        {
+            var local = e.Time.LocalDateTime;
+            if (day != local.Date || card == null)
+            {
+                day = local.Date;
+                var header = new System.Windows.Controls.TextBlock
+                {
+                    Text = DayHeader(local.Date, culture),
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, HistoryPanel.Children.Count == 0 ? 0 : 12, 0, 6)
+                };
+                card = new System.Windows.Controls.StackPanel();
+                var border = new Border { Child = card, Style = (Style)FindResource("SettingCard") };
+                HistoryPanel.Children.Add(header);
+                HistoryPanel.Children.Add(border);
+            }
+            card.Children.Add(HistoryItem(e, local, culture, first: card.Children.Count == 0));
+        }
+
+        HistoryEmpty.Text = Loc.Get(all.Count > 0 ? "Hist_NoneOfKind" : "History_Empty");
+        HistoryEmpty.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static string DayHeader(DateTime date, System.Globalization.CultureInfo culture)
+    {
+        var today = DateTime.Today;
+        if (date == today) return Loc.Get("Hist_Today");
+        if (date == today.AddDays(-1)) return Loc.Get("Hist_Yesterday");
+        var text = $"{Capitalize(culture.DateTimeFormat.GetDayName(date.DayOfWeek))}, {date.ToString("M", culture)}";
+        return date.Year == today.Year ? text : $"{text} {date.Year}";
+    }
+
+    private static FrameworkElement HistoryItem(GameTimer.Models.SessionEvent e, DateTime local,
+        System.Globalization.CultureInfo culture, bool first)
+    {
+        var (symbol, brush) = HistoryLook(e);
+        var (text, who) = DescribeEvent(e);
+
+        var grid = new Grid { Margin = new Thickness(0, first ? 0 : 10, 0, 0) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var icon = new SymbolIcon
+        {
+            Symbol = symbol,
+            FontSize = 18,
+            VerticalAlignment = System.Windows.VerticalAlignment.Top,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+            Margin = new Thickness(0, 1, 0, 0)
+        };
+        icon.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, brush);
+
+        var lines = new System.Windows.Controls.StackPanel();
+        Grid.SetColumn(lines, 1);
+        lines.Children.Add(new System.Windows.Controls.TextBlock { Text = text, TextWrapping = TextWrapping.Wrap });
+        var meta = new System.Windows.Controls.TextBlock
+        {
+            Text = $"{local.ToString("t", culture)} · {who}",
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap
+        };
+        meta.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+        lines.Children.Add(meta);
+
+        grid.Children.Add(icon);
+        grid.Children.Add(lines);
+        return grid;
+    }
+
+    // The icon and the state colour of an event, as on the phone: started green, changed blue (accent),
+    // time up orange, alerts red, the rest neutral
+    private static (SymbolRegular Symbol, string Brush) HistoryLook(GameTimer.Models.SessionEvent e) => e.Type switch
+    {
+        GameTimer.Models.SessionEventType.Started => (SymbolRegular.Play24, "SystemFillColorSuccessBrush"),
+        GameTimer.Models.SessionEventType.Resumed => (SymbolRegular.ArrowClockwise24, "SystemFillColorSuccessBrush"),
+        GameTimer.Models.SessionEventType.Extended =>
+            ((e.Minutes ?? 0) >= 0 ? SymbolRegular.Add24 : SymbolRegular.Subtract24, "AccentFillColorDefaultBrush"),
+        GameTimer.Models.SessionEventType.ScheduleSkipped or GameTimer.Models.SessionEventType.ScheduleRestored =>
+            (SymbolRegular.CalendarLtr24, "AccentFillColorDefaultBrush"),
+        GameTimer.Models.SessionEventType.Stopped or GameTimer.Models.SessionEventType.Reset =>
+            (SymbolRegular.Dismiss24, "TextFillColorSecondaryBrush"),
+        GameTimer.Models.SessionEventType.Updated => (SymbolRegular.Settings24, "TextFillColorSecondaryBrush"),
+        GameTimer.Models.SessionEventType.Expired => (SymbolRegular.LockClosed24, "SystemFillColorCautionBrush"),
+        GameTimer.Models.SessionEventType.Closed or GameTimer.Models.SessionEventType.Tampered =>
+            (SymbolRegular.Warning24, "SystemFillColorCriticalBrush"),
+        _ => (SymbolRegular.Edit24, "TextFillColorSecondaryBrush")
+    };
+
+    private static (string Text, string Who) DescribeEvent(GameTimer.Models.SessionEvent e)
+    {
         string text = e.Type switch
         {
             GameTimer.Models.SessionEventType.Started =>
@@ -895,7 +1011,7 @@ public partial class MainWindow : FluentWindow
             GameTimer.Models.ActionSource.Phone => e.Device ?? Loc.Get("Who_Phone"),
             _ => Loc.Get("Who_System")
         };
-        return new HistoryRow(when, text, who);
+        return (text, who);
     }
 
     private static string FormatDuration(int? minutes)
@@ -1648,165 +1764,322 @@ public partial class MainWindow : FluentWindow
 
     #region Schedule
 
-    // The day rows are identical, so they are built once in code rather than 7x in XAML.
+    private static readonly int[] WeekdayDays = { 1, 2, 3, 4, 5 };
+    private static readonly int[] WeekendDays = { 6, 0 };
+    private const int LimitStep = 15;
+    private const int DefaultLimit = 120;
+
+    // The week overview: one row per day (a radio button: click or arrow keys select the day for the
+    // editor). The rows are identical, so they are built once in code rather than 7x in XAML.
     private void BuildScheduleRows()
     {
-        if (_dayName[ScheduleDayOrder[0]] != null) return; // already built
-
-        ScheduleDaysPanel.Children.Add(BuildScheduleHeader());
+        if (_dayRow[ScheduleDayOrder[0]] != null) return; // already built
 
         foreach (var dow in ScheduleDayOrder)
         {
-            var grid = NewScheduleGrid();
-            grid.Margin = new Thickness(0, 3, 0, 3);
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(112) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(176) });
 
-            var name = new System.Windows.Controls.TextBlock { VerticalAlignment = System.Windows.VerticalAlignment.Center };
-            Grid.SetColumn(name, 0);
+            var name = new System.Windows.Controls.TextBlock
+            {
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
             _dayName[dow] = name;
 
-            var allowed = new System.Windows.Controls.CheckBox
+            // The day as a bar over 0-24 h: before the allowed hours | the allowed hours | after them
+            var bar = new Grid { Height = 8, VerticalAlignment = System.Windows.VerticalAlignment.Center };
+            var cols = new[] { new ColumnDefinition(), new ColumnDefinition(), new ColumnDefinition() };
+            foreach (var c in cols) bar.ColumnDefinitions.Add(c);
+            var track = new Border { CornerRadius = new CornerRadius(4) };
+            track.SetResourceReference(Border.BackgroundProperty, "ControlStrongFillColorDisabledBrush");
+            Grid.SetColumnSpan(track, 3);
+            var fill = new Border { CornerRadius = new CornerRadius(4) };
+            fill.SetResourceReference(Border.BackgroundProperty, "AccentFillColorDefaultBrush");
+            Grid.SetColumn(fill, 1);
+            bar.Children.Add(track);
+            bar.Children.Add(fill);
+            Grid.SetColumn(bar, 1);
+            _dayBarCols[dow] = cols;
+            _dayBarFill[dow] = fill;
+
+            var summary = new System.Windows.Controls.TextBlock
             {
                 VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(12, 0, 0, 0)
             };
-            allowed.Checked += Schedule_Toggle;
-            allowed.Unchecked += Schedule_Toggle;
-            Grid.SetColumn(allowed, 1);
-            _dayAllowed[dow] = allowed;
-
-            var limit = new Wpf.Ui.Controls.TextBox { Width = 46, VerticalAlignment = System.Windows.VerticalAlignment.Center };
-            limit.TextChanged += Schedule_Text;
-            Grid.SetColumn(limit, 2);
-            _dayLimit[dow] = limit;
-
-            var from = new Wpf.Ui.Controls.TextBox { Width = 54, VerticalAlignment = System.Windows.VerticalAlignment.Center };
-            from.TextChanged += Schedule_Text;
-            Grid.SetColumn(from, 3);
-            _dayFrom[dow] = from;
-
-            var dash = new System.Windows.Controls.TextBlock
-            {
-                Text = "\u2013",
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextFillColorSecondaryBrush")
-            };
-            Grid.SetColumn(dash, 4);
-
-            var to = new Wpf.Ui.Controls.TextBox { Width = 54, VerticalAlignment = System.Windows.VerticalAlignment.Center };
-            to.TextChanged += Schedule_Text;
-            Grid.SetColumn(to, 5);
-            _dayTo[dow] = to;
+            Grid.SetColumn(summary, 2);
+            _daySummary[dow] = summary;
 
             grid.Children.Add(name);
-            grid.Children.Add(allowed);
-            grid.Children.Add(limit);
-            grid.Children.Add(from);
-            grid.Children.Add(dash);
-            grid.Children.Add(to);
-            ScheduleDaysPanel.Children.Add(grid);
-        }
-    }
+            grid.Children.Add(bar);
+            grid.Children.Add(summary);
 
-    private Grid BuildScheduleHeader()
-    {
-        var grid = NewScheduleGrid();
-        grid.Margin = new Thickness(0, 0, 0, 2);
-        _schHeadDay = HeaderCell(0);
-        _schHeadOn = HeaderCell(1);
-        _schHeadLimit = HeaderCell(2);
-        _schHeadFrom = HeaderCell(3);
-        _schHeadTo = HeaderCell(5);
-        foreach (var c in new[] { _schHeadDay, _schHeadOn, _schHeadLimit, _schHeadFrom, _schHeadTo })
-            grid.Children.Add(c);
-        return grid;
-
-        System.Windows.Controls.TextBlock HeaderCell(int col)
-        {
-            var t = new System.Windows.Controls.TextBlock
+            var row = new System.Windows.Controls.RadioButton
             {
-                FontSize = 11,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextFillColorSecondaryBrush"),
-                VerticalAlignment = System.Windows.VerticalAlignment.Center
+                GroupName = "ScheduleDay",
+                Content = grid,
+                Tag = dow,
+                Style = (Style)FindResource("DayRow")
             };
-            Grid.SetColumn(t, col);
-            return t;
+            row.Checked += ScheduleDayRow_Checked;
+            _dayRow[dow] = row;
+            ScheduleDaysPanel.Children.Add(row);
         }
     }
 
-    private static Grid NewScheduleGrid()
+    private static System.Globalization.CultureInfo UiCulture()
     {
-        var grid = new Grid();
-        foreach (var w in new[] { 76.0, 46.0, 54.0, 56.0, 16.0, 56.0 })
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
-        return grid;
+        try { return System.Globalization.CultureInfo.GetCultureInfo(Loc.CurrentLanguage); }
+        catch (System.Globalization.CultureNotFoundException) { return System.Globalization.CultureInfo.CurrentUICulture; }
+    }
+
+    private static string Capitalize(string s) => s.Length > 0 ? char.ToUpper(s[0]) + s.Substring(1) : s;
+
+    private static string DayName(int dow) => Capitalize(UiCulture().DateTimeFormat.GetDayName((DayOfWeek)dow));
+
+    // "45 min", "2 h", "1 h 30 min"
+    private static string LimitText(int minutes)
+    {
+        int h = minutes / 60, m = minutes % 60;
+        if (h == 0) return $"{m} {Loc.Get("Min")}";
+        return m == 0 ? $"{h} {Loc.Get("HoursShort")}" : $"{h} {Loc.Get("HoursShort")} {m} {Loc.Get("Min")}";
+    }
+
+    private void EnsureWeek()
+    {
+        if (_settings.Week == null || _settings.Week.Count != 7)
+            _settings.Week = AppSettings.DefaultWeek();
+    }
+
+    // The rows show what is saved (not what is being typed in the editor)
+    private void UpdateWeekOverview()
+    {
+        if (_dayRow[0] == null) return;
+        EnsureWeek();
+        int today = (int)DateTime.Now.DayOfWeek;
+        for (int d = 0; d < 7; d++)
+        {
+            var day = _settings.Week[d];
+            int from = Math.Clamp(day.WindowStartMinutes, 0, 24 * 60);
+            int to = Math.Clamp(day.WindowEndMinutes, 0, 24 * 60);
+            // A reversed window (from an older version or a hand-edited file): the phone shows "Check" too
+            bool bad = day.Allowed && to <= from;
+            bool show = day.Allowed && !bad;
+
+            var name = DayName(d);
+            _dayName[d].Text = name;
+            _dayName[d].FontWeight = d == today ? FontWeights.SemiBold : FontWeights.Normal;
+
+            var cols = _dayBarCols[d];
+            cols[0].Width = new GridLength(show ? from : 1, GridUnitType.Star);
+            cols[1].Width = new GridLength(show ? to - from : 0, GridUnitType.Star);
+            cols[2].Width = new GridLength(show ? 24 * 60 - to : 0, GridUnitType.Star);
+            _dayBarFill[d].Opacity = _settings.ScheduleEnabled ? 1.0 : 0.4;
+
+            string text, brush;
+            if (!day.Allowed) { text = Loc.Get("Sched_Off"); brush = "TextFillColorSecondaryBrush"; }
+            else if (bad) { text = Loc.Get("Sched_Check"); brush = "SystemFillColorCriticalBrush"; }
+            else
+            {
+                var limit = day.LimitMinutes > 0 ? LimitText(day.LimitMinutes) : Loc.Get("Sched_NoLimit");
+                text = from == 0 && to == 24 * 60 ? limit : $"{FormatClock(from)}–{FormatClock(to)} · {limit}";
+                brush = "TextFillColorPrimaryBrush";
+            }
+            _daySummary[d].Text = text;
+            _daySummary[d].SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, brush);
+            System.Windows.Automation.AutomationProperties.SetName(_dayRow[d],
+                d == today ? $"{name} ({Loc.Get("Sched_Today")}): {text}" : $"{name}: {text}");
+        }
     }
 
     private void ApplyScheduleLabels()
     {
-        ScheduleLabel.Text = Loc.Get("Sched_Label");
+        ScheduleLabel.Text = Loc.Get("Tab_Schedule");
         ScheduleIntro.Text = Loc.Get("Sched_Intro");
-        ScheduleEnabledToggle.Content = Loc.Get("Sched_Enable");
+        ScheduleEnableTitle.Text = Loc.Get("Sched_Enable");
         ScheduleHint.Text = Loc.Get("Sched_Hint");
         ScheduleUnlockButton.Content = Loc.Get(IsUnlocked ? "Sched_Lock" : "Sched_Unlock");
 
-        if (_schHeadDay != null) _schHeadDay.Text = Loc.Get("Sched_Col_Day");
-        if (_schHeadOn != null) _schHeadOn.Text = Loc.Get("Sched_Col_On");
-        if (_schHeadLimit != null) _schHeadLimit.Text = Loc.Get("Sched_Col_Limit");
-        if (_schHeadFrom != null) _schHeadFrom.Text = Loc.Get("Sched_Col_From");
-        if (_schHeadTo != null) _schHeadTo.Text = Loc.Get("Sched_Col_To");
+        SchedAllowedLabel.Text = Loc.Get("Sched_Allowed");
+        SchedHoursLabel.Text = Loc.Get("Sched_Hours");
+        SchedLimitLabel.Text = Loc.Get("Sched_DailyLimit");
+        ScheduleLimitUnit.Text = Loc.Get("Min");
+        SchedCopyLabel.Text = Loc.Get("Sched_CopyTo");
+        ScheduleCopyWeekdays.Content = Loc.Get("Sched_Weekdays");
+        ScheduleCopyWeekend.Content = Loc.Get("Sched_Weekend");
+        ScheduleCopyEveryDay.Content = Loc.Get("Sched_EveryDay");
+        ScheduleCopied.Text = Loc.Get("Sched_Copied");
+        System.Windows.Automation.AutomationProperties.SetName(ScheduleDayFrom, $"{Loc.Get("Sched_Hours")}: {Loc.Get("Sched_From")}");
+        System.Windows.Automation.AutomationProperties.SetName(ScheduleDayTo, $"{Loc.Get("Sched_Hours")}: {Loc.Get("Sched_To")}");
+        System.Windows.Automation.AutomationProperties.SetName(ScheduleLimitMinus, $"−{LimitStep} {Loc.Get("Min")}");
+        System.Windows.Automation.AutomationProperties.SetName(ScheduleLimitPlus, $"+{LimitStep} {Loc.Get("Min")}");
 
-        var dtf = System.Globalization.CultureInfo.GetCultureInfo(Loc.CurrentLanguage).DateTimeFormat;
-        for (int d = 0; d < 7; d++)
-        {
-            if (_dayName[d] == null) continue;
-            var n = dtf.GetAbbreviatedDayName((DayOfWeek)d);
-            if (n.Length > 0) n = char.ToUpper(n[0]) + n.Substring(1);
-            _dayName[d].Text = n;
-        }
-
-        UpdateScheduleStatus();
+        LoadDayEditor(); // the day name in the title and the hints
+        UpdateScheduleStatus(); // also the week overview
     }
 
     private void LoadScheduleToUi()
     {
-        if (_settings.Week == null || _settings.Week.Count != 7)
-            _settings.Week = AppSettings.DefaultWeek();
-
-        ScheduleEnabledToggle.IsChecked = _settings.ScheduleEnabled;
-        for (int d = 0; d < 7; d++)
+        EnsureWeek();
+        var was = _scheduleUiLoading;
+        _scheduleUiLoading = true;
+        try
         {
-            if (_dayAllowed[d] == null) continue;
-            var day = _settings.Week[d];
-            _dayAllowed[d].IsChecked = day.Allowed;
-            _dayLimit[d].Text = day.LimitMinutes.ToString();
-            _dayFrom[d].Text = FormatClock(day.WindowStartMinutes);
-            _dayTo[d].Text = FormatClock(day.WindowEndMinutes);
+            ScheduleEnabledToggle.IsChecked = _settings.ScheduleEnabled;
+            if (_dayRow[_selectedDay] is { } row) row.IsChecked = true;
         }
+        finally
+        {
+            _scheduleUiLoading = was;
+        }
+        LoadDayEditor();
         UpdateScheduleStatus();
     }
 
-    private void Schedule_Toggle(object sender, RoutedEventArgs e) => ApplyScheduleFromUi();
-    private void Schedule_Text(object sender, TextChangedEventArgs e) => ApplyScheduleFromUi();
+    private void ScheduleDayRow_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: int d }) return;
+        _selectedDay = d;
+        ScheduleCopied.Visibility = Visibility.Collapsed;
+        LoadDayEditor();
+    }
+
+    // The editor of the selected day shows what is saved for it
+    private void LoadDayEditor()
+    {
+        if (ScheduleDayEditor == null || _settings == null) return;
+        EnsureWeek();
+        var day = _settings.Week[_selectedDay];
+        var was = _scheduleUiLoading;
+        _scheduleUiLoading = true;
+        try
+        {
+            ScheduleDayTitle.Text = DayName(_selectedDay);
+            ScheduleDayAllowed.IsChecked = day.Allowed;
+            ScheduleDayFrom.Text = FormatClock(day.WindowStartMinutes);
+            ScheduleDayTo.Text = FormatClock(day.WindowEndMinutes);
+            ScheduleDayLimitOn.IsChecked = day.LimitMinutes > 0;
+            ScheduleDayLimit.Text = (day.LimitMinutes > 0 ? Math.Min(day.LimitMinutes, 24 * 60) : DefaultLimit).ToString();
+        }
+        finally
+        {
+            _scheduleUiLoading = was;
+        }
+        UpdateDayEditorState();
+    }
+
+    // What the editor shows around the values: the details only for an allowed day, the limit row only
+    // when there is a limit, the window error and the limit hint
+    private void UpdateDayEditorState()
+    {
+        bool allowed = ScheduleDayAllowed.IsChecked == true;
+        ScheduleDayDetails.Visibility = allowed ? Visibility.Visible : Visibility.Collapsed;
+
+        var from = TryParseClock(ScheduleDayFrom.Text, endOfDay: false);
+        var to = TryParseClock(ScheduleDayTo.Text, endOfDay: true);
+        string? windowError = null;
+        if (from == null || to == null) windowError = Loc.Get("Sched_TimeFormat");
+        else if (to <= from) windowError = Loc.Get("Sched_BadWindow");
+        ScheduleWindowError.Text = windowError ?? "";
+        ScheduleWindowError.Visibility = windowError != null ? Visibility.Visible : Visibility.Collapsed;
+
+        bool limitOn = ScheduleDayLimitOn.IsChecked == true;
+        ScheduleLimitRow.Visibility = limitOn ? Visibility.Visible : Visibility.Collapsed;
+        var limit = TryParseLimit(ScheduleDayLimit.Text);
+        string hint, hintBrush = "TextFillColorSecondaryBrush";
+        if (!limitOn) hint = Loc.Get("Sched_NoLimitHint");
+        else if (limit == null) { hint = Loc.Get("Sched_LimitRange"); hintBrush = "SystemFillColorCriticalBrush"; }
+        else if (from is int f && to is int t && t > f && limit > t - f) hint = Loc.Get("Sched_LimitOver");
+        else hint = Loc.Get("Sched_LimitHint");
+        ScheduleLimitHint.Text = hint;
+        ScheduleLimitHint.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, hintBrush);
+        ScheduleLimitMinus.IsEnabled = limit is not int lo || lo > LimitStep;
+        ScheduleLimitPlus.IsEnabled = limit is not int hi || hi < 24 * 60;
+
+        // Copying copies what is saved, so not while the editor shows something that is not saved
+        bool savedMatches = !allowed || (windowError == null && (!limitOn || limit != null));
+        ScheduleCopyWeekdays.IsEnabled = ScheduleCopyWeekend.IsEnabled = ScheduleCopyEveryDay.IsEnabled = savedMatches;
+    }
+
+    private void ScheduleDay_Changed(object sender, RoutedEventArgs e) => ApplyDayFromUi();
+    private void ScheduleDay_TextChanged(object sender, TextChangedEventArgs e) => ApplyDayFromUi();
+
+    // Every change applies at once (under the unlock), like the other settings
+    private void ApplyDayFromUi()
+    {
+        if (_scheduleUiLoading || ScheduleDayEditor == null) return;
+        UpdateDayEditorState();
+        if (_isLoading || !IsUnlocked) return;
+        EnsureWeek();
+
+        var day = _settings.Week[_selectedDay];
+        day.Allowed = ScheduleDayAllowed.IsChecked == true;
+        // An unreadable or reversed window is not saved: the saved one stays until the window is fixed
+        // (the evaluator would take a reversed window as the whole day)
+        if (TryParseClock(ScheduleDayFrom.Text, endOfDay: false) is int from
+            && TryParseClock(ScheduleDayTo.Text, endOfDay: true) is int to && to > from)
+        {
+            day.WindowStartMinutes = from;
+            day.WindowEndMinutes = to;
+        }
+        if (ScheduleDayLimitOn.IsChecked != true) day.LimitMinutes = 0;
+        else if (TryParseLimit(ScheduleDayLimit.Text) is int limit) day.LimitMinutes = limit;
+        SaveSchedule();
+    }
+
+    private void ScheduleLimitStep_Click(object sender, RoutedEventArgs e)
+    {
+        int current = TryParseLimit(ScheduleDayLimit.Text) ?? DefaultLimit;
+        // Steps land on the 15-minute grid: 50 goes up to 60 and down to 45
+        int next = sender == ScheduleLimitPlus
+            ? (current / LimitStep + 1) * LimitStep
+            : ((current + LimitStep - 1) / LimitStep - 1) * LimitStep;
+        ScheduleDayLimit.Text = Math.Clamp(next, LimitStep, 24 * 60).ToString(); // applies through TextChanged
+    }
+
+    private void ScheduleCopy_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading || !IsUnlocked) return;
+        EnsureWeek();
+        var tag = (sender as FrameworkElement)?.Tag as string;
+        int[] targets = tag switch
+        {
+            "weekdays" => WeekdayDays,
+            "weekend" => WeekendDays,
+            _ => ScheduleDayOrder
+        };
+        var src = _settings.Week[_selectedDay];
+        foreach (var d in targets)
+        {
+            if (d == _selectedDay) continue;
+            var t = _settings.Week[d];
+            t.Allowed = src.Allowed;
+            t.LimitMinutes = src.LimitMinutes;
+            t.WindowStartMinutes = src.WindowStartMinutes;
+            t.WindowEndMinutes = src.WindowEndMinutes;
+        }
+        SaveSchedule();
+        ScheduleCopied.Visibility = Visibility.Visible;
+    }
+
     // Under the unlock like every schedule edit (a day edit can free as much as switching it off)
     private void ScheduleEnabled_Changed(object sender, RoutedEventArgs e) => ApplyScheduleFromUi();
 
     private void ApplyScheduleFromUi()
     {
-        if (_isLoading || !IsUnlocked) return;
-        if (_settings.Week == null || _settings.Week.Count != 7)
-            _settings.Week = AppSettings.DefaultWeek();
-
+        if (_isLoading || _scheduleUiLoading || !IsUnlocked) return;
+        EnsureWeek();
         _settings.ScheduleEnabled = ScheduleEnabledToggle.IsChecked == true;
-        for (int d = 0; d < 7; d++)
-        {
-            if (_dayAllowed[d] == null) continue;
-            var day = _settings.Week[d];
-            day.Allowed = _dayAllowed[d].IsChecked == true;
-            day.LimitMinutes = Math.Clamp(ParseInt(_dayLimit[d].Text), 0, 24 * 60);
-            day.WindowStartMinutes = ParseClock(_dayFrom[d].Text, 0);
-            day.WindowEndMinutes = ParseClock(_dayTo[d].Text, 24 * 60);
-        }
+        SaveSchedule();
+    }
+
+    private void SaveSchedule()
+    {
         SaveSettings();
         _timer.ReevaluateSchedule();
         UpdateScheduleStatus();
@@ -1821,10 +2094,13 @@ public partial class MainWindow : FluentWindow
 
     private void UpdateScheduleLock()
     {
+        if (ScheduleDayEditor == null) return;
         // Locked again: the editor shows what is saved
-        if (!IsUnlocked && ScheduleEditPanel != null && ScheduleEditPanel.IsEnabled) LoadScheduleToUi();
-        if (ScheduleEditPanel != null) ScheduleEditPanel.IsEnabled = IsUnlocked;
-        if (ScheduleUnlockButton != null) ScheduleUnlockButton.Content = Loc.Get(IsUnlocked ? "Sched_Lock" : "Sched_Unlock");
+        if (!IsUnlocked && ScheduleDayEditor.IsEnabled) LoadScheduleToUi();
+        ScheduleEditPanel.IsEnabled = IsUnlocked;
+        ScheduleDayEditor.IsEnabled = IsUnlocked;
+        ScheduleUnlockButton.Content = Loc.Get(IsUnlocked ? "Sched_Lock" : "Sched_Unlock");
+        ScheduleUnlockButton.Icon = new SymbolIcon { Symbol = IsUnlocked ? SymbolRegular.LockClosed24 : SymbolRegular.LockOpen24 };
     }
 
     private void UpdateScheduleStatus()
@@ -1864,6 +2140,7 @@ public partial class MainWindow : FluentWindow
         ScheduleStatusBar.Message = msg;
         UpdateStatusLines(); // the line next to the ring on the Status page
         ScheduleStatusBar.Severity = sev;
+        UpdateWeekOverview(); // the saved week, and which day is today
         UpdateButtonStates(_timer.IsRunning); // "Lift restrictions for today" depends on the schedule
     }
 
@@ -1874,25 +2151,25 @@ public partial class MainWindow : FluentWindow
         return $"{minutes / 60:D2}:{minutes % 60:D2}";
     }
 
-    // Parses "H", "H:MM" or "HH:MM" to minutes from midnight (0..1440); fallback on anything else
-    private static int ParseClock(string text, int fallback)
+    // Parses "H", "H:MM" or "HH:MM" to minutes from midnight (0..1440); null when it is not a time of day.
+    // For the end of the allowed hours 00:00 means midnight at the end of the day (24:00).
+    private static int? TryParseClock(string text, bool endOfDay)
     {
-        if (string.IsNullOrWhiteSpace(text)) return fallback;
-        text = text.Trim();
-        int h, m = 0;
-        var colon = text.IndexOf(':');
-        if (colon < 0)
-        {
-            if (!int.TryParse(text, out h)) return fallback;
-        }
-        else
-        {
-            if (!int.TryParse(text.Substring(0, colon), out h)) return fallback;
-            var rest = text.Substring(colon + 1);
-            if (rest.Length > 0 && !int.TryParse(rest, out m)) return fallback;
-        }
-        return Math.Clamp(h * 60 + m, 0, 24 * 60);
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var parts = text.Trim().Split(':');
+        if (parts.Length > 2) return null;
+        if (!int.TryParse(parts[0], System.Globalization.NumberStyles.None, null, out var h)) return null;
+        int m = 0;
+        if (parts.Length == 2 && (parts[1].Length != 2
+            || !int.TryParse(parts[1], System.Globalization.NumberStyles.None, null, out m))) return null;
+        if (h > 24 || m > 59 || (h == 24 && m != 0)) return null;
+        int minutes = h * 60 + m;
+        return endOfDay && minutes == 0 ? 24 * 60 : minutes;
     }
+
+    // A daily limit in minutes: 1..1440, or null
+    private static int? TryParseLimit(string text) =>
+        int.TryParse(text?.Trim(), System.Globalization.NumberStyles.None, null, out var m) && m is >= 1 and <= 24 * 60 ? m : null;
 
     #endregion
 

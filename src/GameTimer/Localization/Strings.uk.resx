@@ -329,9 +329,6 @@
   <data name="Tab_Schedule" xml:space="preserve">
     <value>Розклад</value>
   </data>
-  <data name="Sched_Label" xml:space="preserve">
-    <value>Денний розклад</value>
-  </data>
   <data name="Sched_Intro" xml:space="preserve">
     <value>Денний ліміт часу та години, коли можна грати, для кожного дня тижня. Типово вимкнено.</value>
   </data>
@@ -339,28 +336,13 @@
     <value>Увімкнути розклад</value>
   </data>
   <data name="Sched_Hint" xml:space="preserve">
-    <value>Коли ввімкнено, таймер автоматично запускає денний ліміт і блокує, коли час вичерпано або закінчилися дозволені години. Ліміт 0 = без обмеження. Години 00:00-24:00 = весь день.</value>
+    <value>Коли ввімкнено, таймер автоматично запускає денний ліміт і блокує, коли час вичерпано або закінчилися дозволені години. Виберіть день, щоб переглянути або змінити його.</value>
   </data>
   <data name="Sched_Unlock" xml:space="preserve">
     <value>Розблокувати для змін</value>
   </data>
   <data name="Sched_Lock" xml:space="preserve">
     <value>Заблокувати</value>
-  </data>
-  <data name="Sched_Col_Day" xml:space="preserve">
-    <value>День</value>
-  </data>
-  <data name="Sched_Col_On" xml:space="preserve">
-    <value>Увімк</value>
-  </data>
-  <data name="Sched_Col_Limit" xml:space="preserve">
-    <value>Хв/день</value>
-  </data>
-  <data name="Sched_Col_From" xml:space="preserve">
-    <value>З</value>
-  </data>
-  <data name="Sched_Col_To" xml:space="preserve">
-    <value>До</value>
   </data>
   <data name="Sched_St_Off" xml:space="preserve">
     <value>Розклад вимкнено. Таймер керується вручну.</value>
@@ -547,5 +529,86 @@
   </data>
   <data name="ConnectPhone_NeedsControl" xml:space="preserve">
     <value>Спочатку увімкніть керування з телефону</value>
+  </data>
+  <data name="Sched_Allowed" xml:space="preserve">
+    <value>Ігри дозволені</value>
+  </data>
+  <data name="Sched_Hours" xml:space="preserve">
+    <value>Дозволені години</value>
+  </data>
+  <data name="Sched_DailyLimit" xml:space="preserve">
+    <value>Ліміт на день</value>
+  </data>
+  <data name="Sched_NoLimit" xml:space="preserve">
+    <value>Без ліміту</value>
+  </data>
+  <data name="Sched_Off" xml:space="preserve">
+    <value>Без ігор</value>
+  </data>
+  <data name="Sched_Check" xml:space="preserve">
+    <value>Перевірте</value>
+  </data>
+  <data name="Sched_NoLimitHint" xml:space="preserve">
+    <value>Без ліміту на день: діють лише дозволені години.</value>
+  </data>
+  <data name="Sched_LimitHint" xml:space="preserve">
+    <value>Скільки всього можна грати за день у дозволені години.</value>
+  </data>
+  <data name="Sched_LimitOver" xml:space="preserve">
+    <value>Ліміт більший за дозволені години: гра закінчиться за годинами.</value>
+  </data>
+  <data name="Sched_BadWindow" xml:space="preserve">
+    <value>Кінець має бути пізніше за початок (через північ не можна). Не збережеться, доки не виправите.</value>
+  </data>
+  <data name="Sched_TimeFormat" xml:space="preserve">
+    <value>Введіть час як ГГ:ХХ, наприклад 15:30.</value>
+  </data>
+  <data name="Sched_CopyTo" xml:space="preserve">
+    <value>Скопіювати цей день на</value>
+  </data>
+  <data name="Sched_Weekdays" xml:space="preserve">
+    <value>Будні</value>
+  </data>
+  <data name="Sched_Weekend" xml:space="preserve">
+    <value>Вихідні</value>
+  </data>
+  <data name="Sched_EveryDay" xml:space="preserve">
+    <value>Щодня</value>
+  </data>
+  <data name="Sched_Copied" xml:space="preserve">
+    <value>Скопійовано</value>
+  </data>
+  <data name="Sched_Today" xml:space="preserve">
+    <value>сьогодні</value>
+  </data>
+  <data name="HoursShort" xml:space="preserve">
+    <value>год</value>
+  </data>
+  <data name="Hist_All" xml:space="preserve">
+    <value>Усі</value>
+  </data>
+  <data name="Hist_Timer" xml:space="preserve">
+    <value>Таймер</value>
+  </data>
+  <data name="Hist_Alerts" xml:space="preserve">
+    <value>Попередження</value>
+  </data>
+  <data name="Hist_Today" xml:space="preserve">
+    <value>Сьогодні</value>
+  </data>
+  <data name="Hist_Yesterday" xml:space="preserve">
+    <value>Учора</value>
+  </data>
+  <data name="Hist_NoneOfKind" xml:space="preserve">
+    <value>Серед останніх 200 подій таких немає</value>
+  </data>
+  <data name="Sched_From" xml:space="preserve">
+    <value>з</value>
+  </data>
+  <data name="Sched_To" xml:space="preserve">
+    <value>до</value>
+  </data>
+  <data name="Sched_LimitRange" xml:space="preserve">
+    <value>Введіть хвилини, від 1 до 1440.</value>
   </data>
 </root>
