@@ -548,4 +548,7 @@
   <data name="Source_Link" xml:space="preserve">
     <value>Исходный код</value>
   </data>
+  <data name="ConnectPhone_NeedsControl" xml:space="preserve">
+    <value>Сначала включите управление с телефона</value>
+  </data>
 </root>

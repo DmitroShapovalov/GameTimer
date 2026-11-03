@@ -116,7 +116,7 @@ public partial class MainWindow : FluentWindow
         LanguageDesc.Text = Loc.Get("Language_Desc");
         ActionDesc.Text = Loc.Get("Action_Desc");
         ConnectPhoneTitle.Text = Loc.Get("ConnectPhone_Title");
-        ConnectPhoneDesc.Text = Loc.Get("ConnectPhone_Desc");
+        ConnectPhoneDesc.Text = Loc.Get(_remote.IsRunning ? "ConnectPhone_Desc" : "ConnectPhone_NeedsControl");
         PrivacyLink.Content = Loc.Get("Privacy_Link");
         SourceLink.Content = Loc.Get("Source_Link");
         TabHistoryText.Text = Loc.Get("Tab_History");
@@ -186,8 +186,8 @@ public partial class MainWindow : FluentWindow
         TamperLabel.Text = Loc.Get("Tamper_Label");
         TamperToggle.ToolTip = Loc.Get("Tamper_Toggle");
         TamperHint.Text = Loc.Get("Tamper_Hint");
-        FirewallText.Text = Loc.Get("Remote_FirewallMissing");
-        FirewallInfo.Message = FirewallText.Text;
+        FirewallInfo.Message = Loc.Get("Remote_FirewallMissing");
+        TamperToggle.SetValue(System.Windows.Automation.AutomationProperties.HelpTextProperty, Loc.Get("Tamper_Toggle"));
         FirewallButton.Content = Loc.Get("Remote_FirewallFix");
         PairedDevicesLabel.Text = Loc.Get("PairedDevices");
         NoDevicesText.Text = Loc.Get("PairedDevices_None");
@@ -1410,6 +1410,8 @@ public partial class MainWindow : FluentWindow
     private void UpdateRemoteStatus()
     {
         ConnectPhoneButton.IsEnabled = _remote.IsRunning;
+        // A disabled button says why: phone control has to be on first
+        ConnectPhoneDesc.Text = Loc.Get(_remote.IsRunning ? "ConnectPhone_Desc" : "ConnectPhone_NeedsControl");
 
         FirewallPanel.Visibility = _remote.IsRunning && _firewallOk == false ? Visibility.Visible : Visibility.Collapsed;
 

@@ -548,4 +548,7 @@
   <data name="Source_Link" xml:space="preserve">
     <value>Broncode</value>
   </data>
+  <data name="ConnectPhone_NeedsControl" xml:space="preserve">
+    <value>Zet eerst telefoonbediening aan</value>
+  </data>
 </root>

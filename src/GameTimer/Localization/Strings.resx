@@ -548,4 +548,7 @@
   <data name="Source_Link" xml:space="preserve">
     <value>Source code</value>
   </data>
+  <data name="ConnectPhone_NeedsControl" xml:space="preserve">
+    <value>Turn on phone control first</value>
+  </data>
 </root>
