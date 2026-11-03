@@ -84,7 +84,7 @@
     <value>Скинути</value>
   </data>
   <data name="Tab_Display" xml:space="preserve">
-    <value>Вигляд</value>
+    <value>Таймер на екрані</value>
   </data>
   <data name="OverlayPosition" xml:space="preserve">
     <value>Положення оверлея (перетягніть маркер)</value>
@@ -111,7 +111,7 @@
     <value>хв</value>
   </data>
   <data name="ZoneColors" xml:space="preserve">
-    <value>Кольори зон (натисніть, щоб обрати)</value>
+    <value>Кольори зон</value>
   </data>
   <data name="Zone_Normal" xml:space="preserve">
     <value>Звичайний</value>
@@ -121,9 +121,6 @@
   </data>
   <data name="Zone_Alert" xml:space="preserve">
     <value>Тривога</value>
-  </data>
-  <data name="Tab_Notifications" xml:space="preserve">
-    <value>Сповіщення</value>
   </data>
   <data name="AlertPoints" xml:space="preserve">
     <value>Звукові сповіщення</value>

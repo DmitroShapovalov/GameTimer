@@ -84,7 +84,7 @@
     <value>Сброс</value>
   </data>
   <data name="Tab_Display" xml:space="preserve">
-    <value>Отображение</value>
+    <value>Таймер на экране</value>
   </data>
   <data name="OverlayPosition" xml:space="preserve">
     <value>Позиция оверлея (перетащите маркер)</value>
@@ -111,7 +111,7 @@
     <value>мин</value>
   </data>
   <data name="ZoneColors" xml:space="preserve">
-    <value>Цвета зон (нажмите для выбора)</value>
+    <value>Цвета зон</value>
   </data>
   <data name="Zone_Normal" xml:space="preserve">
     <value>Норма</value>
@@ -121,9 +121,6 @@
   </data>
   <data name="Zone_Alert" xml:space="preserve">
     <value>Тревога</value>
-  </data>
-  <data name="Tab_Notifications" xml:space="preserve">
-    <value>Уведомления</value>
   </data>
   <data name="AlertPoints" xml:space="preserve">
     <value>Точки звуковых уведомлений</value>

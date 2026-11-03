@@ -91,6 +91,7 @@ public partial class MainWindow : FluentWindow
 
         _isLoading = false;
         ValidateTimerInput();
+        UpdateMarkerPreview(); // skipped while loading
 
         Loaded += (_, _) => FocusTimeInput();
         StartButton.ToolTip = "Enter";
@@ -108,7 +109,6 @@ public partial class MainWindow : FluentWindow
         // Tab headers
         TabTimerText.Text = Loc.Get("Tab_Timer");
         TabDisplayText.Text = Loc.Get("Tab_Display");
-        TabNotificationsText.Text = Loc.Get("Tab_Notifications");
         TabSettingsText.Text = Loc.Get("Tab_Settings");
         TabPhonesText.Text = Loc.Get("Tab_Phones");
         SettingsHeader.Text = Loc.Get("Tab_Settings");
@@ -159,6 +159,10 @@ public partial class MainWindow : FluentWindow
         NormalZoneLabel.Text = Loc.Get("Zone_Normal");
         WarningZoneLabel.Text = Loc.Get("Zone_Warning");
         AlertZoneLabel.Text = Loc.Get("Zone_Alert");
+        OverlayHeader.Text = Loc.Get("Tab_Display");
+        PreviewNormal.Content = Loc.Get("Zone_Normal");
+        PreviewWarning.Content = Loc.Get("Zone_Warning");
+        PreviewAlert.Content = Loc.Get("Zone_Alert");
 
         // Notifications tab
         AlertPointsLabel.Text = Loc.Get("AlertPoints");
@@ -246,19 +250,17 @@ public partial class MainWindow : FluentWindow
         // Display tab
         FontSizeSlider.Value = _settings.FontSize;
         OpacitySlider.Value = _settings.Opacity;
+        FontSizeLabel.Text = $"{_settings.FontSize} px"; // the handlers skip this while loading
+        OpacityLabel.Text = $"{_settings.Opacity}%";
         ShowBackgroundCheck.IsChecked = _settings.ShowBackground;
         YellowThreshold.Text = _settings.YellowThreshold.ToString();
         RedThreshold.Text = _settings.RedThreshold.ToString();
         UpdateColorPreviews();
 
         // Position marker (deferred until canvas has actual size)
-        PositionCanvas.Loaded += (_, _) =>
-        {
-            var rangeX = PositionCanvas.ActualWidth - PositionMarker.ActualWidth;
-            var rangeY = PositionCanvas.ActualHeight - PositionMarker.ActualHeight;
-            if (rangeX > 0) Canvas.SetLeft(PositionMarker, _settings.OverlayX * rangeX);
-            if (rangeY > 0) Canvas.SetTop(PositionMarker, _settings.OverlayY * rangeY);
-        };
+        PositionCanvas.Loaded += (_, _) => PlaceMarker();
+        PositionCanvas.LostMouseCapture += (_, _) => _isDragging = false; // Alt+Tab mid-drag
+        PositionCanvas.SizeChanged += (_, _) => PlaceMarker(); // the window is resizable
 
         // Notifications tab
         AlertsList.ItemsSource = _settings.AlertPoints;
@@ -326,6 +328,7 @@ public partial class MainWindow : FluentWindow
         {
             _isLoading = false;
         }
+        UpdateMarkerPreview();
 
         _overlay?.ApplySettings(_settings);
     }
@@ -420,7 +423,7 @@ public partial class MainWindow : FluentWindow
         }
 #endif
 
-        // Ctrl+1..7 — switch pages (Status, Schedule, History, Display, Notifications, Phones, Settings)
+        // Ctrl+1..6 — switch pages (Status, Schedule, History, Timer on screen, Phones, Settings)
         if (ctrl)
         {
             int tab = e.Key switch
@@ -431,7 +434,6 @@ public partial class MainWindow : FluentWindow
                 Key.D4 or Key.NumPad4 => 3,
                 Key.D5 or Key.NumPad5 => 4,
                 Key.D6 or Key.NumPad6 => 5,
-                Key.D7 or Key.NumPad7 => 6,
                 _ => -1
             };
             if (tab >= 0)
@@ -971,6 +973,7 @@ public partial class MainWindow : FluentWindow
         FontSizeLabel.Text = $"{size} px";
         _settings.FontSize = size;
         _overlay?.ApplySettings(_settings);
+        UpdateMarkerPreview();
         SaveSettings();
     }
 
@@ -981,6 +984,7 @@ public partial class MainWindow : FluentWindow
         OpacityLabel.Text = $"{opacity}%";
         _settings.Opacity = opacity;
         _overlay?.ApplySettings(_settings);
+        UpdateMarkerPreview();
         SaveSettings();
     }
 
@@ -989,6 +993,7 @@ public partial class MainWindow : FluentWindow
         if (_isLoading) return;
         _settings.ShowBackground = ShowBackgroundCheck.IsChecked == true;
         _overlay?.ApplySettings(_settings);
+        UpdateMarkerPreview();
         SaveSettings();
     }
 
@@ -1005,6 +1010,102 @@ public partial class MainWindow : FluentWindow
         TrySetBackground(GreenPreview, _settings.ColorGreen);
         TrySetBackground(YellowPreview, _settings.ColorYellow);
         TrySetBackground(RedPreview, _settings.ColorRed);
+        if (!GreenHex.IsKeyboardFocusWithin) GreenHex.Text = _settings.ColorGreen.ToUpperInvariant();
+        if (!YellowHex.IsKeyboardFocusWithin) YellowHex.Text = _settings.ColorYellow.ToUpperInvariant();
+        if (!RedHex.IsKeyboardFocusWithin) RedHex.Text = _settings.ColorRed.ToUpperInvariant();
+        BuildPalette(GreenPalette, 'g', _settings.ColorGreen);
+        BuildPalette(YellowPalette, 'y', _settings.ColorYellow);
+        BuildPalette(RedPalette, 'r', _settings.ColorRed);
+        UpdateMarkerPreview();
+    }
+
+    // Zone colours from a row of swatches (the same palette as the phone), or any #RRGGBB typed next to it
+    private static readonly string[] Palette =
+        { "#4CAF50", "#8BC34A", "#2196F3", "#9C27B0", "#FFEB3B", "#FFC107", "#FF9800", "#F44336", "#E91E63", "#FFFFFF" };
+
+    private void BuildPalette(WrapPanel panel, char zone, string current)
+    {
+        panel.Children.Clear();
+        foreach (var hex in Palette)
+        {
+            var swatch = new System.Windows.Controls.RadioButton
+            {
+                Style = (Style)FindResource("SwatchRadio"), GroupName = "swatch-" + zone, ToolTip = hex,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+                IsChecked = hex.Equals(current, StringComparison.OrdinalIgnoreCase),
+            };
+            System.Windows.Automation.AutomationProperties.SetName(swatch, hex);
+            // after IsChecked above, so building doesn't apply; deferred: applying rebuilds this panel
+            swatch.Checked += (_, _) => Dispatcher.BeginInvoke(() => SetZoneColor(zone, hex));
+            panel.Children.Add(swatch);
+        }
+    }
+
+    private void SetZoneColor(char zone, string hex)
+    {
+        if (_isLoading) return;
+        string current = zone == 'g' ? _settings.ColorGreen : zone == 'y' ? _settings.ColorYellow : _settings.ColorRed;
+        if (hex.Equals(current, StringComparison.OrdinalIgnoreCase)) return;
+        if (zone == 'g') _settings.ColorGreen = hex;
+        else if (zone == 'y') _settings.ColorYellow = hex;
+        else _settings.ColorRed = hex;
+        // The box shows the new colour even while focused, so leaving it later doesn't put the old one back
+        (zone == 'g' ? GreenHex : zone == 'y' ? YellowHex : RedHex).Text = hex.ToUpperInvariant();
+        UpdateColorPreviews();
+        _overlay?.ApplySettings(_settings);
+        SaveSettings();
+    }
+
+    private void ColorHex_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        ApplyHex(sender);
+        e.Handled = true;
+    }
+
+    private void ColorHex_LostFocus(object sender, KeyboardFocusChangedEventArgs e) => ApplyHex(sender);
+
+    private void ApplyHex(object sender)
+    {
+        if (sender is not System.Windows.Controls.TextBox box) return;
+        char zone = box == GreenHex ? 'g' : box == YellowHex ? 'y' : 'r';
+        var text = box.Text.Trim().TrimStart('#');
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, "^[0-9A-Fa-f]{6}$"))
+        {
+            var hex = "#" + text.ToUpperInvariant();
+            string old = zone == 'g' ? _settings.ColorGreen : zone == 'y' ? _settings.ColorYellow : _settings.ColorRed;
+            if (!hex.Equals(old, StringComparison.OrdinalIgnoreCase)) SetZoneColor(zone, hex);
+            else box.Text = hex;
+        }
+        else box.Text = (zone == 'g' ? _settings.ColorGreen : zone == 'y' ? _settings.ColorYellow : _settings.ColorRed).ToUpperInvariant();
+    }
+
+    private void PreviewZone_Changed(object sender, RoutedEventArgs e) => UpdateMarkerPreview();
+
+    /// <summary>The marker on the small screen looks like the countdown: zone colour, size, opacity, background.</summary>
+    private void UpdateMarkerPreview()
+    {
+        // Checked handlers fire inside InitializeComponent, before every element (and the settings) exist
+        if (_isLoading || _settings == null || PreviewText == null || PositionMarker == null || PreviewWarning == null || PreviewAlert == null) return;
+        string hex = PreviewAlert.IsChecked == true ? _settings.ColorRed
+            : PreviewWarning.IsChecked == true ? _settings.ColorYellow : _settings.ColorGreen;
+        try { PreviewText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)); }
+        catch { PreviewText.Foreground = Brushes.White; }
+        PreviewText.Text = PreviewAlert.IsChecked == true ? "02:00" : PreviewWarning.IsChecked == true ? "12:00" : "1:30:00";
+        PreviewText.FontSize = Math.Max(9, _settings.FontSize * 0.35); // the preview screen is a small screen
+        PositionMarker.Opacity = _settings.Opacity / 100.0;
+        PositionMarker.Background = _settings.ShowBackground ? new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)) : Brushes.Transparent;
+        // The marker's size changed: keep it where the overlay is
+        Dispatcher.BeginInvoke(PlaceMarker, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void PlaceMarker()
+    {
+        if (_isDragging) return;
+        var rangeX = PositionCanvas.ActualWidth - PositionMarker.ActualWidth;
+        var rangeY = PositionCanvas.ActualHeight - PositionMarker.ActualHeight;
+        if (rangeX > 0) Canvas.SetLeft(PositionMarker, _settings.OverlayX * rangeX);
+        if (rangeY > 0) Canvas.SetTop(PositionMarker, _settings.OverlayY * rangeY);
     }
 
     private static void TrySetBackground(Border border, string hex)
@@ -1015,37 +1116,6 @@ public partial class MainWindow : FluentWindow
             border.Background = new SolidColorBrush(color);
         }
         catch { }
-    }
-
-    private void ColorPicker_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (_isLoading || sender is not Border border) return;
-
-        string currentHex;
-        if (border == GreenPreview) currentHex = _settings.ColorGreen;
-        else if (border == YellowPreview) currentHex = _settings.ColorYellow;
-        else currentHex = _settings.ColorRed;
-
-        var dialog = new System.Windows.Forms.ColorDialog();
-        try
-        {
-            var c = (Color)ColorConverter.ConvertFromString(currentHex);
-            dialog.Color = System.Drawing.Color.FromArgb(c.R, c.G, c.B);
-        }
-        catch { }
-        dialog.FullOpen = true;
-
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-        {
-            var hex = $"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}";
-            if (border == GreenPreview) _settings.ColorGreen = hex;
-            else if (border == YellowPreview) _settings.ColorYellow = hex;
-            else _settings.ColorRed = hex;
-
-            UpdateColorPreviews();
-            _overlay?.ApplySettings(_settings);
-            SaveSettings();
-        }
     }
 
     // Position marker drag
