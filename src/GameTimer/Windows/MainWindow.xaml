@@ -98,6 +98,34 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,16"/>
         </Style>
+        <!-- A colour swatch: a round radio button (keyboard and screen readers reach it like any radio) -->
+        <Style x:Key="SwatchRadio" TargetType="RadioButton">
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Ring" CornerRadius="13" BorderThickness="1" Padding="2"
+                                BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}">
+                            <Border CornerRadius="10" Background="{TemplateBinding Background}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ring" Property="BorderThickness" Value="3"/>
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+                                <Setter TargetName="Ring" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -420,7 +448,7 @@
                                     <Border Grid.Column="1" x:Name="GreenPreview" Width="32" Height="32" CornerRadius="16" Margin="0,0,12,0"
                                             BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}" BorderThickness="1"/>
                                     <WrapPanel Grid.Column="2" x:Name="GreenPalette" VerticalAlignment="Center"/>
-                                    <ui:TextBox Grid.Column="3" x:Name="GreenHex" Width="96" MaxLength="7" VerticalAlignment="Center"
+                                    <ui:TextBox Grid.Column="3" x:Name="GreenHex" Width="96" AutomationProperties.LabeledBy="{Binding ElementName=NormalZoneLabel}" MaxLength="7" VerticalAlignment="Center"
                                                 LostKeyboardFocus="ColorHex_LostFocus" KeyDown="ColorHex_KeyDown"/>
                                 </Grid>
                                 <Grid Margin="0,4">
@@ -434,7 +462,7 @@
                                     <Border Grid.Column="1" x:Name="YellowPreview" Width="32" Height="32" CornerRadius="16" Margin="0,0,12,0"
                                             BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}" BorderThickness="1"/>
                                     <WrapPanel Grid.Column="2" x:Name="YellowPalette" VerticalAlignment="Center"/>
-                                    <ui:TextBox Grid.Column="3" x:Name="YellowHex" Width="96" MaxLength="7" VerticalAlignment="Center"
+                                    <ui:TextBox Grid.Column="3" x:Name="YellowHex" Width="96" AutomationProperties.LabeledBy="{Binding ElementName=WarningZoneLabel}" MaxLength="7" VerticalAlignment="Center"
                                                 LostKeyboardFocus="ColorHex_LostFocus" KeyDown="ColorHex_KeyDown"/>
                                 </Grid>
                                 <Grid Margin="0,4">
@@ -448,7 +476,7 @@
                                     <Border Grid.Column="1" x:Name="RedPreview" Width="32" Height="32" CornerRadius="16" Margin="0,0,12,0"
                                             BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}" BorderThickness="1"/>
                                     <WrapPanel Grid.Column="2" x:Name="RedPalette" VerticalAlignment="Center"/>
-                                    <ui:TextBox Grid.Column="3" x:Name="RedHex" Width="96" MaxLength="7" VerticalAlignment="Center"
+                                    <ui:TextBox Grid.Column="3" x:Name="RedHex" Width="96" AutomationProperties.LabeledBy="{Binding ElementName=AlertZoneLabel}" MaxLength="7" VerticalAlignment="Center"
                                                 LostKeyboardFocus="ColorHex_LostFocus" KeyDown="ColorHex_KeyDown"/>
                                 </Grid>
                             </StackPanel>

@@ -122,9 +122,6 @@
   <data name="Zone_Alert" xml:space="preserve">
     <value>Тревога</value>
   </data>
-  <data name="Tab_Notifications" xml:space="preserve">
-    <value>Уведомления</value>
-  </data>
   <data name="AlertPoints" xml:space="preserve">
     <value>Точки звуковых уведомлений</value>
   </data>

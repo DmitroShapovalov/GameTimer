@@ -91,6 +91,7 @@ public partial class MainWindow : FluentWindow
 
         _isLoading = false;
         ValidateTimerInput();
+        UpdateMarkerPreview(); // skipped while loading
 
         Loaded += (_, _) => FocusTimeInput();
         StartButton.ToolTip = "Enter";
@@ -256,6 +257,7 @@ public partial class MainWindow : FluentWindow
 
         // Position marker (deferred until canvas has actual size)
         PositionCanvas.Loaded += (_, _) => PlaceMarker();
+        PositionCanvas.LostMouseCapture += (_, _) => _isDragging = false; // Alt+Tab mid-drag
         PositionCanvas.SizeChanged += (_, _) => PlaceMarker(); // the window is resizable
 
         // Notifications tab
@@ -324,6 +326,7 @@ public partial class MainWindow : FluentWindow
         {
             _isLoading = false;
         }
+        UpdateMarkerPreview();
 
         _overlay?.ApplySettings(_settings);
     }
@@ -1023,16 +1026,15 @@ public partial class MainWindow : FluentWindow
         panel.Children.Clear();
         foreach (var hex in Palette)
         {
-            bool selected = hex.Equals(current, StringComparison.OrdinalIgnoreCase);
-            var swatch = new Border
+            var swatch = new System.Windows.Controls.RadioButton
             {
-                Width = 24, Height = 24, CornerRadius = new CornerRadius(12), Margin = new Thickness(0, 0, 6, 0),
-                BorderThickness = new Thickness(selected ? 3 : 1), Cursor = System.Windows.Input.Cursors.Hand, ToolTip = hex,
-                BorderBrush = selected ? (Brush)FindResource("AccentFillColorDefaultBrush") : (Brush)FindResource("ControlStrongStrokeColorDefaultBrush"),
+                Style = (Style)FindResource("SwatchRadio"), GroupName = "swatch-" + zone, ToolTip = hex,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+                IsChecked = hex.Equals(current, StringComparison.OrdinalIgnoreCase),
             };
-            TrySetBackground(swatch, hex);
             System.Windows.Automation.AutomationProperties.SetName(swatch, hex);
-            swatch.MouseLeftButtonUp += (_, _) => SetZoneColor(zone, hex);
+            // after IsChecked above, so building doesn't apply; deferred: applying rebuilds this panel
+            swatch.Checked += (_, _) => Dispatcher.BeginInvoke(() => SetZoneColor(zone, hex));
             panel.Children.Add(swatch);
         }
     }
@@ -1040,9 +1042,13 @@ public partial class MainWindow : FluentWindow
     private void SetZoneColor(char zone, string hex)
     {
         if (_isLoading) return;
+        string current = zone == 'g' ? _settings.ColorGreen : zone == 'y' ? _settings.ColorYellow : _settings.ColorRed;
+        if (hex.Equals(current, StringComparison.OrdinalIgnoreCase)) return;
         if (zone == 'g') _settings.ColorGreen = hex;
         else if (zone == 'y') _settings.ColorYellow = hex;
         else _settings.ColorRed = hex;
+        // The box shows the new colour even while focused, so leaving it later doesn't put the old one back
+        (zone == 'g' ? GreenHex : zone == 'y' ? YellowHex : RedHex).Text = hex.ToUpperInvariant();
         UpdateColorPreviews();
         _overlay?.ApplySettings(_settings);
         SaveSettings();
@@ -1077,13 +1083,14 @@ public partial class MainWindow : FluentWindow
     /// <summary>The marker on the small screen looks like the countdown: zone colour, size, opacity, background.</summary>
     private void UpdateMarkerPreview()
     {
-        if (PreviewText == null || PositionMarker == null) return;
+        // Checked handlers fire inside InitializeComponent, before every element (and the settings) exist
+        if (_isLoading || _settings == null || PreviewText == null || PositionMarker == null || PreviewWarning == null || PreviewAlert == null) return;
         string hex = PreviewAlert.IsChecked == true ? _settings.ColorRed
             : PreviewWarning.IsChecked == true ? _settings.ColorYellow : _settings.ColorGreen;
         try { PreviewText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)); }
         catch { PreviewText.Foreground = Brushes.White; }
         PreviewText.Text = PreviewAlert.IsChecked == true ? "02:00" : PreviewWarning.IsChecked == true ? "12:00" : "1:30:00";
-        PreviewText.FontSize = Math.Max(9, _settings.FontSize * 0.5); // the preview screen is about half size
+        PreviewText.FontSize = Math.Max(9, _settings.FontSize * 0.35); // the preview screen is a small screen
         PositionMarker.Opacity = _settings.Opacity / 100.0;
         PositionMarker.Background = _settings.ShowBackground ? new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)) : Brushes.Transparent;
         // The marker's size changed: keep it where the overlay is

@@ -122,9 +122,6 @@
   <data name="Zone_Alert" xml:space="preserve">
     <value>Alert</value>
   </data>
-  <data name="Tab_Notifications" xml:space="preserve">
-    <value>Notifications</value>
-  </data>
   <data name="AlertPoints" xml:space="preserve">
     <value>Sound alert points</value>
   </data>
