@@ -99,6 +99,9 @@ public partial class MainWindow : FluentWindow
         LoadSettingsToUI();
         ApplyLocalization();
         SetupTrayIcon();
+        _timer.StateChanged += _ => { _lastTickMinutes = double.NaN; UpdateTrayStatus(); };
+        _sessionLog.Added += e => Dispatcher.BeginInvoke(() => NotifyParentChange(e));
+        _scheduleSnapshot = ScheduleSnapshot();
 
         _isLoading = false;
         ValidateTimerInput();
@@ -186,6 +189,8 @@ public partial class MainWindow : FluentWindow
         SoundCustom.Content = Loc.Get("CustomFile");
         BrowseButton.Content = Loc.Get("Browse");
         PreviewButton.Content = Loc.Get("Preview");
+        WindowsNotificationsTitle.Text = Loc.Get("Notif_Setting_Title");
+        WindowsNotificationsDesc.Text = Loc.Get("Notif_Setting_Desc");
         NewAlertMinutes.PlaceholderText = Loc.Get("MinPlaceholder");
 
         // Refresh alerts list to update "min before timer" text
@@ -279,6 +284,7 @@ public partial class MainWindow : FluentWindow
         // Notifications tab
         AlertsList.ItemsSource = _settings.AlertPoints;
 
+        WindowsNotificationsToggle.IsChecked = _settings.WindowsNotifications;
         if (string.IsNullOrEmpty(_settings.CustomSoundPath))
         {
             SoundBuiltIn.IsChecked = true;
@@ -322,6 +328,12 @@ public partial class MainWindow : FluentWindow
     private void OnSettingsChanged(object source)
     {
         if (source == this) return;
+        // The schedule changed from a phone in a way that matters today: tell the child (after the reload below)
+        var snapshot = ScheduleSnapshot();
+        int today = (int)DateTime.Now.DayOfWeek;
+        bool todayChanged = snapshot[0] != _scheduleSnapshot[0] || snapshot[1 + today] != _scheduleSnapshot[1 + today];
+        _scheduleSnapshot = snapshot;
+        if (todayChanged) Dispatcher.BeginInvoke(NotifyScheduleChanged);
 
         _isLoading = true;
         try
@@ -839,6 +851,8 @@ public partial class MainWindow : FluentWindow
 
         UpdateRing(remaining);
         UpdateStatusLines(); // the end moves with − / + (from here or a phone)
+        CheckRedZone(remaining);
+        UpdateTrayStatus();
         if (remaining.TotalHours >= 1)
             RemainingText.Text = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
         else
@@ -1645,24 +1659,10 @@ public partial class MainWindow : FluentWindow
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
             Text = "GameTimer",
-            Visible = false
+            Visible = true // always: it shows the time left, and Windows notifications come from it
         };
 
-        // Draw alarm clock icon
-        using var bitmap = new System.Drawing.Bitmap(32, 32);
-        using var g = System.Drawing.Graphics.FromImage(bitmap);
-        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        g.Clear(System.Drawing.Color.Transparent);
-        var legPen = new System.Drawing.Pen(System.Drawing.Color.White, 2f);
-        g.DrawLine(legPen, 7, 5, 10, 8);
-        g.DrawLine(legPen, 25, 5, 22, 8);
-        g.FillEllipse(new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(0, 120, 212)), 6, 6, 20, 20);
-        g.DrawEllipse(new System.Drawing.Pen(System.Drawing.Color.White, 1.5f), 6, 6, 20, 20);
-        var handPen = new System.Drawing.Pen(System.Drawing.Color.White, 2f);
-        g.DrawLine(handPen, 16, 16, 16, 10);
-        g.DrawLine(handPen, 16, 16, 21, 16);
-        g.FillEllipse(System.Drawing.Brushes.White, 14, 26, 4, 4);
-        _trayIcon.Icon = System.Drawing.Icon.FromHandle(bitmap.GetHicon());
+        UpdateTrayStatus();
 
         UpdateTrayMenu();
         _trayIcon.DoubleClick += (_, _) => ShowFromTray();
@@ -1675,6 +1675,202 @@ public partial class MainWindow : FluentWindow
         menu.Items.Add(Loc.Get("TrayOpen"), null, (_, _) => ShowFromTray());
         menu.Items.Add(Loc.Get("TrayExit"), null, (_, _) => TrayExit());
         _trayIcon.ContextMenuStrip = menu;
+        _trayTip = null; // the language may have changed
+        UpdateTrayStatus();
+    }
+
+    private string? _trayTip;
+    private System.Drawing.Color? _trayColor;
+    private IntPtr _trayIconHandle;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool DestroyIcon(IntPtr handle);
+
+    // The tray icon shows the time left: its tooltip, and the clock in the zone colour while a timer runs
+    private void UpdateTrayStatus()
+    {
+        if (_trayIcon == null) return;
+        bool running = _timer.IsRunning;
+        var remaining = _timer.Remaining;
+        string tip = running
+            ? $"GameTimer \u2014 {string.Format(Loc.Get("Tray_Left"), LimitText(MinutesLeft(remaining)))}"
+            : "GameTimer";
+        if (tip != _trayTip)
+        {
+            _trayTip = tip;
+            _trayIcon.Text = tip.Length > 127 ? tip.Substring(0, 127) : tip;
+        }
+
+        var color = System.Drawing.Color.FromArgb(0, 120, 212);
+        if (running)
+        {
+            string hex = remaining.TotalMinutes <= _settings.RedThreshold ? _settings.ColorRed
+                : remaining.TotalMinutes <= _settings.YellowThreshold ? _settings.ColorYellow : _settings.ColorGreen;
+            try { color = System.Drawing.ColorTranslator.FromHtml(hex); } catch { /* keep the default */ }
+        }
+        if (color != _trayColor)
+        {
+            _trayColor = color;
+            DrawTrayIcon(color);
+        }
+    }
+
+    private static int MinutesLeft(TimeSpan remaining) => Math.Max(0, (int)Math.Ceiling(remaining.TotalMinutes));
+
+    // An alarm clock in the given colour
+    private void DrawTrayIcon(System.Drawing.Color fill)
+    {
+        if (_trayIcon == null) return;
+        using var bitmap = new System.Drawing.Bitmap(32, 32);
+        using (var g = System.Drawing.Graphics.FromImage(bitmap))
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.Clear(System.Drawing.Color.Transparent);
+            using var legPen = new System.Drawing.Pen(System.Drawing.Color.White, 2f);
+            g.DrawLine(legPen, 7, 5, 10, 8);
+            g.DrawLine(legPen, 25, 5, 22, 8);
+            using var fillBrush = new System.Drawing.SolidBrush(fill);
+            g.FillEllipse(fillBrush, 6, 6, 20, 20);
+            using var rim = new System.Drawing.Pen(System.Drawing.Color.White, 1.5f);
+            g.DrawEllipse(rim, 6, 6, 20, 20);
+            using var handPen = new System.Drawing.Pen(System.Drawing.Color.White, 2f);
+            g.DrawLine(handPen, 16, 16, 16, 10);
+            g.DrawLine(handPen, 16, 16, 21, 16);
+            g.FillEllipse(System.Drawing.Brushes.White, 14, 26, 4, 4);
+        }
+        var handle = bitmap.GetHicon();
+        var old = _trayIcon.Icon;
+        var oldHandle = _trayIconHandle;
+        _trayIcon.Icon = System.Drawing.Icon.FromHandle(handle);
+        _trayIconHandle = handle;
+        old?.Dispose();
+        if (oldHandle != IntPtr.Zero) DestroyIcon(oldHandle);
+    }
+
+    #endregion
+
+    #region Windows notifications
+
+    // Only what matters to the child's play: the red zone, and a parent's change from a phone.
+    // A change made on this PC is not announced (the parent is right here).
+
+    private double _lastTickMinutes = double.NaN;
+    private string[] _scheduleSnapshot = new string[8];
+
+    // [0] = on / off, [1 + day] = that day (indexed by DayOfWeek), to tell a change that matters today
+    private string[] ScheduleSnapshot()
+    {
+        var s = new string[8];
+        s[0] = _settings.ScheduleEnabled ? "1" : "0";
+        for (int d = 0; d < 7; d++)
+            s[1 + d] = _settings.Week is { Count: 7 } w
+                ? $"{(w[d].Allowed ? 1 : 0)},{w[d].LimitMinutes},{w[d].WindowStartMinutes},{w[d].WindowEndMinutes}"
+                : "";
+        return s;
+    }
+
+    // Once when the time left crosses into the red zone (not when a timer starts or resumes inside it)
+    private void CheckRedZone(TimeSpan remaining)
+    {
+        double minutes = remaining.TotalMinutes;
+        double red = _settings.RedThreshold;
+        if (_timer.IsRunning && minutes > 0 && minutes <= red && _lastTickMinutes > red)
+        {
+            ShowNotification(
+                string.Format(Loc.Get("Notif_RedTitle"), LimitText(MinutesLeft(remaining))),
+                string.Format(Loc.Get("Notif_RedBody"), string.Format(Loc.Get("Then_Action"), Loc.Get("Action_" + _settings.Action))));
+        }
+        _lastTickMinutes = _timer.IsRunning ? minutes : double.NaN;
+    }
+
+    private void NotifyParentChange(GameTimer.Models.SessionEvent e)
+    {
+        if (e.Source != GameTimer.Models.ActionSource.Phone) return;
+        // "End now" from a phone is an Extended(-N) followed at once by the expiry: nothing left to tell
+        if (e.Type == GameTimer.Models.SessionEventType.Extended && !_timer.IsRunning) return;
+        string left = LimitText(MinutesLeft(_timer.Remaining));
+        string? body = e.Type switch
+        {
+            GameTimer.Models.SessionEventType.Extended when (e.Minutes ?? 0) > 0 =>
+                string.Format(Loc.Get("Notif_Added"), LimitText(e.Minutes!.Value), left),
+            GameTimer.Models.SessionEventType.Extended when (e.Minutes ?? 0) < 0 =>
+                string.Format(Loc.Get("Notif_Removed"), LimitText(-e.Minutes!.Value), left),
+            GameTimer.Models.SessionEventType.Started =>
+                string.Format(Loc.Get("Notif_Started"), LimitText(Math.Max(1, e.Minutes ?? MinutesLeft(_timer.Remaining)))),
+            GameTimer.Models.SessionEventType.Stopped or GameTimer.Models.SessionEventType.Reset => Loc.Get("Notif_Stopped"),
+            GameTimer.Models.SessionEventType.ScheduleSkipped => Loc.Get("Notif_Lifted"),
+            _ => null
+        };
+        if (body != null) ShowNotification(Loc.Get("Notif_ParentTitle"), body);
+    }
+
+    private void NotifyScheduleChanged()
+    {
+        var dec = _timer.CurrentSchedule();
+        string body = dec.Status switch
+        {
+            ScheduleStatus.Allowed => string.Format(Loc.Get("Sched_St_Allowed"), dec.AvailableSeconds / 60),
+            ScheduleStatus.OutsideWindow => Loc.Get("Sched_St_OutsideWindow"),
+            ScheduleStatus.DayDisabled => Loc.Get("Sched_St_DayOff"),
+            ScheduleStatus.LimitReached => Loc.Get("Sched_St_LimitReached"),
+            ScheduleStatus.SkippedToday => Loc.Get("Sched_St_Skipped"),
+            _ => Loc.Get("Sched_St_Off")
+        };
+        ShowNotification(Loc.Get("Notif_ScheduleTitle"), body);
+    }
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll")]
+    private static extern int SHQueryUserNotificationState(out int state);
+
+    // QUNS_ACCEPTS_NOTIFICATIONS (5) or QUNS_QUIET_TIME (6): not a full-screen game, video or presentation
+    private static bool CanNotify()
+    {
+        try { return SHQueryUserNotificationState(out var s) != 0 || s is 5 or 6; }
+        catch { return true; }
+    }
+
+    // One phone action can log two events (a lift stops the timer too) or cross into the red zone at
+    // once; a new balloon replaces the previous one, so what arrives together is shown together
+    private string? _pendingTitle;
+    private readonly List<string> _pendingBodies = new();
+    private System.Windows.Threading.DispatcherTimer? _notifyTimer;
+
+    private void ShowNotification(string title, string body)
+    {
+        if (!_settings.WindowsNotifications || _trayIcon == null) return;
+        _pendingTitle ??= title; // the first title (the parent's change, when there is one) leads
+        if (!_pendingBodies.Contains(body)) _pendingBodies.Add(body);
+        if (_notifyTimer == null)
+        {
+            _notifyTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+            _notifyTimer.Tick += (_, _) => { _notifyTimer!.Stop(); FlushNotification(); };
+        }
+        _notifyTimer.Stop();
+        _notifyTimer.Start();
+    }
+
+    // A Windows notification from the tray icon. Over a full-screen game it stays quiet: the overlay
+    // pulses instead (the timer on screen is what the child sees there).
+    private void FlushNotification()
+    {
+        var title = _pendingTitle;
+        var body = string.Join(" ", _pendingBodies);
+        _pendingTitle = null;
+        _pendingBodies.Clear();
+        if (title == null || _trayIcon == null || !_settings.WindowsNotifications) return;
+        if (!CanNotify())
+        {
+            _overlay?.PlayPulse();
+            return;
+        }
+        _trayIcon.ShowBalloonTip(8000, title, body, System.Windows.Forms.ToolTipIcon.None);
+    }
+
+    private void WindowsNotifications_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading) return;
+        _settings.WindowsNotifications = WindowsNotificationsToggle.IsChecked == true;
+        SaveSettings();
     }
 
     private void ShowFromTray() => BringToFront();
@@ -1696,7 +1892,6 @@ public partial class MainWindow : FluentWindow
         Topmost = false;
         Focus();
 
-        if (_trayIcon != null) _trayIcon.Visible = false;
         FocusTimeInput();
     }
 
@@ -1759,6 +1954,7 @@ public partial class MainWindow : FluentWindow
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
             _trayIcon = null;
+            if (_trayIconHandle != IntPtr.Zero) { DestroyIcon(_trayIconHandle); _trayIconHandle = IntPtr.Zero; }
         }
         System.Windows.Application.Current.Shutdown();
     }
@@ -1772,7 +1968,6 @@ public partial class MainWindow : FluentWindow
         e.Cancel = true;
         SetUnlocked(false); // require Windows Hello again next time the window opens
         Hide();
-        if (_trayIcon != null) _trayIcon.Visible = true;
     }
 
     #endregion
@@ -2143,6 +2338,7 @@ public partial class MainWindow : FluentWindow
 
     private void SaveSchedule()
     {
+        _scheduleSnapshot = ScheduleSnapshot(); // a change made here is not announced
         SaveSettings();
         _timer.ReevaluateSchedule();
         UpdateScheduleStatus();

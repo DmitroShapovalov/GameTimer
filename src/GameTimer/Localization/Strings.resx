@@ -611,4 +611,40 @@
   <data name="Sched_LimitRange" xml:space="preserve">
     <value>Enter the minutes, from 1 to 1440.</value>
   </data>
+  <data name="Notif_Setting_Title" xml:space="preserve">
+    <value>Windows notifications</value>
+  </data>
+  <data name="Notif_Setting_Desc" xml:space="preserve">
+    <value>Only when time is almost up (the red zone) and when a parent changes the time or the schedule from a phone. Never over a full-screen game.</value>
+  </data>
+  <data name="Notif_RedTitle" xml:space="preserve">
+    <value>{0} left</value>
+  </data>
+  <data name="Notif_RedBody" xml:space="preserve">
+    <value>Time to save your game. {0}</value>
+  </data>
+  <data name="Notif_ParentTitle" xml:space="preserve">
+    <value>A parent changed your time</value>
+  </data>
+  <data name="Notif_Added" xml:space="preserve">
+    <value>+{0}. Time left: {1}.</value>
+  </data>
+  <data name="Notif_Removed" xml:space="preserve">
+    <value>−{0}. Time left: {1}.</value>
+  </data>
+  <data name="Notif_Started" xml:space="preserve">
+    <value>A timer was started: {0}.</value>
+  </data>
+  <data name="Notif_Stopped" xml:space="preserve">
+    <value>The timer was stopped.</value>
+  </data>
+  <data name="Notif_Lifted" xml:space="preserve">
+    <value>Today's schedule is lifted.</value>
+  </data>
+  <data name="Notif_ScheduleTitle" xml:space="preserve">
+    <value>A parent changed the schedule</value>
+  </data>
+  <data name="Tray_Left" xml:space="preserve">
+    <value>{0} left</value>
+  </data>
 </root>

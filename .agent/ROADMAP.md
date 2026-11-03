@@ -239,8 +239,8 @@ Owner's decisions (2026-11-01):
 | W2 | Status page: ring, state badge, − / + with a step, Lift, More menu; start form with presets | ✓ (PR #47) |
 | W3 | Settings and Phones: setting cards applied at once; a Phones page; About | ✓ (PR #48) |
 | W4 | Overlay page: live preview, colour swatches, alert chips and sounds | ✓ (PR #49) |
-| W5 | History and Schedule as on the phone: week bars + a day editor (copy to weekdays/weekend/every day); history by day with icons, colours and filters | in review |
-| W6 | Windows notifications (red zone, a parent changed the limits; quiet in full screen) and time left in the tray | ☐ |
+| W5 | History and Schedule as on the phone: week bars + a day editor (copy to weekdays/weekend/every day); history by day with icons, colours and filters | ✓ (PR #50) |
+| W6 | Windows notifications (red zone, a parent changed the limits; quiet in full screen) and time left in the tray | in review |
 | W7 | Remove the old phone web page and the v1 API | ☐ |
 | R1 | "Ask for more time": child on the PC → parent on the phone (+15 / +30 / No) | ☐ |
 

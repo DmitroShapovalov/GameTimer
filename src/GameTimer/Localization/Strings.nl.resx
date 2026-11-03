@@ -611,4 +611,40 @@
   <data name="Sched_LimitRange" xml:space="preserve">
     <value>Voer de minuten in, van 1 tot 1440.</value>
   </data>
+  <data name="Notif_Setting_Title" xml:space="preserve">
+    <value>Windows-meldingen</value>
+  </data>
+  <data name="Notif_Setting_Desc" xml:space="preserve">
+    <value>Alleen als de tijd bijna op is (de rode zone) en als een ouder de tijd of het schema vanaf een telefoon wijzigt. Nooit over een game op volledig scherm.</value>
+  </data>
+  <data name="Notif_RedTitle" xml:space="preserve">
+    <value>Nog {0}</value>
+  </data>
+  <data name="Notif_RedBody" xml:space="preserve">
+    <value>Tijd om je spel op te slaan. {0}</value>
+  </data>
+  <data name="Notif_ParentTitle" xml:space="preserve">
+    <value>Een ouder heeft je tijd gewijzigd</value>
+  </data>
+  <data name="Notif_Added" xml:space="preserve">
+    <value>+{0}. Nog over: {1}.</value>
+  </data>
+  <data name="Notif_Removed" xml:space="preserve">
+    <value>−{0}. Nog over: {1}.</value>
+  </data>
+  <data name="Notif_Started" xml:space="preserve">
+    <value>Er is een timer gestart: {0}.</value>
+  </data>
+  <data name="Notif_Stopped" xml:space="preserve">
+    <value>De timer is gestopt.</value>
+  </data>
+  <data name="Notif_Lifted" xml:space="preserve">
+    <value>Het schema van vandaag is opgeheven.</value>
+  </data>
+  <data name="Notif_ScheduleTitle" xml:space="preserve">
+    <value>Een ouder heeft het schema gewijzigd</value>
+  </data>
+  <data name="Tray_Left" xml:space="preserve">
+    <value>nog {0}</value>
+  </data>
 </root>
