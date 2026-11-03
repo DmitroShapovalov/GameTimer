@@ -611,4 +611,40 @@
   <data name="Sched_LimitRange" xml:space="preserve">
     <value>Введите минуты, от 1 до 1440.</value>
   </data>
+  <data name="Notif_Setting_Title" xml:space="preserve">
+    <value>Уведомления Windows</value>
+  </data>
+  <data name="Notif_Setting_Desc" xml:space="preserve">
+    <value>Только когда время почти вышло (красная зона) и когда родитель меняет время или расписание с телефона. Никогда поверх полноэкранной игры.</value>
+  </data>
+  <data name="Notif_RedTitle" xml:space="preserve">
+    <value>Осталось {0}</value>
+  </data>
+  <data name="Notif_RedBody" xml:space="preserve">
+    <value>Пора сохранить игру. {0}</value>
+  </data>
+  <data name="Notif_ParentTitle" xml:space="preserve">
+    <value>Родитель изменил твоё время</value>
+  </data>
+  <data name="Notif_Added" xml:space="preserve">
+    <value>+{0}. Осталось: {1}.</value>
+  </data>
+  <data name="Notif_Removed" xml:space="preserve">
+    <value>−{0}. Осталось: {1}.</value>
+  </data>
+  <data name="Notif_Started" xml:space="preserve">
+    <value>Запущен таймер: {0}.</value>
+  </data>
+  <data name="Notif_Stopped" xml:space="preserve">
+    <value>Таймер остановлен.</value>
+  </data>
+  <data name="Notif_Lifted" xml:space="preserve">
+    <value>Расписание на сегодня снято.</value>
+  </data>
+  <data name="Notif_ScheduleTitle" xml:space="preserve">
+    <value>Родитель изменил расписание</value>
+  </data>
+  <data name="Tray_Left" xml:space="preserve">
+    <value>осталось {0}</value>
+  </data>
 </root>

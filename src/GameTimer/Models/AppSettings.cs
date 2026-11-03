@@ -57,6 +57,12 @@ public class AppSettings
     // Stop the child closing the app from Task Manager (deny terminate + watchdog). Off by default.
     public bool TamperProtection { get; set; } = false;
 
+    /// <summary>
+    /// Windows notifications on this PC: only the red zone and a parent's change from a phone (time or
+    /// schedule); never over a full-screen game. On by default.
+    /// </summary>
+    public bool WindowsNotifications { get; set; } = true;
+
     // Phone remote over home Wi-Fi (embedded server). Off by default.
     public bool RemoteEnabled { get; set; } = false;
     public int RemotePort { get; set; } = 5123;
