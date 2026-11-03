@@ -42,7 +42,7 @@
   </resheader>
 
   <data name="Tab_Timer" xml:space="preserve">
-    <value>Таймер</value>
+    <value>Статус</value>
   </data>
   <data name="Mode" xml:space="preserve">
     <value>Режим</value>
@@ -514,5 +514,17 @@
   </data>
   <data name="Lock_Tooltip" xml:space="preserve">
     <value>Зміни, які дають більше часу або змінюють налаштування, потребують батьків. Одне розблокування Windows Hello діє 5 хвилин; перехід до іншої програми, згортання або закриття вікна знову блокує.</value>
+  </data>
+  <data name="More" xml:space="preserve">
+    <value>Більше</value>
+  </data>
+  <data name="EndAt_Menu" xml:space="preserve">
+    <value>Закінчити о…</value>
+  </data>
+  <data name="Then_Action" xml:space="preserve">
+    <value>Потім: {0}</value>
+  </data>
+  <data name="Until_Time" xml:space="preserve">
+    <value>до {0}</value>
   </data>
 </root>

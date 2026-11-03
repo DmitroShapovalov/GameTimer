@@ -111,94 +111,131 @@
                         <TextBlock x:Name="TabTimerText" Text="Timer"/>
                     </StackPanel>
                 </TabItem.Header>
-                <StackPanel Margin="16">
+                <!-- Status: the PC's state first (as on the phone), then the everyday actions; with no timer,
+                     the start form takes the actions' place -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="16,8,16,16">
                     <ui:InfoBar x:Name="InterruptionBar" Severity="Warning" IsOpen="False" IsClosable="False"
                                 Margin="0,0,0,8"/>
                     <ui:Button x:Name="InterruptionDismiss" Content="Got it" Appearance="Secondary"
                                HorizontalAlignment="Right" Margin="0,0,0,12" Visibility="Collapsed"
                                Click="InterruptionDismiss_Click"/>
-                    <TextBlock x:Name="ModeLabel" Text="Mode" Style="{StaticResource SectionLabel}"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                        <RadioButton x:Name="ModeInterval" Content="Interval" IsChecked="True"
-                                     Checked="Mode_Changed" Margin="0,0,16,0"/>
-                        <RadioButton x:Name="ModeAbsolute" Content="Time of day"
-                                     Checked="Mode_Changed"/>
-                    </StackPanel>
+                    <TextBlock x:Name="StatusHeader" Text="Status" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+                    <!-- Ring and actions side by side; on a narrow window the actions go below the ring -->
+                    <WrapPanel>
+                        <!-- The ring: the time left against the timer's length (MainWindow.UpdateRing) -->
+                        <Grid Width="200" Height="200" Margin="0,0,32,16" VerticalAlignment="Top">
+                            <Ellipse Stroke="{DynamicResource ControlStrongStrokeColorDefaultBrush}" StrokeThickness="12" Margin="6" Opacity="0.35"/>
+                            <Path x:Name="RingArc" StrokeThickness="12" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Stroke="{DynamicResource SystemFillColorSuccessBrush}"/>
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock x:Name="RemainingText" Text="" FontSize="34" FontWeight="SemiBold"
+                                           FontFamily="Segoe UI Variable Display, Segoe UI" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="EndTimeText" Text="" FontSize="13" HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Width="340">
+                            <Border x:Name="StateBadge" CornerRadius="12" Padding="12,4" HorizontalAlignment="Left"
+                                    Background="{DynamicResource SubtleFillColorSecondaryBrush}" Margin="0,0,0,8">
+                                <TextBlock x:Name="StatusText" Text="Timer not started" FontWeight="SemiBold"/>
+                            </Border>
+                            <TextBlock x:Name="ThenText" Text="" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,2"/>
+                            <TextBlock x:Name="ScheduleLineText" Text="" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,16"/>
 
-                    <StackPanel x:Name="IntervalPanel" Orientation="Horizontal" Margin="0,0,0,12">
-                        <TextBlock x:Name="HoursLabel" Text="Hours:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ui:TextBox x:Name="IntervalHours" Width="80"
-                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
-                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="1" VerticalAlignment="Center"
-                                 TextChanged="TimerInput_Changed"/>
-                        <TextBlock x:Name="MinutesLabel" Text="Minutes:" VerticalAlignment="Center" Margin="16,0,6,0"/>
-                        <ui:TextBox x:Name="IntervalMinutes" Width="80"
-                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
-                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="0" VerticalAlignment="Center"
-                                 TextChanged="TimerInput_Changed"/>
-                    </StackPanel>
+                            <!-- A running timer: − / + by a chosen step, Lift, and the rarer actions under More -->
+                            <StackPanel x:Name="RunningPanel" Visibility="Collapsed">
+                                <WrapPanel Margin="0,0,0,8">
+                                    <ui:Button x:Name="MinusButton" Content="−15 min" MinWidth="96" Height="34"
+                                               Margin="0,0,8,0" Click="Minus_Click"/>
+                                    <ui:Button x:Name="PlusButton" Content="+15 min" MinWidth="96" Height="34"
+                                               Appearance="Primary" Margin="0,0,12,0" Click="Plus_Click"/>
+                                    <TextBlock x:Name="StepLabel" Text="Step:" VerticalAlignment="Center" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <ComboBox x:Name="StepCombo" Width="80" VerticalAlignment="Center"
+                                              SelectionChanged="StepCombo_Changed"/>
+                                </WrapPanel>
+                            </StackPanel>
+                            <!-- Lift: with a timer, or without one while the schedule limits today -->
+                            <WrapPanel Margin="0,0,0,8">
+                                    <ui:Button x:Name="StopButton" Content="Lift restrictions" MinWidth="160" Height="34"
+                                               Margin="0,0,8,8" Click="Stop_Click" IsEnabled="False"/>
+                                    <ui:Button x:Name="MoreButton" Content="More" Height="34" Appearance="Secondary"
+                                               Icon="{ui:SymbolIcon MoreHorizontal24}" Click="MoreButton_Click">
+                                        <ui:Button.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem x:Name="EndAtMenu" Header="End at…" Click="EndAtMenu_Click"/>
+                                                <MenuItem x:Name="EndNowButton" Header="End now" Click="EndNow_Click" IsEnabled="False"/>
+                                                <MenuItem x:Name="ResetButton" Header="Reset" Click="Reset_Click" IsEnabled="False"/>
+                                            </ContextMenu>
+                                        </ui:Button.ContextMenu>
+                                    </ui:Button>
+                            </WrapPanel>
+                            <!-- End at: opened from More -->
+                            <StackPanel x:Name="EndAtPanel" Orientation="Horizontal" Visibility="Collapsed" Margin="0,4,0,0">
+                                    <TextBlock x:Name="EndAtLabel" Text="End at:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ui:TextBox x:Name="EndAtHour" Width="64" MaxLength="2" VerticalAlignment="Center"
+                                                PreviewTextInput="TimeInput_PreviewTextInput" GotKeyboardFocus="TimeInput_GotFocus"/>
+                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="4,0,4,0" FontWeight="Bold"/>
+                                    <ui:TextBox x:Name="EndAtMinute" Width="64" MaxLength="2" VerticalAlignment="Center"
+                                                PreviewTextInput="TimeInput_PreviewTextInput" GotKeyboardFocus="TimeInput_GotFocus"/>
+                                    <ui:Button x:Name="EndAtButton" Content="Set" Height="34" Margin="8,0,0,0" Click="EndAt_Click"/>
+                            </StackPanel>
 
-                    <StackPanel x:Name="AbsolutePanel" Orientation="Horizontal" Margin="0,0,0,12"
-                                Visibility="Collapsed">
-                        <TextBlock x:Name="HourLabel" Text="Hour:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ui:TextBox x:Name="AbsoluteHour" Width="80"
-                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
-                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="20" VerticalAlignment="Center"
-                                 TextChanged="TimerInput_Changed"/>
-                        <TextBlock Text=":" VerticalAlignment="Center" Margin="4,0,4,0" FontWeight="Bold"/>
-                        <ui:TextBox x:Name="AbsoluteMinute" Width="80"
-                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
-                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="00" VerticalAlignment="Center"
-                                 TextChanged="TimerInput_Changed"/>
-                    </StackPanel>
-
-                    <TextBlock x:Name="ValidationText" Text="" FontSize="12"
-                               Foreground="#FF6B6B" Margin="0,0,0,4" Visibility="Collapsed"/>
-
-                    <ui:Card Margin="0,4,0,12">
-                        <StackPanel>
-                            <TextBlock x:Name="StatusText" Text="Timer not started"
-                                       FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                            <TextBlock x:Name="RemainingText" Text=""
-                                       FontSize="28" FontWeight="Bold" FontFamily="Consolas"
-                                       Margin="0,4,0,0"/>
+                            <!-- No timer: For / Until, presets, the time, Start -->
+                            <StackPanel x:Name="StartPanel">
+                                <TextBlock x:Name="ModeLabel" Text="Mode" Style="{StaticResource SectionLabel}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                    <RadioButton x:Name="ModeInterval" Content="Interval" IsChecked="True" GroupName="Mode"
+                                                 Style="{StaticResource {x:Type ToggleButton}}" MinWidth="110" Height="32"
+                                                 Checked="Mode_Changed"/>
+                                    <RadioButton x:Name="ModeAbsolute" Content="Time of day" GroupName="Mode"
+                                                 Style="{StaticResource {x:Type ToggleButton}}" MinWidth="110" Height="32"
+                                                 Margin="4,0,0,0" Checked="Mode_Changed"/>
+                                </StackPanel>
+                                <StackPanel x:Name="IntervalPanel" Margin="0,0,0,12">
+                                    <WrapPanel x:Name="PresetPanel" Margin="0,0,0,8">
+                                        <ui:Button Content="0:30" Tag="30" MinWidth="60" Margin="0,0,6,6" Click="Preset_Click"/>
+                                        <ui:Button Content="1:00" Tag="60" MinWidth="60" Margin="0,0,6,6" Click="Preset_Click"/>
+                                        <ui:Button Content="1:30" Tag="90" MinWidth="60" Margin="0,0,6,6" Click="Preset_Click"/>
+                                        <ui:Button Content="2:00" Tag="120" MinWidth="60" Margin="0,0,6,6" Click="Preset_Click"/>
+                                    </WrapPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="HoursLabel" Text="Hours:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <ui:TextBox x:Name="IntervalHours" Width="72"
+                                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
+                                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="1" VerticalAlignment="Center"
+                                                 TextChanged="TimerInput_Changed"/>
+                                        <TextBlock x:Name="MinutesLabel" Text="Minutes:" VerticalAlignment="Center" Margin="16,0,6,0"/>
+                                        <ui:TextBox x:Name="IntervalMinutes" Width="72"
+                                                 PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
+                                                 GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="0" VerticalAlignment="Center"
+                                                 TextChanged="TimerInput_Changed"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel x:Name="AbsolutePanel" Orientation="Horizontal" Margin="0,0,0,12"
+                                            Visibility="Collapsed">
+                                    <TextBlock x:Name="HourLabel" Text="Hour:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ui:TextBox x:Name="AbsoluteHour" Width="72"
+                                             PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
+                                             GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="20" VerticalAlignment="Center"
+                                             TextChanged="TimerInput_Changed"/>
+                                    <TextBlock Text=":" VerticalAlignment="Center" Margin="4,0,4,0" FontWeight="Bold"/>
+                                    <ui:TextBox x:Name="AbsoluteMinute" Width="72"
+                                             PreviewKeyDown="TimeInput_PreviewKeyDown" PreviewTextInput="TimeInput_PreviewTextInput"
+                                             GotKeyboardFocus="TimeInput_GotFocus" MaxLength="2" Text="00" VerticalAlignment="Center"
+                                             TextChanged="TimerInput_Changed"/>
+                                </StackPanel>
+                                <TextBlock x:Name="ValidationText" Text="" FontSize="12"
+                                           Foreground="{DynamicResource SystemFillColorCriticalBrush}" Margin="0,0,0,4" Visibility="Collapsed"/>
+                                <ui:Button x:Name="StartButton" Content="Start" MinWidth="200" Height="36"
+                                           Click="Start_Click" Appearance="Primary" FontWeight="SemiBold"/>
+                            </StackPanel>
                         </StackPanel>
-                    </ui:Card>
-
-                    <!-- A running timer: − / + by a chosen step, a new end time -->
-                    <StackPanel x:Name="RunningPanel" Visibility="Collapsed" Margin="0,0,0,12">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock x:Name="StepLabel" Text="Step:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ComboBox x:Name="StepCombo" Width="90" VerticalAlignment="Center"
-                                      SelectionChanged="StepCombo_Changed"/>
-                            <ui:Button x:Name="MinusButton" Content="−15 min" Width="100" Height="34"
-                                       Margin="8,0,8,0" Click="Minus_Click"/>
-                            <ui:Button x:Name="PlusButton" Content="+15 min" Width="100" Height="34"
-                                       Click="Plus_Click"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="EndAtLabel" Text="End at:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ui:TextBox x:Name="EndAtHour" Width="64" MaxLength="2" VerticalAlignment="Center"
-                                        PreviewTextInput="TimeInput_PreviewTextInput" GotKeyboardFocus="TimeInput_GotFocus"/>
-                            <TextBlock Text=":" VerticalAlignment="Center" Margin="4,0,4,0" FontWeight="Bold"/>
-                            <ui:TextBox x:Name="EndAtMinute" Width="64" MaxLength="2" VerticalAlignment="Center"
-                                        PreviewTextInput="TimeInput_PreviewTextInput" GotKeyboardFocus="TimeInput_GotFocus"/>
-                            <ui:Button x:Name="EndAtButton" Content="Set" Height="34" Margin="8,0,0,0" Click="EndAt_Click"/>
-                        </StackPanel>
-                    </StackPanel>
-
-                    <WrapPanel Orientation="Horizontal">
-                        <ui:Button x:Name="StartButton" Content="Start" Width="100" Height="34"
-                                Margin="0,0,8,8" Click="Start_Click"
-                                Appearance="Success" FontWeight="Bold"/>
-                        <ui:Button x:Name="EndNowButton" Content="End now" Height="34" MinWidth="100"
-                                Margin="0,0,8,8" Click="EndNow_Click" IsEnabled="False" Appearance="Danger"/>
-                        <ui:Button x:Name="StopButton" Content="Lift restrictions" Height="34" MinWidth="100"
-                                Margin="0,0,8,8" Click="Stop_Click" IsEnabled="False"/>
-                        <ui:Button x:Name="ResetButton" Content="Reset" Width="100" Height="34"
-                                Margin="0,0,8,8" Click="Reset_Click" IsEnabled="False"/>
                     </WrapPanel>
                 </StackPanel>
+                </ScrollViewer>
             </TabItem>
             <!-- TAB: Schedule -->
             <TabItem>

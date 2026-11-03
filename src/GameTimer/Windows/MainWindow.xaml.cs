@@ -122,15 +122,19 @@ public partial class MainWindow : FluentWindow
         HoursLabel.Text = Loc.Get("Hours");
         MinutesLabel.Text = Loc.Get("Minutes");
         HourLabel.Text = Loc.Get("Hour");
+        StatusHeader.Text = Loc.Get("Tab_Timer");
         StartButton.Content = Loc.Get("Start");
         StopButton.Content = Loc.Get("Lift");
-        EndNowButton.Content = Loc.Get("EndNow");
+        EndNowButton.Header = Loc.Get("EndNow");
+        MoreButton.Content = Loc.Get("More");
+        EndAtMenu.Header = Loc.Get("EndAt_Menu");
         StepLabel.Text = Loc.Get("Step_Label");
         EndAtLabel.Text = Loc.Get("EndAt_Label");
         EndAtButton.Content = Loc.Get("EndAt_Set");
         UpdateStepButtons();
-        ResetButton.Content = Loc.Get("Reset");
+        ResetButton.Header = Loc.Get("Reset");
         StatusText.Text = Loc.Get(_timerStateKey);
+        UpdateStatusLines();
 
         // Display tab
         OverlayPositionLabel.Text = Loc.Get("OverlayPosition");
@@ -406,7 +410,7 @@ public partial class MainWindow : FluentWindow
         }
 #endif
 
-        // Ctrl+1..6 — switch pages (Timer, Schedule, History, Display, Notifications, Settings)
+        // Ctrl+1..6 — switch pages (Status, Schedule, History, Display, Notifications, Settings)
         if (ctrl)
         {
             int tab = e.Key switch
@@ -429,9 +433,17 @@ public partial class MainWindow : FluentWindow
         }
 
         // Esc — hide to tray (unless a dropdown is open: then Esc just closes it)
-        if (e.Key == Key.Escape && !LanguageCombo.IsDropDownOpen && !ActionCombo.IsDropDownOpen)
+        if (e.Key == Key.Escape && !LanguageCombo.IsDropDownOpen && !ActionCombo.IsDropDownOpen && !StepCombo.IsDropDownOpen)
         {
             Close(); // Window_Closing turns this into "minimize to tray"
+            e.Handled = true;
+            return;
+        }
+
+        // Enter in the End-at fields sets the new end
+        if (e.Key == Key.Enter && (EndAtHour.IsKeyboardFocusWithin || EndAtMinute.IsKeyboardFocusWithin))
+        {
+            EndAt_Click(EndAtButton, new RoutedEventArgs());
             e.Handled = true;
             return;
         }
@@ -671,17 +683,116 @@ public partial class MainWindow : FluentWindow
     private void UpdateButtonStates(bool running)
     {
         StartButton.IsEnabled = !running;
+        StartPanel.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
         // Lift also works without a timer while the schedule limits today (e.g. it has locked the PC)
         StopButton.IsEnabled = running || _timer.CurrentSchedule().Restricts;
+        StopButton.Visibility = StopButton.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
         StopButton.Content = Loc.Get(running ? "Lift" : "LiftToday");
+        MoreButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        if (!running) EndAtPanel.Visibility = Visibility.Collapsed;
         ResetButton.IsEnabled = running;
         EndNowButton.IsEnabled = running;
         RunningPanel.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        UpdateStatusLines();
         if (running && _timer.TargetTime is { } end && !EndAtHour.IsKeyboardFocusWithin && !EndAtMinute.IsKeyboardFocusWithin && !EndAtButton.IsPressed)
         {
             EndAtHour.Text = end.Hour.ToString("D2");
             EndAtMinute.Text = end.Minute.ToString("D2");
         }
+    }
+
+    private void MoreButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (MoreButton.ContextMenu is not { } menu) return;
+        menu.PlacementTarget = MoreButton;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    private void EndAtMenu_Click(object sender, RoutedEventArgs e)
+    {
+        EndAtPanel.Visibility = Visibility.Visible;
+        Dispatcher.BeginInvoke(() => { EndAtHour.Focus(); Keyboard.Focus(EndAtHour); },
+            System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    // 0:30 / 1:00 / 1:30 / 2:00 fill the duration
+    private void Preset_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string tag } || !int.TryParse(tag, out var minutes)) return;
+        IntervalHours.Text = (minutes / 60).ToString();
+        IntervalMinutes.Text = (minutes % 60).ToString("D2");
+        StartButton.Focus();
+    }
+
+    // ---- The ring and the lines next to it ----
+
+    // The ring's full length = the time used since this timer started (or was resumed) + the time left,
+    // on the monotonic clock: − / + from here or a phone and clock changes keep it right
+    private long _ringStartedAt;
+
+    private void UpdateRing(TimeSpan remaining)
+    {
+        double left = Math.Max(0, remaining.TotalSeconds);
+        if (_ringStartedAt == 0) _ringStartedAt = Environment.TickCount64;
+        double used = (Environment.TickCount64 - _ringStartedAt) / 1000.0;
+        double total = used + left;
+        DrawRing(total > 0 ? left / total : 0, ZoneBrush(remaining));
+    }
+
+    private void DrawRing(double fraction, Brush brush)
+    {
+        RingArc.Stroke = brush;
+        fraction = Math.Clamp(fraction, 0, 1);
+        if (fraction <= 0) { RingArc.Data = null; return; }
+        const double c = 100, r = 88; // the centre line of the 12 px track inside the 200 px ring
+        if (fraction >= 0.9999) { RingArc.Data = new EllipseGeometry(new Point(c, c), r, r); return; }
+        double angle = fraction * 2 * Math.PI;
+        var start = new Point(c, c - r);
+        var end = new Point(c + r * Math.Sin(angle), c - r * Math.Cos(angle));
+        var figure = new PathFigure { StartPoint = start, IsClosed = false };
+        figure.Segments.Add(new ArcSegment(end, new Size(r, r), 0, fraction > 0.5, SweepDirection.Clockwise, true));
+        RingArc.Data = new PathGeometry(new[] { figure });
+    }
+
+    // The overlay's zone colour for this time left (the parent's own colours)
+    private Brush ZoneBrush(TimeSpan remaining)
+    {
+        string hex = remaining.TotalMinutes <= _settings.RedThreshold ? _settings.ColorRed
+            : remaining.TotalMinutes <= _settings.YellowThreshold ? _settings.ColorYellow : _settings.ColorGreen;
+        try { return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)); }
+        catch { return (Brush)FindResource("SystemFillColorSuccessBrush"); }
+    }
+
+    private string _scheduleLine = "";
+
+    /// <summary>The end time under the ring, "Then: …", today's schedule line and the state badge's colour.</summary>
+    private void UpdateStatusLines()
+    {
+        if (EndTimeText == null) return;
+        bool running = _timer.IsRunning;
+        EndTimeText.Text = running && _timer.TargetTime is { } end ? string.Format(Loc.Get("Until_Time"), end.ToString("t")) : "";
+        ThenText.Text = running ? string.Format(Loc.Get("Then_Action"), Loc.Get("Action_" + _settings.Action)) : "";
+        var dec = _timer.CurrentSchedule();
+        _scheduleLine = dec.Status switch
+        {
+            ScheduleStatus.Allowed => string.Format(Loc.Get("Sched_St_Allowed"), dec.AvailableSeconds / 60),
+            ScheduleStatus.OutsideWindow => Loc.Get("Sched_St_OutsideWindow"),
+            ScheduleStatus.DayDisabled => Loc.Get("Sched_St_DayOff"),
+            ScheduleStatus.LimitReached => Loc.Get("Sched_St_LimitReached"),
+            ScheduleStatus.SkippedToday => Loc.Get("Sched_St_Skipped"),
+            _ => "", // no schedule: nothing to say
+        };
+        ScheduleLineText.Text = _scheduleLine;
+        ScheduleLineText.Visibility = _scheduleLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        string key = running ? "SystemFillColorSuccessBrush"
+            : _timer.State == TimerState.Expired ? "SystemFillColorCautionBrush" : "SubtleFillColorSecondaryBrush";
+        if (TryFindResource(key) is Brush b)
+        {
+            StateBadge.Background = b.Clone();
+            StateBadge.Background.Opacity = running || _timer.State == TimerState.Expired ? 0.25 : 1;
+        }
+        if (!running) DrawRing(0, RingArc.Stroke);
     }
 
     #endregion
@@ -699,6 +810,8 @@ public partial class MainWindow : FluentWindow
             EndAtMinute.Text = end.Minute.ToString("D2");
         }
 
+        UpdateRing(remaining);
+        UpdateStatusLines(); // the end moves with − / + (from here or a phone)
         if (remaining.TotalHours >= 1)
             RemainingText.Text = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
         else
@@ -778,12 +891,15 @@ public partial class MainWindow : FluentWindow
         return m >= 60 ? $"{m / 60}:{m % 60:D2}" : $"{m} {Loc.Get("Min")}";
     }
 
+    private TimerState _lastShownState = TimerState.NotStarted;
+
     private void OnTimerStateChanged(TimerState state)
     {
         switch (state)
         {
             case TimerState.Running:
                 ValidationText.Visibility = Visibility.Collapsed;
+                if (_lastShownState != TimerState.Running) _ringStartedAt = 0; // a new (or resumed) timer: the ring starts full
                 ShowOverlay();
                 UpdateButtonStates(running: true);
                 _timerStateKey = "Timer_Started";
@@ -812,6 +928,8 @@ public partial class MainWindow : FluentWindow
         }
 
         StatusText.Text = Loc.Get(_timerStateKey);
+        if (state != TimerState.Running && _lastShownState == TimerState.Running) FocusTimeInput(); // back to the start form
+        _lastShownState = state;
     }
 
     #endregion
@@ -1661,6 +1779,7 @@ public partial class MainWindow : FluentWindow
                 break;
         }
         ScheduleStatusBar.Message = msg;
+        UpdateStatusLines(); // the line next to the ring on the Status page
         ScheduleStatusBar.Severity = sev;
         UpdateButtonStates(_timer.IsRunning); // "Lift restrictions for today" depends on the schedule
     }
