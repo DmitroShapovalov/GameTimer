@@ -383,7 +383,7 @@
                         </Border>
                         <!-- The week at a glance; a row selects the day for the editor below (works while locked too) -->
                         <Border Style="{StaticResource SettingCard}" Padding="4,6">
-                            <StackPanel x:Name="ScheduleDaysPanel" KeyboardNavigation.TabNavigation="Once"
+                            <StackPanel x:Name="ScheduleDaysPanel" KeyboardNavigation.TabNavigation="Local"
                                         KeyboardNavigation.DirectionalNavigation="Cycle"/>
                         </Border>
                         <!-- The selected day -->

@@ -1949,7 +1949,10 @@ public partial class MainWindow : FluentWindow
         try
         {
             ScheduleEnabledToggle.IsChecked = _settings.ScheduleEnabled;
-            if (_dayRow[_selectedDay] is { } row) row.IsChecked = true;
+            if (_dayRow[_selectedDay] is { } row)
+            {
+                row.IsChecked = true;
+            }
         }
         finally
         {
@@ -1963,6 +1966,8 @@ public partial class MainWindow : FluentWindow
     {
         if (sender is not FrameworkElement { Tag: int d }) return;
         _selectedDay = d;
+        // Only the selected day is a tab stop: Tab into the week lands on it (arrow keys reach the others)
+        foreach (var r in _dayRow) if (r != null) r.IsTabStop = r == sender;
         ScheduleCopied.Visibility = Visibility.Collapsed;
         LoadDayEditor();
     }
@@ -1989,12 +1994,12 @@ public partial class MainWindow : FluentWindow
         {
             _scheduleUiLoading = was;
         }
-        UpdateDayEditorState();
+        UpdateDayEditorState(announce: false);
     }
 
     // What the editor shows around the values: the details only for an allowed day, the limit row only
     // when there is a limit, the window error and the limit hint
-    private void UpdateDayEditorState()
+    private void UpdateDayEditorState(bool announce = true)
     {
         bool allowed = ScheduleDayAllowed.IsChecked == true;
         ScheduleDayDetails.Visibility = allowed ? Visibility.Visible : Visibility.Collapsed;
@@ -2004,8 +2009,8 @@ public partial class MainWindow : FluentWindow
         string? windowError = null;
         if (from == null || to == null) windowError = Loc.Get("Sched_TimeFormat");
         else if (to <= from) windowError = Loc.Get("Sched_BadWindow");
-        SetLiveText(ScheduleWindowError, windowError ?? "");
         ScheduleWindowError.Visibility = windowError != null ? Visibility.Visible : Visibility.Collapsed;
+        SetLiveText(ScheduleWindowError, windowError ?? "", announce);
 
         bool limitOn = ScheduleDayLimitOn.IsChecked == true;
         ScheduleLimitRow.Visibility = limitOn ? Visibility.Visible : Visibility.Collapsed;
@@ -2015,7 +2020,7 @@ public partial class MainWindow : FluentWindow
         else if (limit == null) { hint = Loc.Get("Sched_LimitRange"); hintBrush = "SystemFillColorCriticalBrush"; }
         else if (from is int f && to is int t && t > f && limit > t - f) hint = Loc.Get("Sched_LimitOver");
         else hint = Loc.Get("Sched_LimitHint");
-        SetLiveText(ScheduleLimitHint, hint);
+        SetLiveText(ScheduleLimitHint, hint, announce);
         ScheduleLimitHint.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, hintBrush);
         ScheduleLimitMinus.IsEnabled = limit is not int lo || lo > LimitStep;
         ScheduleLimitPlus.IsEnabled = limit is not int hi || hi < 24 * 60;
@@ -2037,14 +2042,23 @@ public partial class MainWindow : FluentWindow
     }
 
     // A hint that changes while the parent types: screen readers announce it (LiveSetting is set in XAML)
-    private static void SetLiveText(System.Windows.Controls.TextBlock block, string text)
+    private static void SetLiveText(System.Windows.Controls.TextBlock block, string text, bool announce)
     {
         if (block.Text == text) return;
         block.Text = text;
-        if (text.Length == 0) return;
+        if (!announce || text.Length == 0) return;
         var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(block)
                    ?? System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(block);
         peer?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
+    }
+
+    private void CommitPendingScheduleText()
+    {
+        if (ScheduleDayEditor == null) return;
+        if (ScheduleDayFrom.IsKeyboardFocusWithin || ScheduleDayTo.IsKeyboardFocusWithin || ScheduleDayLimit.IsKeyboardFocusWithin
+            || FocusManager.GetFocusedElement(this) is DependencyObject f
+               && (f == ScheduleDayFrom || f == ScheduleDayTo || f == ScheduleDayLimit))
+            ApplyDayFromUi();
     }
 
     private void ScheduleDay_LostFocus(object sender, RoutedEventArgs e) => ApplyDayFromUi();
@@ -2064,6 +2078,7 @@ public partial class MainWindow : FluentWindow
         EnsureWeek();
 
         var day = _settings.Week[_selectedDay];
+        var before = (day.Allowed, day.LimitMinutes, day.WindowStartMinutes, day.WindowEndMinutes);
         day.Allowed = ScheduleDayAllowed.IsChecked == true;
         // An unreadable or reversed window is not saved: the saved one stays until the window is fixed
         // (the evaluator would take a reversed window as the whole day)
@@ -2075,6 +2090,7 @@ public partial class MainWindow : FluentWindow
         }
         if (ScheduleDayLimitOn.IsChecked != true) day.LimitMinutes = 0;
         else if (TryParseLimit(ScheduleDayLimit.Text) is int limit) day.LimitMinutes = limit;
+        if (before == (day.Allowed, day.LimitMinutes, day.WindowStartMinutes, day.WindowEndMinutes)) return;
         SaveSchedule();
     }
 
@@ -2238,6 +2254,9 @@ public partial class MainWindow : FluentWindow
 
     private void SetUnlocked(bool on)
     {
+        // Leaving the app or hiding the window does not take the focus from a text box (no LostFocus):
+        // what the parent typed is saved while still unlocked
+        if (!on && IsUnlocked) CommitPendingScheduleText();
         _unlockedUntil = on ? Environment.TickCount64 + (long)UnlockFor.TotalMilliseconds : 0;
         if (on && _lockTimer == null)
         {
