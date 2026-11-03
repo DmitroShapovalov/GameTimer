@@ -84,7 +84,7 @@
     <value>Reset</value>
   </data>
   <data name="Tab_Display" xml:space="preserve">
-    <value>Display</value>
+    <value>Timer on screen</value>
   </data>
   <data name="OverlayPosition" xml:space="preserve">
     <value>Overlay position (drag the marker)</value>
@@ -111,7 +111,7 @@
     <value>min</value>
   </data>
   <data name="ZoneColors" xml:space="preserve">
-    <value>Zone colors (click to choose)</value>
+    <value>Zone colors</value>
   </data>
   <data name="Zone_Normal" xml:space="preserve">
     <value>Normal</value>

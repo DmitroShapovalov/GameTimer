@@ -332,152 +332,176 @@
                     </StackPanel>
                 </TabItem.Header>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="16">
+                    <StackPanel Margin="4,8,4,16">
+                        <TextBlock x:Name="OverlayHeader" Text="Timer on screen" Style="{StaticResource PageHeader}"/>
+                        <!-- Live preview: a small screen; the marker looks like the countdown (zone colour, size, opacity,
+                             background) and is dragged to where it shows -->
                         <TextBlock x:Name="OverlayPositionLabel" Text="Overlay position (drag the marker)" Style="{StaticResource SectionLabel}"/>
-                        <Border BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1" CornerRadius="4"
-                                Height="120" Margin="0,0,0,12" Background="#1a1a2e">
+                        <Border BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1" CornerRadius="8"
+                                Height="160" Margin="0,0,0,8" Background="#1a1a2e" ClipToBounds="True">
                             <Canvas x:Name="PositionCanvas" MouseLeftButtonDown="Canvas_MouseDown"
                                     MouseMove="Canvas_MouseMove" MouseLeftButtonUp="Canvas_MouseUp">
-                                <Border x:Name="PositionMarker" Canvas.Left="0" Canvas.Top="0"
-                                        Background="#4CAF50" CornerRadius="3" Padding="6,2">
-                                    <TextBlock Text="01:30" Foreground="White" FontFamily="Consolas"
-                                               FontSize="11" FontWeight="Bold"/>
+                                <Border x:Name="PositionMarker" Canvas.Left="0" Canvas.Top="0" CornerRadius="4" Padding="6,2" Cursor="SizeAll">
+                                    <TextBlock x:Name="PreviewText" Text="01:30" FontFamily="Consolas, Courier New" FontWeight="Bold"/>
                                 </Border>
                             </Canvas>
                         </Border>
-
-                        <TextBlock x:Name="FontSizeSectionLabel" Text="Font size" Style="{StaticResource SectionLabel}"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Slider x:Name="FontSizeSlider" Minimum="12" Maximum="72" Value="24"
-                                    Width="280" VerticalAlignment="Center"
-                                    ValueChanged="FontSize_Changed"/>
-                            <TextBlock x:Name="FontSizeLabel" Text="24 px" Margin="8,0,0,0"
-                                       VerticalAlignment="Center" Width="50"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <RadioButton x:Name="PreviewNormal" Content="Normal" GroupName="PreviewZone" IsChecked="True"
+                                         Style="{StaticResource {x:Type ToggleButton}}" MinWidth="90" Checked="PreviewZone_Changed"/>
+                            <RadioButton x:Name="PreviewWarning" Content="Warning" GroupName="PreviewZone" Margin="4,0,0,0"
+                                         Style="{StaticResource {x:Type ToggleButton}}" MinWidth="90" Checked="PreviewZone_Changed"/>
+                            <RadioButton x:Name="PreviewAlert" Content="Alert" GroupName="PreviewZone" Margin="4,0,0,0"
+                                         Style="{StaticResource {x:Type ToggleButton}}" MinWidth="90" Checked="PreviewZone_Changed"/>
                         </StackPanel>
 
-                        <TextBlock x:Name="OpacitySectionLabel" Text="Opacity" Style="{StaticResource SectionLabel}"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Slider x:Name="OpacitySlider" Minimum="20" Maximum="100" Value="70"
-                                    Width="280" VerticalAlignment="Center"
-                                    ValueChanged="Opacity_Changed"/>
-                            <TextBlock x:Name="OpacityLabel" Text="70%" Margin="8,0,0,0"
-                                       VerticalAlignment="Center" Width="50"/>
-                        </StackPanel>
-
-                        <CheckBox x:Name="ShowBackgroundCheck" Content="Background behind text"
-                                  IsChecked="True" Margin="0,4,0,12"
-                                  Checked="DisplaySetting_Changed" Unchecked="DisplaySetting_Changed"/>
-
-                        <TextBlock x:Name="ThresholdsLabel" Text="Thresholds (minutes)" Style="{StaticResource SectionLabel}"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock x:Name="WarningFromLabel" Text="Warning:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ui:TextBox x:Name="YellowThreshold" Width="55" Text="30"
-                                     TextChanged="Threshold_Changed"/>
-                            <TextBlock x:Name="MinLabel1" Text="min" VerticalAlignment="Center" Margin="4,0,16,0"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                            <TextBlock x:Name="AlertFromLabel" Text="Alert:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ui:TextBox x:Name="RedThreshold" Width="55" Text="10"
-                                     TextChanged="Threshold_Changed"/>
-                            <TextBlock x:Name="MinLabel2" Text="min" VerticalAlignment="Center" Margin="4,0,0,0"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                        </StackPanel>
-
-                        <TextBlock x:Name="ZoneColorsLabel" Text="Zone colors (click to choose)" Style="{StaticResource SectionLabel}"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                            <StackPanel Margin="0,0,16,0">
-                                <Border x:Name="GreenPreview" Width="40" Height="32" CornerRadius="4"
-                                        Background="#4CAF50" Cursor="Hand"
-                                        MouseLeftButtonUp="ColorPicker_Click"
-                                        BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1"/>
-                                <TextBlock x:Name="NormalZoneLabel" Text="Normal" FontSize="11" Margin="0,2,0,0"
-                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,0,16,0">
-                                <Border x:Name="YellowPreview" Width="40" Height="32" CornerRadius="4"
-                                        Background="#FFC107" Cursor="Hand"
-                                        MouseLeftButtonUp="ColorPicker_Click"
-                                        BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1"/>
-                                <TextBlock x:Name="WarningZoneLabel" Text="Warning" FontSize="11" Margin="0,2,0,0"
-                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
-                            </StackPanel>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="FontSizeSectionLabel" Text="Font size" Style="{StaticResource CardTitle}" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Slider x:Name="FontSizeSlider" Minimum="12" Maximum="72" Value="24" Width="220"
+                                            VerticalAlignment="Center" ValueChanged="FontSize_Changed"
+                                            AutomationProperties.LabeledBy="{Binding ElementName=FontSizeSectionLabel}"/>
+                                    <TextBlock x:Name="FontSizeLabel" Text="24 px" Margin="8,0,0,0" VerticalAlignment="Center" Width="50"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="OpacitySectionLabel" Text="Opacity" Style="{StaticResource CardTitle}" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Slider x:Name="OpacitySlider" Minimum="20" Maximum="100" Value="70" Width="220"
+                                            VerticalAlignment="Center" ValueChanged="Opacity_Changed"
+                                            AutomationProperties.LabeledBy="{Binding ElementName=OpacitySectionLabel}"/>
+                                    <TextBlock x:Name="OpacityLabel" Text="70%" Margin="8,0,0,0" VerticalAlignment="Center" Width="50"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingCard}">
+                            <CheckBox x:Name="ShowBackgroundCheck" Content="Background behind text" IsChecked="True"
+                                      Checked="DisplaySetting_Changed" Unchecked="DisplaySetting_Changed"/>
+                        </Border>
+                        <Border Style="{StaticResource SettingCard}">
                             <StackPanel>
-                                <Border x:Name="RedPreview" Width="40" Height="32" CornerRadius="4"
-                                        Background="#F44336" Cursor="Hand"
-                                        MouseLeftButtonUp="ColorPicker_Click"
-                                        BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1"/>
-                                <TextBlock x:Name="AlertZoneLabel" Text="Alert" FontSize="11" Margin="0,2,0,0"
-                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="ThresholdsLabel" Text="Thresholds (minutes)" Style="{StaticResource CardTitle}" Margin="0,0,0,8"/>
+                                <WrapPanel>
+                                    <TextBlock x:Name="WarningFromLabel" Text="Warning:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ui:TextBox x:Name="YellowThreshold" Width="64" Text="30" TextChanged="Threshold_Changed"
+                                                PreviewTextInput="TimeInput_PreviewTextInput"/>
+                                    <TextBlock x:Name="MinLabel1" Text="min" VerticalAlignment="Center" Margin="4,0,16,0"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock x:Name="AlertFromLabel" Text="Alert:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ui:TextBox x:Name="RedThreshold" Width="64" Text="10" TextChanged="Threshold_Changed"
+                                                PreviewTextInput="TimeInput_PreviewTextInput"/>
+                                    <TextBlock x:Name="MinLabel2" Text="min" VerticalAlignment="Center" Margin="4,0,0,0"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                </WrapPanel>
                             </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-            <!-- TAB: Notifications -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Alert24" Margin="0,0,6,0"/>
-                        <TextBlock x:Name="TabNotificationsText" Text="Notifications"/>
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="16">
-                        <TextBlock x:Name="AlertPointsLabel" Text="Sound alert points" Style="{StaticResource SectionLabel}"/>
-
-                        <Border BorderBrush="{DynamicResource ControlElevationBorderBrush}"
-                                BorderThickness="1" CornerRadius="6"
-                                Background="{DynamicResource ControlFillColorDefaultBrush}"
-                                Padding="4" Margin="0,0,0,8">
-                            <ItemsControl x:Name="AlertsList">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="4,2">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}" Margin="0,0,8,0"
-                                                      Checked="AlertEnabled_Changed" Unchecked="AlertEnabled_Changed"/>
-                                            <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                                                       Text="{Binding DisplayText}"/>
-                                            <ui:Button Grid.Column="2" Appearance="Secondary"
-                                                       Width="30" Height="30" Padding="0"
-                                                       Click="RemoveAlert_Click"
-                                                       Tag="{Binding}">
-                                                <ui:SymbolIcon Symbol="Delete24" FontSize="14"/>
-                                            </ui:Button>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                        </Border>
+                        <Border Style="{StaticResource SettingCard}">
+                            <StackPanel>
+                                <TextBlock x:Name="ZoneColorsLabel" Text="Zone colors" Style="{StaticResource CardTitle}" Margin="0,0,0,4"/>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="NormalZoneLabel" Text="Normal" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" x:Name="GreenPreview" Width="32" Height="32" CornerRadius="16" Margin="0,0,12,0"
+                                            BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}" BorderThickness="1"/>
+                                    <WrapPanel Grid.Column="2" x:Name="GreenPalette" VerticalAlignment="Center"/>
+                                    <ui:TextBox Grid.Column="3" x:Name="GreenHex" Width="96" MaxLength="7" VerticalAlignment="Center"
+                                                LostKeyboardFocus="ColorHex_LostFocus" KeyDown="ColorHex_KeyDown"/>
+                                </Grid>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="WarningZoneLabel" Text="Warning" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" x:Name="YellowPreview" Width="32" Height="32" CornerRadius="16" Margin="0,0,12,0"
+                                            BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}" BorderThickness="1"/>
+                                    <WrapPanel Grid.Column="2" x:Name="YellowPalette" VerticalAlignment="Center"/>
+                                    <ui:TextBox Grid.Column="3" x:Name="YellowHex" Width="96" MaxLength="7" VerticalAlignment="Center"
+                                                LostKeyboardFocus="ColorHex_LostFocus" KeyDown="ColorHex_KeyDown"/>
+                                </Grid>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="AlertZoneLabel" Text="Alert" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" x:Name="RedPreview" Width="32" Height="32" CornerRadius="16" Margin="0,0,12,0"
+                                            BorderBrush="{DynamicResource ControlStrongStrokeColorDefaultBrush}" BorderThickness="1"/>
+                                    <WrapPanel Grid.Column="2" x:Name="RedPalette" VerticalAlignment="Center"/>
+                                    <ui:TextBox Grid.Column="3" x:Name="RedHex" Width="96" MaxLength="7" VerticalAlignment="Center"
+                                                LostKeyboardFocus="ColorHex_LostFocus" KeyDown="ColorHex_KeyDown"/>
+                                </Grid>
+                            </StackPanel>
                         </Border>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                            <ui:TextBox x:Name="NewAlertMinutes" Width="60" Margin="0,0,8,0"
+                        <TextBlock x:Name="AlertPointsLabel" Text="Sound alert points" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
+                        <ItemsControl x:Name="AlertsList" Margin="0,0,0,8">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <!-- A chip per alert point: on / off, the minutes, remove -->
+                                    <Border CornerRadius="16" Padding="10,2,4,2" Margin="0,0,8,8"
+                                            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                        <StackPanel Orientation="Horizontal">
+                                            <CheckBox IsChecked="{Binding Enabled}" MinWidth="0" Margin="0,0,4,0" VerticalAlignment="Center"
+                                                      AutomationProperties.Name="{Binding DisplayText}"
+                                                      Checked="AlertEnabled_Changed" Unchecked="AlertEnabled_Changed"/>
+                                            <TextBlock VerticalAlignment="Center" Text="{Binding DisplayText}" Margin="0,0,4,0"/>
+                                            <ui:Button Appearance="Transparent" Width="28" Height="28" Padding="0"
+                                                       Click="RemoveAlert_Click" Tag="{Binding}"
+                                                       AutomationProperties.Name="{Binding DisplayText}">
+                                                <ui:SymbolIcon Symbol="Dismiss16" FontSize="12"/>
+                                            </ui:Button>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <ui:TextBox x:Name="NewAlertMinutes" Width="70" Margin="0,0,8,0"
                                         KeyDown="NewAlertMinutes_KeyDown" PreviewTextInput="TimeInput_PreviewTextInput" MaxLength="3"
                                         PlaceholderText="min"/>
-                            <ui:Button x:Name="AddButton" Content="Add" Width="120" Click="AddAlert_Click"
-                                       Icon="{ui:SymbolIcon Add24}"/>
+                            <ui:Button x:Name="AddButton" Content="Add" Click="AddAlert_Click" Icon="{ui:SymbolIcon Add24}"/>
                         </StackPanel>
-
-                        <TextBlock x:Name="SoundFileLabel" Text="Sound file" Style="{StaticResource SectionLabel}"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <RadioButton x:Name="SoundBuiltIn" Content="Built-in" IsChecked="True"
-                                         Checked="SoundSource_Changed" Margin="0,0,16,0"/>
-                            <RadioButton x:Name="SoundCustom" Content="Custom file"
-                                         Checked="SoundSource_Changed"/>
-                        </StackPanel>
-
-                        <StackPanel x:Name="CustomSoundPanel" Orientation="Horizontal" Visibility="Collapsed"
-                                    Margin="0,0,0,8">
-                            <ui:TextBox x:Name="CustomSoundPath" Width="220" IsReadOnly="True" Margin="0,0,8,0"/>
-                            <ui:Button x:Name="BrowseButton" Content="Browse..." Width="80" Margin="0,0,8,0" Click="BrowseSound_Click"/>
-                        </StackPanel>
-
-                        <ui:Button x:Name="PreviewButton" Content="Preview" Width="140" HorizontalAlignment="Left"
-                                Margin="0,8,0,0" Click="PreviewSound_Click"
-                                Icon="{ui:SymbolIcon Speaker224}"/>
+                        <Border Style="{StaticResource SettingCard}">
+                            <StackPanel>
+                                <TextBlock x:Name="SoundFileLabel" Text="Sound file" Style="{StaticResource CardTitle}" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <RadioButton x:Name="SoundBuiltIn" Content="Built-in" IsChecked="True"
+                                                 Checked="SoundSource_Changed" Margin="0,0,16,0"/>
+                                    <RadioButton x:Name="SoundCustom" Content="Custom file" Checked="SoundSource_Changed"/>
+                                </StackPanel>
+                                <StackPanel x:Name="CustomSoundPanel" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,0,8">
+                                    <ui:TextBox x:Name="CustomSoundPath" Width="260" IsReadOnly="True" Margin="0,0,8,0"/>
+                                    <ui:Button x:Name="BrowseButton" Content="Browse..." Click="BrowseSound_Click"/>
+                                </StackPanel>
+                                <ui:Button x:Name="PreviewButton" Content="Preview" HorizontalAlignment="Left"
+                                           Click="PreviewSound_Click" Icon="{ui:SymbolIcon Speaker224}"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

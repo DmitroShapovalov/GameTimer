@@ -84,7 +84,7 @@
     <value>Herstellen</value>
   </data>
   <data name="Tab_Display" xml:space="preserve">
-    <value>Weergave</value>
+    <value>Timer op het scherm</value>
   </data>
   <data name="OverlayPosition" xml:space="preserve">
     <value>Positie van de overlay (sleep de markering)</value>
@@ -111,7 +111,7 @@
     <value>min</value>
   </data>
   <data name="ZoneColors" xml:space="preserve">
-    <value>Zonekleuren (klik om te kiezen)</value>
+    <value>Zonekleuren</value>
   </data>
   <data name="Zone_Normal" xml:space="preserve">
     <value>Normaal</value>

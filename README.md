@@ -132,11 +132,11 @@ The app can keep the running timer even if it is closed, and can make it hard fo
 
 | Key | Action |
 |---|---|
-| `Enter` | Start the timer (Timer tab) / add an alert point (Notifications tab) |
+| `Enter` | Start the timer (Status) / add an alert point or set a colour (Timer on screen) |
 | `↑` / `↓` | Increase / decrease the focused time value by 1 |
 | `Shift` + `↑` / `↓` | Increase / decrease by 10 |
 | `:` | Jump from the hours field to the minutes field |
-| `Ctrl` + `1`…`7` | Switch pages (Status, Schedule, History, Display, Notifications, Phones, Settings) |
+| `Ctrl` + `1`…`6` | Switch pages (Status, Schedule, History, Timer on screen, Phones, Settings) |
 | `Esc` | Hide the window to the system tray |
 
 Only one copy of the app can run at a time — launching it again just brings the existing window to the front.
