@@ -76,7 +76,9 @@ src/GameTimer/
     Strings.uk.resx        Ukrainian
   Windows/
     MainWindow             FluentWindow (Mica, resizable), a left navigation (TabControl styled NavTabControl):
-                           Timer, Schedule, History | Display, Notifications, Settings; the parent lock; tray, keyboard
+                           Status, Schedule, History | Display, Notifications, Settings; the parent lock; tray, keyboard.
+                           Status: a ring (RingArc, its length = the timer's start plus every + seen, UpdateRing),
+                           a state badge, − / + with a step, Lift, More (End at / End now / Reset), the start form
     OverlayWindow          Countdown overlay, color zones, pulse animation
     PasswordDialog         Fallback when Windows Hello is unavailable
     ConnectPhoneDialog     QR code with the one-time pairing link (v1 code in the query, v2 secret in the #fragment),

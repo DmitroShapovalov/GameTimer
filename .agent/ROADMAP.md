@@ -235,8 +235,8 @@ Owner's decisions (2026-11-01):
 
 | # | Step | Status |
 |---|---|---|
-| W1 | Shell: resizable window with Mica, left navigation, the parent lock (one unlock, 5 min) | in review |
-| W2 | Status page: ring, state badge, − / + with a step, Lift, More menu; start form without text boxes | ☐ |
+| W1 | Shell: resizable window with Mica, left navigation, the parent lock (one unlock, 5 min) | ✓ (PR #46) |
+| W2 | Status page: ring, state badge, − / + with a step, Lift, More menu; start form with presets | in review |
 | W3 | Settings and Phones: setting cards applied at once; a Phones page; About | ☐ |
 | W4 | Overlay page: live preview, colour swatches, alert chips and sounds | ☐ |
 | W5 | History and Schedule as on the phone | ☐ |
