@@ -527,4 +527,28 @@
   <data name="Until_Time" xml:space="preserve">
     <value>until {0}</value>
   </data>
+  <data name="Tab_Phones" xml:space="preserve">
+    <value>Phones</value>
+  </data>
+  <data name="Language_Desc" xml:space="preserve">
+    <value>This app and the countdown</value>
+  </data>
+  <data name="Action_Desc" xml:space="preserve">
+    <value>What the PC does when the time is up</value>
+  </data>
+  <data name="ConnectPhone_Title" xml:space="preserve">
+    <value>Connect a phone</value>
+  </data>
+  <data name="ConnectPhone_Desc" xml:space="preserve">
+    <value>Scan the QR code with the GameTimer app on the phone</value>
+  </data>
+  <data name="Privacy_Link" xml:space="preserve">
+    <value>Privacy</value>
+  </data>
+  <data name="Source_Link" xml:space="preserve">
+    <value>Source code</value>
+  </data>
+  <data name="ConnectPhone_NeedsControl" xml:space="preserve">
+    <value>Turn on phone control first</value>
+  </data>
 </root>

@@ -75,6 +75,29 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- A setting card (as in Windows 11 Settings): icon, title + description, control on the right -->
+        <Style x:Key="SettingCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16,12"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style x:Key="CardTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="CardDescription" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+        </Style>
+        <Style x:Key="PageHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,16"/>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -458,60 +481,84 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-            <!-- TAB: Settings -->
+            <!-- TAB: Phones -->
             <TabItem>
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Settings24" Margin="0,0,6,0"/>
-                        <TextBlock x:Name="TabSettingsText" Text="Settings"/>
+                        <ui:SymbolIcon Symbol="Phone24" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TabPhonesText" Text="Phones"/>
                     </StackPanel>
                 </TabItem.Header>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="16">
-                        <TextBlock x:Name="LanguageLabel" Text="Language" Style="{StaticResource SectionLabel}"/>
-                        <ComboBox x:Name="LanguageCombo" Width="200" HorizontalAlignment="Left"
-                                  Margin="0,0,0,16" SelectionChanged="Language_Changed">
-                            <ComboBoxItem Content="English" Tag="en"/>
-                            <ComboBoxItem Content="Русский" Tag="ru"/>
-                            <ComboBoxItem Content="Nederlands" Tag="nl"/>
-                            <ComboBoxItem Content="Українська" Tag="uk"/>
-                        </ComboBox>
-
-                        <TextBlock x:Name="ActionLabel" Text="Action when timer expires" Style="{StaticResource SectionLabel}"/>
-                        <ComboBox x:Name="ActionCombo" Width="220" HorizontalAlignment="Left"
-                                  Margin="0,0,0,16" SelectionChanged="Action_Changed">
-                            <ComboBoxItem x:Name="ActionShutdown" Content="Shut down computer"/>
-                            <ComboBoxItem x:Name="ActionLock" Content="Lock screen"/>
-                            <ComboBoxItem x:Name="ActionLogoff" Content="Log off"/>
-                        </ComboBox>
-
-                        <TextBlock x:Name="PhoneControlLabel" Text="Phone control" Style="{StaticResource SectionLabel}"/>
-                        <ui:ToggleSwitch x:Name="RemoteToggle" Content="Allow control from a phone on home Wi-Fi"
-                                         Checked="RemoteToggle_Changed" Unchecked="RemoteToggle_Changed"/>
-                        <TextBlock x:Name="RemoteStatusText" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,8"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                        <StackPanel x:Name="FirewallPanel" Margin="0,0,0,8" Visibility="Collapsed">
-                            <TextBlock x:Name="FirewallText" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4"
-                                       Foreground="{DynamicResource SystemFillColorCautionBrush}"
-                                       Text="Windows Firewall may block the phone."/>
+                    <StackPanel Margin="4,8,4,16">
+                        <TextBlock x:Name="PhonesHeader" Text="Phones" Style="{StaticResource PageHeader}"/>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Symbol="Phone24" FontSize="20" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="PhoneControlLabel" Text="Phone control" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock x:Name="RemoteToggleText" Style="{StaticResource CardDescription}"/>
+                                    <TextBlock x:Name="RemoteStatusText" Style="{StaticResource CardDescription}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <ContentControl Grid.Column="2" VerticalAlignment="Center" Focusable="False">
+                                    <ui:ToggleSwitch x:Name="RemoteToggle" AutomationProperties.LabeledBy="{Binding ElementName=PhoneControlLabel}"
+                                                     Checked="RemoteToggle_Changed" Unchecked="RemoteToggle_Changed"/>
+                                </ContentControl>
+                            </Grid>
+                        </Border>
+                        <StackPanel x:Name="FirewallPanel" Margin="0,0,0,4" Visibility="Collapsed">
+                            <ui:InfoBar x:Name="FirewallInfo" Title="Windows Firewall" IsOpen="True" IsClosable="False" Severity="Warning" Margin="0,0,0,4"/>
                             <ui:Button x:Name="FirewallButton" Content="Allow in firewall" Click="FirewallButton_Click"/>
                         </StackPanel>
-                        <ui:Button x:Name="ConnectPhoneButton" Content="Connect phone" Click="ConnectPhone_Click"
-                                   IsEnabled="False"/>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Symbol="PhoneAdd24" FontSize="20" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="ConnectPhoneTitle" Text="Connect a phone" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock x:Name="ConnectPhoneDesc" Text="Scan the QR code with the GameTimer app on the phone" Style="{StaticResource CardDescription}"/>
+                                </StackPanel>
+                                <ContentControl Grid.Column="2" VerticalAlignment="Center" Focusable="False">
+                                    <ui:Button x:Name="ConnectPhoneButton" Content="Connect phone" Click="ConnectPhone_Click"
+                                               Appearance="Primary" IsEnabled="False"/>
+                                </ContentControl>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Symbol="Globe24" FontSize="20" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="RemoteAccessTitle" Text="Control from anywhere" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock x:Name="RemoteAccessText" Style="{StaticResource CardDescription}"/>
+                                </StackPanel>
+                                <ContentControl Grid.Column="2" VerticalAlignment="Center" Focusable="False">
+                                    <ui:ToggleSwitch x:Name="RemoteAccessToggle" AutomationProperties.LabeledBy="{Binding ElementName=RemoteAccessTitle}"
+                                                     Checked="RemoteAccessToggle_Changed" Unchecked="RemoteAccessToggle_Changed"/>
+                                </ContentControl>
+                            </Grid>
+                        </Border>
 
-                        <ui:ToggleSwitch x:Name="RemoteAccessToggle" Content="Control from anywhere (through the internet)"
-                                         Margin="0,16,0,0"
-                                         Checked="RemoteAccessToggle_Changed" Unchecked="RemoteAccessToggle_Changed"/>
-                        <TextBlock x:Name="RemoteAccessText" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,8"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-
-                        <TextBlock x:Name="PairedDevicesLabel" Text="Paired phones" Style="{StaticResource SectionLabel}"/>
-                        <TextBlock x:Name="NoDevicesText" Text="No phones connected yet" FontSize="12"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                        <ItemsControl x:Name="DevicesList" Margin="0,0,0,16">
+                        <TextBlock x:Name="PairedDevicesLabel" Text="Paired phones" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
+                        <TextBlock x:Name="NoDevicesText" Text="No phones connected yet" Style="{StaticResource CardDescription}"/>
+                        <ItemsControl x:Name="DevicesList" Margin="0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,2">
+                                    <Border Style="{StaticResource SettingCard}">
+                                    <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -523,18 +570,20 @@
                                         </StackPanel>
                                         <ui:Button Grid.Column="1" Appearance="Secondary"
                                                    Width="30" Height="30" Padding="0"
-                                                   Click="RevokeDevice_Click" Tag="{Binding}">
+                                                   Click="RevokeDevice_Click" Tag="{Binding}" AutomationProperties.Name="{Binding Name}">
                                             <ui:SymbolIcon Symbol="Delete24" FontSize="14"/>
                                         </ui:Button>
                                     </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <!-- Protocol v2 parent apps (role, revoke) -->
-                        <ItemsControl x:Name="PeersList" Margin="0,-12,0,16">
+                        <ItemsControl x:Name="PeersList" Margin="0,0,0,16">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,2">
+                                    <Border Style="{StaticResource SettingCard}">
+                                    <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -547,34 +596,121 @@
                                         </StackPanel>
                                         <ui:Button Grid.Column="1" Appearance="Secondary" Margin="0,0,4,0"
                                                    Width="30" Height="30" Padding="0" ToolTip="{Binding RoleButtonTip}"
-                                                   Click="TogglePeerRole_Click" Tag="{Binding}">
+                                                   Click="TogglePeerRole_Click" Tag="{Binding}" AutomationProperties.Name="{Binding RoleButtonTip}">
                                             <ui:SymbolIcon Symbol="PersonKey20" FontSize="14"/>
                                         </ui:Button>
                                         <ui:Button Grid.Column="2" Appearance="Secondary"
                                                    Width="30" Height="30" Padding="0"
-                                                   Click="RevokePeer_Click" Tag="{Binding}" ToolTip="{Binding RevokeTip}">
+                                                   Click="RevokePeer_Click" Tag="{Binding}" ToolTip="{Binding RevokeTip}" AutomationProperties.Name="{Binding RevokeTip}">
                                             <ui:SymbolIcon Symbol="Delete24" FontSize="14"/>
                                         </ui:Button>
                                     </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-
-                        <TextBlock x:Name="TamperLabel" Text="Protection from closing" Style="{StaticResource SectionLabel}"/>
-                        <ui:ToggleSwitch x:Name="TamperToggle" Content="Prevent closing from Task Manager"
-                                         Checked="TamperToggle_Changed" Unchecked="TamperToggle_Changed"/>
-                        <TextBlock x:Name="TamperHint" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,16"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <!-- TAB: Settings -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Settings24" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TabSettingsText" Text="Settings"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="4,8,4,16">
+                        <TextBlock x:Name="SettingsHeader" Text="Settings" Style="{StaticResource PageHeader}"/>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Symbol="LocalLanguage24" FontSize="20" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="LanguageLabel" Text="Language" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock x:Name="LanguageDesc" Text="This app and the countdown" Style="{StaticResource CardDescription}"/>
+                                </StackPanel>
+                                <ContentControl Grid.Column="2" VerticalAlignment="Center" Focusable="False">
+                                    <ComboBox x:Name="LanguageCombo" MinWidth="150" SelectionChanged="Language_Changed">
+                                        <ComboBoxItem Content="English" Tag="en"/>
+                                        <ComboBoxItem Content="Русский" Tag="ru"/>
+                                        <ComboBoxItem Content="Nederlands" Tag="nl"/>
+                                        <ComboBoxItem Content="Українська" Tag="uk"/>
+                                    </ComboBox>
+                                </ContentControl>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Symbol="Power24" FontSize="20" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="ActionLabel" Text="Action when timer expires" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock x:Name="ActionDesc" Text="What the PC does when the time is up" Style="{StaticResource CardDescription}"/>
+                                </StackPanel>
+                                <ContentControl Grid.Column="2" VerticalAlignment="Center" Focusable="False">
+                                    <ComboBox x:Name="ActionCombo" MinWidth="150" SelectionChanged="Action_Changed">
+                                        <ComboBoxItem x:Name="ActionShutdown" Content="Shut down computer"/>
+                                        <ComboBoxItem x:Name="ActionLock" Content="Lock screen"/>
+                                        <ComboBoxItem x:Name="ActionLogoff" Content="Log off"/>
+                                    </ComboBox>
+                                </ContentControl>
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Symbol="ShieldLock24" FontSize="20" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="TamperLabel" Text="Protection from closing" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock x:Name="TamperHint" Style="{StaticResource CardDescription}"/>
+                                </StackPanel>
+                                <ContentControl Grid.Column="2" VerticalAlignment="Center" Focusable="False">
+                                    <ui:ToggleSwitch x:Name="TamperToggle" AutomationProperties.LabeledBy="{Binding ElementName=TamperLabel}"
+                                                     Checked="TamperToggle_Changed" Unchecked="TamperToggle_Changed"/>
+                                </ContentControl>
+                            </Grid>
+                        </Border>
                         <ui:InfoBar x:Name="ProtectionInfo" Title="Protection" IsOpen="True" IsClosable="False"
-                                    Severity="Informational"
+                                    Severity="Informational" Margin="0,12,0,0"
                                     Message="Timer controls are protected by Windows Hello (PIN / fingerprint / face)."/>
 
                         <TextBlock x:Name="AboutLabel" Text="About" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
-                        <TextBlock x:Name="VersionText" Text="GameTimer" FontSize="12"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                        <TextBlock x:Name="AppDescriptionText" Text="Game time limiter for Windows" FontSize="12"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <Border Style="{StaticResource SettingCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon Symbol="Info24" FontSize="20" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="VersionText" Text="GameTimer" Style="{StaticResource CardTitle}"/>
+                                    <TextBlock x:Name="AppDescriptionText" Text="Game time limiter for Windows" Style="{StaticResource CardDescription}"/>
+                                </StackPanel>
+                                <ContentControl Grid.Column="2" VerticalAlignment="Center" Focusable="False">
+                                    <WrapPanel MaxWidth="240" HorizontalAlignment="Right">
+                                        <ui:HyperlinkButton x:Name="PrivacyLink" Content="Privacy"
+                                                            NavigateUri="https://github.com/DmitroShapovalov/GameTimer/blob/master/docs/PRIVACY.md"/>
+                                        <ui:HyperlinkButton x:Name="SourceLink" Content="Source code"
+                                                            NavigateUri="https://github.com/DmitroShapovalov/GameTimer"/>
+                                    </WrapPanel>
+                                </ContentControl>
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
