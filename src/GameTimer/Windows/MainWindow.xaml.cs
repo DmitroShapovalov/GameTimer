@@ -250,6 +250,8 @@ public partial class MainWindow : FluentWindow
         // Display tab
         FontSizeSlider.Value = _settings.FontSize;
         OpacitySlider.Value = _settings.Opacity;
+        FontSizeLabel.Text = $"{_settings.FontSize} px"; // the handlers skip this while loading
+        OpacityLabel.Text = $"{_settings.Opacity}%";
         ShowBackgroundCheck.IsChecked = _settings.ShowBackground;
         YellowThreshold.Text = _settings.YellowThreshold.ToString();
         RedThreshold.Text = _settings.RedThreshold.ToString();
