@@ -49,6 +49,8 @@ public partial class MainWindow : FluentWindow
     private int _selectedDay = (int)DateTime.Now.DayOfWeek;
     // Set while the schedule controls are filled from the settings (their change events must not save)
     private bool _scheduleUiLoading;
+    // The day "today" was last shown for (the bold day in the week, Today / Yesterday in History)
+    private DateTime _shownDate = DateTime.Today;
     // Display order Monday..Sunday, mapped to (int)DayOfWeek (0 = Sunday)
     private static readonly int[] ScheduleDayOrder = { 1, 2, 3, 4, 5, 6, 0 };
 
@@ -57,6 +59,13 @@ public partial class MainWindow : FluentWindow
         GameTimer.Services.V2.WindowsPairingUi pairingUi)
     {
         InitializeComponent();
+        // After midnight "today" moves: refresh it when the window is used again
+        Activated += (_, _) =>
+        {
+            if (_shownDate == DateTime.Today) return;
+            UpdateWeekOverview();
+            RefreshHistory();
+        };
         // The parent lock ends when the window is minimized or hidden, or when the user switches to another
         // app (back to the game): a parent who walks away after adding time leaves nothing unlocked behind
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) SetUnlocked(false); };
@@ -866,6 +875,12 @@ public partial class MainWindow : FluentWindow
 
     private enum HistoryFilter { All, Timer, Alerts }
     private HistoryFilter _historyFilter = HistoryFilter.All;
+
+    // Arrow keys move the focus between the chips: the focused chip is the filter
+    private void HistoryFilter_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.RadioButton chip) chip.IsChecked = true;
+    }
 
     private void HistoryFilter_Checked(object sender, RoutedEventArgs e)
     {
@@ -1827,6 +1842,8 @@ public partial class MainWindow : FluentWindow
                 Style = (Style)FindResource("DayRow")
             };
             row.Checked += ScheduleDayRow_Checked;
+            // Arrow keys move the focus between the rows: the focused row is the selected day
+            row.GotKeyboardFocus += (_, _) => row.IsChecked = true;
             _dayRow[dow] = row;
             ScheduleDaysPanel.Children.Add(row);
         }
@@ -1859,6 +1876,7 @@ public partial class MainWindow : FluentWindow
     // The rows show what is saved (not what is being typed in the editor)
     private void UpdateWeekOverview()
     {
+        _shownDate = DateTime.Today;
         if (_dayRow[0] == null) return;
         EnsureWeek();
         int today = (int)DateTime.Now.DayOfWeek;
@@ -1957,6 +1975,7 @@ public partial class MainWindow : FluentWindow
         var day = _settings.Week[_selectedDay];
         var was = _scheduleUiLoading;
         _scheduleUiLoading = true;
+        ScheduleCopied.Visibility = Visibility.Collapsed;
         try
         {
             ScheduleDayTitle.Text = DayName(_selectedDay);
@@ -1985,7 +2004,7 @@ public partial class MainWindow : FluentWindow
         string? windowError = null;
         if (from == null || to == null) windowError = Loc.Get("Sched_TimeFormat");
         else if (to <= from) windowError = Loc.Get("Sched_BadWindow");
-        ScheduleWindowError.Text = windowError ?? "";
+        SetLiveText(ScheduleWindowError, windowError ?? "");
         ScheduleWindowError.Visibility = windowError != null ? Visibility.Visible : Visibility.Collapsed;
 
         bool limitOn = ScheduleDayLimitOn.IsChecked == true;
@@ -1996,7 +2015,7 @@ public partial class MainWindow : FluentWindow
         else if (limit == null) { hint = Loc.Get("Sched_LimitRange"); hintBrush = "SystemFillColorCriticalBrush"; }
         else if (from is int f && to is int t && t > f && limit > t - f) hint = Loc.Get("Sched_LimitOver");
         else hint = Loc.Get("Sched_LimitHint");
-        ScheduleLimitHint.Text = hint;
+        SetLiveText(ScheduleLimitHint, hint);
         ScheduleLimitHint.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, hintBrush);
         ScheduleLimitMinus.IsEnabled = limit is not int lo || lo > LimitStep;
         ScheduleLimitPlus.IsEnabled = limit is not int hi || hi < 24 * 60;
@@ -2006,13 +2025,40 @@ public partial class MainWindow : FluentWindow
         ScheduleCopyWeekdays.IsEnabled = ScheduleCopyWeekend.IsEnabled = ScheduleCopyEveryDay.IsEnabled = savedMatches;
     }
 
+    // Switches apply at once; the text boxes apply when they are left or on Enter, not on each keystroke
+    // (typing "90" would otherwise save a limit of 9 first, and that could end the play at once)
     private void ScheduleDay_Changed(object sender, RoutedEventArgs e) => ApplyDayFromUi();
-    private void ScheduleDay_TextChanged(object sender, TextChangedEventArgs e) => ApplyDayFromUi();
+
+    private void ScheduleDay_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_scheduleUiLoading || ScheduleDayEditor == null) return;
+        ScheduleCopied.Visibility = Visibility.Collapsed;
+        UpdateDayEditorState();
+    }
+
+    // A hint that changes while the parent types: screen readers announce it (LiveSetting is set in XAML)
+    private static void SetLiveText(System.Windows.Controls.TextBlock block, string text)
+    {
+        if (block.Text == text) return;
+        block.Text = text;
+        if (text.Length == 0) return;
+        var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(block)
+                   ?? System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(block);
+        peer?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
+    }
+
+    private void ScheduleDay_LostFocus(object sender, RoutedEventArgs e) => ApplyDayFromUi();
+
+    private void ScheduleDay_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) ApplyDayFromUi();
+    }
 
     // Every change applies at once (under the unlock), like the other settings
     private void ApplyDayFromUi()
     {
         if (_scheduleUiLoading || ScheduleDayEditor == null) return;
+        ScheduleCopied.Visibility = Visibility.Collapsed;
         UpdateDayEditorState();
         if (_isLoading || !IsUnlocked) return;
         EnsureWeek();
@@ -2039,7 +2085,8 @@ public partial class MainWindow : FluentWindow
         int next = sender == ScheduleLimitPlus
             ? (current / LimitStep + 1) * LimitStep
             : ((current + LimitStep - 1) / LimitStep - 1) * LimitStep;
-        ScheduleDayLimit.Text = Math.Clamp(next, LimitStep, 24 * 60).ToString(); // applies through TextChanged
+        ScheduleDayLimit.Text = Math.Clamp(next, LimitStep, 24 * 60).ToString();
+        ApplyDayFromUi();
     }
 
     private void ScheduleCopy_Click(object sender, RoutedEventArgs e)

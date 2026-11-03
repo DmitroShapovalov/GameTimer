@@ -383,7 +383,8 @@
                         </Border>
                         <!-- The week at a glance; a row selects the day for the editor below (works while locked too) -->
                         <Border Style="{StaticResource SettingCard}" Padding="4,6">
-                            <StackPanel x:Name="ScheduleDaysPanel"/>
+                            <StackPanel x:Name="ScheduleDaysPanel" KeyboardNavigation.TabNavigation="Once"
+                                        KeyboardNavigation.DirectionalNavigation="Cycle"/>
                         </Border>
                         <!-- The selected day -->
                         <Border Style="{StaticResource SettingCard}">
@@ -406,12 +407,15 @@
                                     <TextBlock x:Name="SchedHoursLabel" Text="Allowed hours" Style="{StaticResource CardTitle}" Margin="0,4,0,6"/>
                                     <StackPanel Orientation="Horizontal">
                                         <ui:TextBox x:Name="ScheduleDayFrom" Width="84" MaxLength="5"
-                                                    TextChanged="ScheduleDay_TextChanged"/>
+                                                    TextChanged="ScheduleDay_TextChanged" LostFocus="ScheduleDay_LostFocus"
+                                                    KeyDown="ScheduleDay_KeyDown"/>
                                         <TextBlock Text="&#x2013;" Margin="8,0" VerticalAlignment="Center"/>
                                         <ui:TextBox x:Name="ScheduleDayTo" Width="84" MaxLength="5"
-                                                    TextChanged="ScheduleDay_TextChanged"/>
+                                                    TextChanged="ScheduleDay_TextChanged" LostFocus="ScheduleDay_LostFocus"
+                                                    KeyDown="ScheduleDay_KeyDown"/>
                                     </StackPanel>
                                     <TextBlock x:Name="ScheduleWindowError" Style="{StaticResource CardDescription}" Margin="0,6,0,0"
+                                               AutomationProperties.LiveSetting="Polite"
                                                Foreground="{DynamicResource SystemFillColorCriticalBrush}" Visibility="Collapsed"/>
                                     <Grid Margin="0,16,0,6">
                                         <Grid.ColumnDefinitions>
@@ -430,11 +434,13 @@
                                         <ui:Button x:Name="ScheduleLimitMinus" Icon="{ui:SymbolIcon Subtract24}" Click="ScheduleLimitStep_Click"/>
                                         <ui:TextBox x:Name="ScheduleDayLimit" Width="72" Margin="6,0" MaxLength="4"
                                                     AutomationProperties.LabeledBy="{Binding ElementName=SchedLimitLabel}"
-                                                    TextChanged="ScheduleDay_TextChanged"/>
+                                                    TextChanged="ScheduleDay_TextChanged" LostFocus="ScheduleDay_LostFocus"
+                                                    KeyDown="ScheduleDay_KeyDown"/>
                                         <ui:Button x:Name="ScheduleLimitPlus" Icon="{ui:SymbolIcon Add24}" Click="ScheduleLimitStep_Click"/>
                                         <TextBlock x:Name="ScheduleLimitUnit" Text="min" Margin="8,0,0,0" VerticalAlignment="Center"/>
                                     </StackPanel>
-                                    <TextBlock x:Name="ScheduleLimitHint" Style="{StaticResource CardDescription}" Margin="0,6,0,0"/>
+                                    <TextBlock x:Name="ScheduleLimitHint" Style="{StaticResource CardDescription}" Margin="0,6,0,0"
+                                               AutomationProperties.LiveSetting="Polite"/>
                                 </StackPanel>
                                 <TextBlock x:Name="SchedCopyLabel" Text="Copy this day to" Style="{StaticResource CardDescription}"
                                            Margin="0,16,0,6"/>
@@ -468,13 +474,17 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <TextBlock x:Name="HistoryHeader" Text="History" Style="{StaticResource PageHeader}"/>
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8" KeyboardNavigation.TabNavigation="Once"
+                                KeyboardNavigation.DirectionalNavigation="Cycle">
                         <RadioButton x:Name="HistFilterAll" Content="All" GroupName="HistoryFilter" IsChecked="True"
-                                     Style="{StaticResource FilterChip}" Checked="HistoryFilter_Checked"/>
+                                     Style="{StaticResource FilterChip}" Checked="HistoryFilter_Checked"
+                                     GotKeyboardFocus="HistoryFilter_GotKeyboardFocus"/>
                         <RadioButton x:Name="HistFilterTimer" Content="Timer" GroupName="HistoryFilter"
-                                     Style="{StaticResource FilterChip}" Checked="HistoryFilter_Checked"/>
+                                     Style="{StaticResource FilterChip}" Checked="HistoryFilter_Checked"
+                                     GotKeyboardFocus="HistoryFilter_GotKeyboardFocus"/>
                         <RadioButton x:Name="HistFilterAlerts" Content="Alerts" GroupName="HistoryFilter"
-                                     Style="{StaticResource FilterChip}" Checked="HistoryFilter_Checked"/>
+                                     Style="{StaticResource FilterChip}" Checked="HistoryFilter_Checked"
+                                     GotKeyboardFocus="HistoryFilter_GotKeyboardFocus"/>
                     </StackPanel>
                     <TextBlock x:Name="HistoryEmpty" Grid.Row="2" Text="No events yet" Visibility="Collapsed" Margin="0,8,0,0"
                                TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
