@@ -8,7 +8,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 
-/** Payload shapes of protocol §7 (they reuse the v1 API's shapes, docs/remote-api.http). */
+/** Payload shapes of protocol §7 (the Windows side: src/GameTimer/Services/RemoteServer.Model.cs). */
 
 @Serializable
 public data class AlertPoint(val minutes: Int, val enabled: Boolean = true)

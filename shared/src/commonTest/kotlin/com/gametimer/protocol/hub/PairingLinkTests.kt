@@ -13,11 +13,18 @@ class PairingLinkTests {
 
     @Test
     fun parsesTheQrLink() {
-        val link = assertNotNull(PairingLink.parse("http://192.168.1.10:5123/pair?code=AB12CD34#v=2&k=$k&s=$s&n=Kids%20PC"))
+        val link = assertNotNull(PairingLink.parse("http://192.168.1.10:5123/pair#v=2&k=$k&s=$s&n=Kids%20PC"))
         assertEquals("192.168.1.10", link.host)
         assertEquals(5123, link.port)
         assertContentEquals(ByteArray(32) { 1 }, link.agentKey)
         assertContentEquals(ByteArray(32) { 2 }, link.secret)
+        assertEquals("Kids PC", link.pcName)
+    }
+
+    @Test
+    fun readsAQrFromAPcBefore19() {
+        // Older PCs also put a v1 code for the removed web page in the query: it is ignored
+        val link = assertNotNull(PairingLink.parse("http://192.168.1.10:5123/pair?code=AB12CD34#v=2&k=$k&s=$s&n=Kids%20PC"))
         assertEquals("Kids PC", link.pcName)
     }
 

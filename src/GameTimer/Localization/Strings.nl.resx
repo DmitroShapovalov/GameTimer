@@ -234,7 +234,7 @@
     <value>Telefoon verbinden</value>
   </data>
   <data name="ConnectPhone_Instructions" xml:space="preserve">
-    <value>Scan deze code met de camera van de telefoon. De telefoon moet op dezelfde wifi zitten als deze pc.</value>
+    <value>Scan deze code in de GameTimer-app op de telefoon. De telefoon moet op dezelfde wifi zitten als deze pc.</value>
   </data>
   <data name="ConnectPhone_ExpiresIn" xml:space="preserve">
     <value>De code is geldig voor {0}</value>

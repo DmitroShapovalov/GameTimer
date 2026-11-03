@@ -43,8 +43,6 @@ can read the timer, the history or the names, or send a command.
   paired phones can recognise them. Someone on the same network can see that such a device is there and
   how many phones are paired, nothing more. The PC announces only on networks where a phone already
   connected.
-- **The older phone web page** (for phones paired before the Android app) is plain HTTP on the home
-  network, not end-to-end encrypted. New setups should use the app.
 
 ## "Control from anywhere" (off by default)
 

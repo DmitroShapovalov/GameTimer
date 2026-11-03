@@ -6,8 +6,8 @@ import io.ktor.http.parseQueryString
 
 /**
  * The v2 part of the pairing QR (protocol §8.2):
- * `http://<lan-ip>:<port>/pair?code=<v1 code>#v=2&k=<agent public key>&s=<secret>&n=<PC name>`.
- * Only the fragment is used; the v1 code is for the browser app.
+ * `http://<lan-ip>:<port>/pair#v=2&k=<agent public key>&s=<secret>&n=<PC name>`.
+ * Only the host, the port and the fragment are used (PCs before v1.9 also put a v1 code in the query).
  */
 public class PairingLink(
     public val host: String,

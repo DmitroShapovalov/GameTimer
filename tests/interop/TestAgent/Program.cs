@@ -33,7 +33,7 @@ var port = 0;
 if (emulator)
 {
     app.MapGet("/control/health", () => "OK");
-    app.MapGet("/control/pair", () => $"http://10.0.2.2:{port}/pair?code=X#{host.StartPairing("Test PC").QrFragment}");
+    app.MapGet("/control/pair", () => $"http://10.0.2.2:{port}/pair#{host.StartPairing("Test PC").QrFragment}");
     app.MapGet("/control/code", (string c) => { ui.Answer(c); return "OK"; });
 }
 await app.StartAsync();
@@ -50,7 +50,7 @@ while ((line = Console.ReadLine()) != null)
     {
         case "pair":
             var offer = host.StartPairing("Test PC");
-            Out($"LINK http://127.0.0.1:{port}/pair?code=X#{offer.QrFragment}");
+            Out($"LINK http://127.0.0.1:{port}/pair#{offer.QrFragment}");
             break;
         case "code": ui.Answer(parts[1]); break;
         case "cancel": ui.Answer(null); break;
