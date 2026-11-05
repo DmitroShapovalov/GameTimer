@@ -99,7 +99,7 @@ public sealed partial class RemoteServer
     private string? ValidateSchedule(ScheduleDto? update)
     {
         if (update?.Week == null || update.Week.Count != 7)
-            return "invalid_request";
+            return "invalid_schedule";
         foreach (var d in update.Week)
         {
             if (d == null || d.LimitMinutes is < 0 or > 1440

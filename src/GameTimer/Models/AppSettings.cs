@@ -82,7 +82,6 @@ public class AppSettings
     /// </summary>
     public string? V2AgentId { get; set; }
 
-
     // Daily schedule: per-weekday allowed window + minute budget, enforced automatically. Off by default.
     public bool ScheduleEnabled { get; set; } = false;
 

@@ -38,7 +38,8 @@ The server (ASP.NET Core / Kestrel) is the only listening network surface. It is
    fc00::/7). The Windows Firewall rules we add are also limited to the local subnet.
 3. **Two WebSocket endpoints and nothing else.** `/v2` and `/v2/pair` (protocol §3); any other path is 404,
    there are no static files and no HTTP API. A browser request (an `Origin` header) is refused with 403,
-   connection slots are limited (503), and the request body is capped at 64 KB.
+   connection slots are limited (503), and frame and buffer sizes are limited by the protocol layer
+   (protocol.md §3).
 4. **Everything is end-to-end encrypted and authenticated by the protocol.** `/v2` runs Noise IK with the
    phone's key pinned at pairing; an unknown key is closed silently. Nothing on the wire is a bearer
    credential that could be sniffed and replayed.

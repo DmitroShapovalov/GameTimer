@@ -12,10 +12,10 @@ using Microsoft.AspNetCore.Http;
 namespace GameTimer.Services;
 
 /// <summary>
-/// Protocol v2 (docs/protocol.md) next to the v1 phone API: the <c>/v2</c> and <c>/v2/pair</c>
+/// Protocol v2 (docs/protocol.md), the only phone protocol: the <c>/v2</c> and <c>/v2/pair</c>
 /// WebSocket endpoints feed <see cref="AgentHost"/>, and <see cref="V2Backend"/> maps its requests onto
-/// the same <see cref="TimerController"/> / settings as v1. Events go out from the v1 event handlers
-/// (RemoteServer.Events.cs), so both protocols see every change.
+/// <see cref="TimerController"/> / settings (RemoteServer.Model.cs). Events come from the handlers in
+/// RemoteServer.Events.cs.
 /// </summary>
 public sealed partial class RemoteServer
 {
@@ -357,7 +357,7 @@ public sealed partial class RemoteServer
                     try { update = JsonSerializer.Deserialize<ScheduleDto>(m.GetRawText(), Json); }
                     catch (JsonException) { return Reply.Error("bad_request"); }
                     var error = _s.ValidateSchedule(update);
-                    if (error != null) return Reply.Error(error == "invalid_request" ? "invalid_schedule" : error);
+                    if (error != null) return Reply.Error(error);
                     _s.ApplySchedule(update!);
                     return Ok("schedule", Schedule());
                 }

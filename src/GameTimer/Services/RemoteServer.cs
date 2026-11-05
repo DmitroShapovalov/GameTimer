@@ -1,6 +1,6 @@
 using System.Text.Json;
-using GameTimer.Models;
 using System.Text.Json.Serialization;
+using GameTimer.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
