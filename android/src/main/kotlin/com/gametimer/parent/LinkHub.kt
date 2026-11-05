@@ -322,7 +322,16 @@ class LinkHub(private val context: Context, private val store: HubStore) {
                 }
                 seenPeers.edit().putStringSet(agent.agentId, list.map { it.id }.toSet()).apply()
             }
-            launch { link.state.collect { st -> if (st != null) notifier.requestFromState(agent, st) } }
+            // Only on "a request was there, now it isn't": not on every tick, and never before the state that has it
+            launch {
+                var last: String? = null
+                link.state.collect { st ->
+                    if (st == null) return@collect
+                    val id = ((st.json["request"] as? JsonObject)?.get("id") as? JsonPrimitive)?.content
+                    if (last != null && id == null) notifier.requestEnded(agent) // a replaced one: the new notice takes its place
+                    last = id
+                }
+            }
             launch {
                 link.status.collect {
                     if (it is LinkStatus.Online) {

@@ -1839,7 +1839,7 @@ public partial class MainWindow : FluentWindow
         bool sent = _timer.RequestMoreTime() == TimeRequestResult.Sent; // the answer comes back as more time (+N) or a "no" (both notified)
         UpdateAskUi();
         // From the tray the window isn't showing: say that it was sent
-        if (sent && !IsVisible && AskBlockedFor() is { } waiting) ShowNotification(Loc.Get("AskMore_Button"), waiting);
+        if (sent && !IsActive && AskBlockedFor() is { } waiting) ShowNotification(Loc.Get("AskMore_Button"), waiting);
     }
 
     #endregion

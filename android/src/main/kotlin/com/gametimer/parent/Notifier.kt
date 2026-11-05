@@ -123,16 +123,14 @@ class Notifier(private val context: Context) {
         if (notify) show(agent, e, me, pcNow = null)
     }
 
+    /** The child's request was answered, replaced or dropped with the timer: its notification goes. */
+    fun requestEnded(agent: PairedAgent) =
+        NotificationManagerCompat.from(context).cancel((agent.agentId + "/timeRequested").hashCode())
+
     /**
      * After a push wake-up (protocol §10.6): a warning point isn't in the history, so it is told from the timer
      * state — "about N min left" — once per timer run (by its target time), and only near the end.
      */
-    /** The child's request was answered, replaced or dropped with the timer: its notification goes. */
-    fun requestFromState(agent: PairedAgent, state: com.gametimer.protocol.hub.AgentState) {
-        if (state.json["request"] is JsonObject) return
-        NotificationManagerCompat.from(context).cancel((agent.agentId + "/timeRequested").hashCode())
-    }
-
     fun soonFromState(agent: PairedAgent, state: com.gametimer.protocol.hub.AgentState?) {
         if (state == null || !state.isRunning || !settings.isOn(NotifySettings.Category.Soon)) return
         val left = state.remainingSecondsNow()
