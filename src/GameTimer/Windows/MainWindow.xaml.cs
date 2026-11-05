@@ -1813,11 +1813,9 @@ public partial class MainWindow : FluentWindow
     // Why asking is not possible right now (waiting for an answer, or right after a "no"), or null
     private string? AskBlockedFor()
     {
-        var now = DateTimeOffset.Now;
-        if (_timer.PendingRequest is { } p && now - p.Time < TimerController.RequestLifetime)
+        if (_timer.RequestWaiting && _timer.PendingRequest is { } p)
             return string.Format(Loc.Get("AskMore_Pending"), p.Time.LocalDateTime.ToString("t", UiCulture()));
-        if (_timer.DeclinedAt is { } d && now >= d && now - d < TimerController.RequestCooldown)
-            return Loc.Get("AskMore_Declined");
+        if (_timer.RecentlyDeclined) return Loc.Get("AskMore_Declined");
         return null;
     }
 
@@ -1838,8 +1836,10 @@ public partial class MainWindow : FluentWindow
     private void AskMoreTime()
     {
         if (!CanAskMoreTime) return;
-        _timer.RequestMoreTime(); // the answer comes back as more time (+N) or a "no" (both notified)
+        bool sent = _timer.RequestMoreTime() == TimeRequestResult.Sent; // the answer comes back as more time (+N) or a "no" (both notified)
         UpdateAskUi();
+        // From the tray the window isn't showing: say that it was sent
+        if (sent && !IsVisible && AskBlockedFor() is { } waiting) ShowNotification(Loc.Get("AskMore_Button"), waiting);
     }
 
     #endregion

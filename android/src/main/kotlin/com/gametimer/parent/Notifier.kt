@@ -127,6 +127,12 @@ class Notifier(private val context: Context) {
      * After a push wake-up (protocol §10.6): a warning point isn't in the history, so it is told from the timer
      * state — "about N min left" — once per timer run (by its target time), and only near the end.
      */
+    /** The child's request was answered, replaced or dropped with the timer: its notification goes. */
+    fun requestFromState(agent: PairedAgent, state: com.gametimer.protocol.hub.AgentState) {
+        if (state.json["request"] is JsonObject) return
+        NotificationManagerCompat.from(context).cancel((agent.agentId + "/timeRequested").hashCode())
+    }
+
     fun soonFromState(agent: PairedAgent, state: com.gametimer.protocol.hub.AgentState?) {
         if (state == null || !state.isRunning || !settings.isOn(NotifySettings.Category.Soon)) return
         val left = state.remainingSecondsNow()
@@ -164,6 +170,8 @@ class Notifier(private val context: Context) {
         // What this phone did itself is no news (by hub id; agents before v1.7.2 only give the name)
         val mine = if (e.hub != null) e.hub == me.hubId else e.source == "phone" && me.name != null && e.device == me.name
         if (mine) return
+        // A request from long ago has been answered or replaced by now (the agent keeps one ≤ 15 min)
+        if (e.type == "timeRequested" && pcNow != null && parseTime(e.time)?.let { Duration.between(it, pcNow) > Duration.ofMinutes(15) } == true) return
         val (category, text) = when (e.type) {
             "expired" -> NotifySettings.Category.TimeUp to context.getString(R.string.ntf_time_up, actionText(e.action))
             "closed" -> NotifySettings.Category.Suspicious to context.getString(R.string.ntf_closed)

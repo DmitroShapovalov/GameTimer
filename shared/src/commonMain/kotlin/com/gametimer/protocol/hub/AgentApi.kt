@@ -138,6 +138,9 @@ public class AgentApi(private val link: AgentLink) {
         /** The agent speaks protocol minor ≥ 2: [setEndIn] is available. */
         public fun supportsEndIn(hello: JsonObject): Boolean = minor(hello) >= 2
 
+        /** The agent speaks protocol minor ≥ 3: the child's `request` in the state and [answerRequest]. */
+        public fun supportsRequests(hello: JsonObject): Boolean = minor(hello) >= 3
+
         private fun minor(hello: JsonObject): Int =
             (hello["minor"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 0
     }

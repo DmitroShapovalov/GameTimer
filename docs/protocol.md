@@ -228,7 +228,8 @@ supports and the hub adapts.
 **Minor versions.** `0`: the initial set. `1` (agent v1.7.1): `timer.end`, `timer.setEnd`,
 `timer.stop` with `skipScheduleToday`, and the schedule status `skippedToday`. A hub shows those
 controls only when `hello.minor` ≥ 1. `2` (agent v1.8.0): `timer.setEnd` with `inSeconds`; a hub
-sends it only when `hello.minor` ≥ 2 and falls back to `hours` + `minutes` otherwise.
+sends it only when `hello.minor` ≥ 2 and falls back to `hours` + `minutes` otherwise. `3` (agent v1.9):
+`state.request` and `timer.answerRequest` (the child asks for more time on the PC, §7.1).
 
 **Capabilities** — the hub renders a control only if the agent lists the capability. Names are
 stable; a breaking change gets a new name (`timer2`).
@@ -277,7 +278,9 @@ At most one at a time; it goes away when it is answered (`timer.answerRequest`),
 or runs out, or when the child asks again after 15 minutes without an answer (a new `id`). After a "no"
 the PC lets the child ask again only after 5 minutes. History types `timeRequested` (source `pc`) and
 `timeRequestDeclined` (a parent said no; a yes is recorded as `extended`). Hubs show `request` only
-while the timer runs, and treat a missing field as `null`.
+while the timer runs, and treat a missing field as `null`. `time` is the agent's clock, for display only;
+the lifetime and the pause after a "no" are measured on the agent's monotonic clock. A pending request
+and the pause live only in memory (a restart of the agent drops both).
 
 The hub counts down from `remainingSeconds` using **its own monotonic clock** from the moment the
 message arrived. `targetTime` and `now` are for display only: the PC clock may be wrong or changed.

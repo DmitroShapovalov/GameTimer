@@ -322,6 +322,7 @@ class LinkHub(private val context: Context, private val store: HubStore) {
                 }
                 seenPeers.edit().putStringSet(agent.agentId, list.map { it.id }.toSet()).apply()
             }
+            launch { link.state.collect { st -> if (st != null) notifier.requestFromState(agent, st) } }
             launch {
                 link.status.collect {
                     if (it is LinkStatus.Online) {

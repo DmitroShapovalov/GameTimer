@@ -591,8 +591,14 @@ public sealed class TimerController
     /// <summary>The child's request waiting for a parent, or null. One at a time; cleared when the timer stops.</summary>
     public TimeRequest? PendingRequest { get; private set; }
 
-    /// <summary>When a parent last said no (for the cooldown), or null.</summary>
-    public DateTimeOffset? DeclinedAt { get; private set; }
+    // Monotonic (Environment.TickCount64): the child can change the wall clock
+    private long _requestAtMs, _declinedAtMs = long.MinValue;
+
+    /// <summary>The request is still waiting and may not be replaced yet.</summary>
+    public bool RequestWaiting => PendingRequest != null && Environment.TickCount64 - _requestAtMs < (long)RequestLifetime.TotalMilliseconds;
+
+    /// <summary>A parent said no less than <see cref="RequestCooldown"/> ago.</summary>
+    public bool RecentlyDeclined => _declinedAtMs != long.MinValue && Environment.TickCount64 - _declinedAtMs < (long)RequestCooldown.TotalMilliseconds;
 
     /// <summary>Raised when a request is made, answered, or dropped with its timer.</summary>
     public event Action? TimeRequestChanged;
@@ -602,11 +608,11 @@ public sealed class TimerController
     {
         _dispatcher.VerifyAccess();
         if (!IsRunning) return TimeRequestResult.NotRunning;
-        var now = DateTimeOffset.Now;
-        if (PendingRequest is { } p && now - p.Time < RequestLifetime) return TimeRequestResult.AlreadyPending;
-        if (DeclinedAt is { } d && now - d < RequestCooldown && now >= d) return TimeRequestResult.TooSoon;
+        if (RequestWaiting) return TimeRequestResult.AlreadyPending;
+        if (RecentlyDeclined) return TimeRequestResult.TooSoon;
+        _requestAtMs = Environment.TickCount64;
         PendingRequest = new TimeRequest(
-            Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), now);
+            Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), DateTimeOffset.Now);
         Log(SessionEventType.TimeRequested, ActionSource.Pc);
         TimeRequestChanged?.Invoke();
         return TimeRequestResult.Sent;
@@ -623,7 +629,7 @@ public sealed class TimerController
         if (minutes == 0)
         {
             PendingRequest = null;
-            DeclinedAt = DateTimeOffset.Now;
+            _declinedAtMs = Environment.TickCount64;
             Log(SessionEventType.TimeRequestDeclined, source, device);
             TimeRequestChanged?.Invoke();
             return AnswerResult.Ok;

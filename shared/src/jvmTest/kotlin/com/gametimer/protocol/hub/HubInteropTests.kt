@@ -500,6 +500,7 @@ class HubInteropTests {
     fun theChildAsksForMoreTimeAndAParentAnswers(): Unit = runBlocking {
       withTimeout(60.seconds) {
         val (a, l) = api()
+        assertTrue(AgentApi.supportsRequests(l.awaitOnline().hello)) // minor 3 on both sides
         assertIs<RequestOutcome.Ok>(a.startInterval(0, 10))
         fun requestId() = ((l.state.value?.json?.get("request") as? kotlinx.serialization.json.JsonObject)?.get("id") as? JsonPrimitive)?.content
         // The child asks on the PC: the state carries the request (minor 3)
