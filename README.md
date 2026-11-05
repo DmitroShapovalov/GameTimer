@@ -11,6 +11,7 @@ A game time limiter for Windows — designed for parents who want to manage thei
 - **Auto-action on expiry** — shut down, lock screen, or log off when time is up
 - **Parental protection** — all controls are protected by Windows Hello (PIN / fingerprint / face recognition) with Windows password fallback
 - **System tray** — always there, showing the time left (tooltip, and the clock in the zone colour); closing the window hides to the tray; exit only from the tray menu (also protected)
+- **Ask for more time** — the child asks on the PC (Status page or tray menu); the parent gets a notification and answers on the phone: +15, +30 or No
 - **Windows notifications, only what matters to the child** — when time is almost up (the red zone) and when a parent changes the time or the schedule from a phone; never over a full-screen game (the timer on screen pulses instead); can be turned off
 - **Draggable overlay position** — position the timer anywhere on screen via a visual preview
 - **Parent app for Android** — the timer, the weekly schedule, the settings and the history of each PC on your phone, end-to-end encrypted, paired by QR code; notifications when time is up or something looks wrong

@@ -224,4 +224,13 @@
     <string name="monitor_title">Наблюдение за ПК</string>
     <string name="monitor_text">Сообщит, когда время выйдет</string>
     <string name="ntf_public">Новое событие на ПК</string>
+    <string name="req_title">Просит ещё времени · %1$s</string>
+    <string name="req_no">Нет</string>
+    <string name="err_no_request">На просьбу уже ответили или она устарела</string>
+    <string name="ntf_request">Просит ещё времени</string>
+    <string name="ntf_declined">Отказал в дополнительном времени</string>
+    <string name="ntf_cat_requests">Просьбы о времени</string>
+    <string name="ntf_cat_requests_hint">Ребёнок просит ещё времени на ПК; ответить можно на экране таймера.</string>
+    <string name="ev_time_requested">Попросил ещё времени</string>
+    <string name="ev_time_request_declined">Отказал в дополнительном времени</string>
 </resources>

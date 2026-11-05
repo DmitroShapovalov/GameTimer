@@ -54,6 +54,13 @@ public class AgentApi(private val link: AgentLink) {
 
     public suspend fun extend(minutes: Int): RequestOutcome = link.send("timer.extend", buildJsonObject { put("minutes", minutes) })
 
+    /**
+     * Answers the child's request for more time (state `request`, minor 3): [minutes] > 0 adds that much,
+     * 0 says no. `no_request` if it was answered or dropped meanwhile.
+     */
+    public suspend fun answerRequest(id: String, minutes: Int): RequestOutcome =
+        link.send("timer.answerRequest", buildJsonObject { put("request", id); put("minutes", minutes) }) // "id" is the envelope's
+
     public suspend fun acknowledgeInterruption(): RequestOutcome = link.send("interruption.ack", JsonObject(emptyMap()))
 
     public suspend fun settings(): ApiResult<AgentSettings> = read("settings.get", null) { it["settings"]!!.decodeAs() }
@@ -130,6 +137,9 @@ public class AgentApi(private val link: AgentLink) {
 
         /** The agent speaks protocol minor ≥ 2: [setEndIn] is available. */
         public fun supportsEndIn(hello: JsonObject): Boolean = minor(hello) >= 2
+
+        /** The agent speaks protocol minor ≥ 3: the child's `request` in the state and [answerRequest]. */
+        public fun supportsRequests(hello: JsonObject): Boolean = minor(hello) >= 3
 
         private fun minor(hello: JsonObject): Int =
             (hello["minor"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 0

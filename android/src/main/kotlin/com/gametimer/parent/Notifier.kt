@@ -43,7 +43,8 @@ class NotifySettings(context: Context) {
         TimeUp("timeUp", listOf("expired")),         // the time ran out (or was ended): the PC locked / logged off / shut down
         Soon("soon", listOf("alert")),               // a warning point on the PC ("5 min left"): live only; woken → from the state
         Suspicious("suspicious", listOf("closed", "tampered", "peerAdded")), // closed while a timer ran; tampered; a parent app added
-        Others("others", listOf("started", "stopped", "reset", "extended", "scheduleSkipped")), // someone else's action
+        Others("others", listOf("started", "stopped", "reset", "extended", "scheduleSkipped", "timeRequestDeclined")), // someone else's action
+        Requests("requests", listOf("timeRequested")), // the child asks for more time on the PC (protocol minor 3)
     }
 }
 
@@ -122,6 +123,10 @@ class Notifier(private val context: Context) {
         if (notify) show(agent, e, me, pcNow = null)
     }
 
+    /** The child's request was answered, replaced or dropped with the timer: its notification goes. */
+    fun requestEnded(agent: PairedAgent) =
+        NotificationManagerCompat.from(context).cancel((agent.agentId + "/timeRequested").hashCode())
+
     /**
      * After a push wake-up (protocol §10.6): a warning point isn't in the history, so it is told from the timer
      * state — "about N min left" — once per timer run (by its target time), and only near the end.
@@ -163,10 +168,13 @@ class Notifier(private val context: Context) {
         // What this phone did itself is no news (by hub id; agents before v1.7.2 only give the name)
         val mine = if (e.hub != null) e.hub == me.hubId else e.source == "phone" && me.name != null && e.device == me.name
         if (mine) return
+        // A request from long ago has been answered or replaced by now (the agent keeps one ≤ 15 min)
+        if (e.type == "timeRequested" && pcNow != null && parseTime(e.time)?.let { Duration.between(it, pcNow) > Duration.ofMinutes(15) } == true) return
         val (category, text) = when (e.type) {
             "expired" -> NotifySettings.Category.TimeUp to context.getString(R.string.ntf_time_up, actionText(e.action))
             "closed" -> NotifySettings.Category.Suspicious to context.getString(R.string.ntf_closed)
             "tampered" -> NotifySettings.Category.Suspicious to context.getString(R.string.ntf_tampered)
+            "timeRequested" -> NotifySettings.Category.Requests to context.getString(R.string.ntf_request)
             else -> {
                 if (e.source == "system") return // automatic starts, resumes, restores: not someone's action
                 val who = if (e.source == "pc") context.getString(R.string.ntf_who_pc) else (e.device ?: "?")
@@ -176,6 +184,7 @@ class Notifier(private val context: Context) {
                     "extended" -> if ((e.minutes ?: 0) >= 0) context.getString(R.string.ntf_plus, e.minutes ?: 0)
                                   else context.getString(R.string.ntf_minus, -(e.minutes ?: 0))
                     "scheduleSkipped" -> context.getString(R.string.ntf_lifted)
+                    "timeRequestDeclined" -> context.getString(R.string.ntf_declined)
                     else -> return
                 }
                 NotifySettings.Category.Others to context.getString(R.string.ntf_by, what, who)
@@ -202,7 +211,7 @@ class Notifier(private val context: Context) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val channel = when (category) {
-            NotifySettings.Category.TimeUp, NotifySettings.Category.Soon -> CHANNEL_TIMER
+            NotifySettings.Category.TimeUp, NotifySettings.Category.Soon, NotifySettings.Category.Requests -> CHANNEL_TIMER
             NotifySettings.Category.Suspicious -> CHANNEL_SECURITY
             NotifySettings.Category.Others -> CHANNEL_ACTIVITY
         }

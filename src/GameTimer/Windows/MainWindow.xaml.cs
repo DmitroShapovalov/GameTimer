@@ -88,13 +88,14 @@ public partial class MainWindow : FluentWindow
         _pairingUi = pairingUi;
         _pairingUi.AskForCode = AskPairingCodeAsync;
         _remote.Agent.PeersChanged += () => Dispatcher.BeginInvoke(RefreshDevicesList);
+        _timer.TimeRequestChanged += UpdateAskUi;
         _remote.RelayStatusChanged += () => Dispatcher.BeginInvoke(UpdateRemoteStatus);
         _settingsService.SettingsChanged += OnSettingsChanged;
 
         LoadSettingsToUI();
         ApplyLocalization();
         SetupTrayIcon();
-        _timer.StateChanged += _ => { _lastTickMinutes = double.NaN; UpdateTrayStatus(); };
+        _timer.StateChanged += _ => { _lastTickMinutes = double.NaN; UpdateTrayStatus(); UpdateAskUi(); };
         _sessionLog.Added += e => Dispatcher.BeginInvoke(() => NotifyParentChange(e));
         _scheduleSnapshot = ScheduleSnapshot();
 
@@ -150,6 +151,7 @@ public partial class MainWindow : FluentWindow
         MoreButton.Content = Loc.Get("More");
         EndAtMenu.Header = Loc.Get("EndAt_Menu");
         StepLabel.Text = Loc.Get("Step_Label");
+        AskMoreButton.Content = Loc.Get("AskMore_Button");
         EndAtLabel.Text = Loc.Get("EndAt_Label");
         EndAtButton.Content = Loc.Get("EndAt_Set");
         UpdateStepButtons();
@@ -848,6 +850,7 @@ public partial class MainWindow : FluentWindow
         UpdateStatusLines(); // the end moves with − / + (from here or a phone)
         CheckRedZone(remaining);
         UpdateTrayStatus();
+        UpdateAskUi(); // the cooldown after a "no" runs out
         if (remaining.TotalHours >= 1)
             RemainingText.Text = $"{(int)remaining.TotalHours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
         else
@@ -998,6 +1001,8 @@ public partial class MainWindow : FluentWindow
         GameTimer.Models.SessionEventType.Resumed => (SymbolRegular.ArrowClockwise24, "SystemFillColorSuccessBrush"),
         GameTimer.Models.SessionEventType.Extended =>
             ((e.Minutes ?? 0) >= 0 ? SymbolRegular.Add24 : SymbolRegular.Subtract24, "AccentFillColorDefaultBrush"),
+        GameTimer.Models.SessionEventType.TimeRequested => (SymbolRegular.HandWave24, "AccentFillColorDefaultBrush"),
+        GameTimer.Models.SessionEventType.TimeRequestDeclined => (SymbolRegular.Dismiss24, "TextFillColorSecondaryBrush"),
         GameTimer.Models.SessionEventType.ScheduleSkipped or GameTimer.Models.SessionEventType.ScheduleRestored =>
             (SymbolRegular.CalendarLtr24, "AccentFillColorDefaultBrush"),
         GameTimer.Models.SessionEventType.Stopped or GameTimer.Models.SessionEventType.Reset =>
@@ -1027,6 +1032,8 @@ public partial class MainWindow : FluentWindow
             GameTimer.Models.SessionEventType.Updated => Loc.Get("Ev_Updated"),
             GameTimer.Models.SessionEventType.ScheduleSkipped => Loc.Get("Ev_ScheduleSkipped"),
             GameTimer.Models.SessionEventType.ScheduleRestored => Loc.Get("Ev_ScheduleRestored"),
+            GameTimer.Models.SessionEventType.TimeRequested => Loc.Get("Ev_TimeRequested"),
+            GameTimer.Models.SessionEventType.TimeRequestDeclined => Loc.Get("Ev_TimeRequestDeclined"),
             _ => e.Type.ToString()
         };
         string who = e.Source switch
@@ -1604,11 +1611,13 @@ public partial class MainWindow : FluentWindow
                 Loc.Get(admin ? "Peer_MakeParent" : "Peer_MakeAdmin"));
         }).ToList();
         PeersList.ItemsSource = peers;
+        UpdateAskUi(); // asking needs a paired parent app
         NoDevicesText.Visibility = peers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void UpdateRemoteStatus()
     {
+        UpdateAskUi(); // asking needs phone control on
         ConnectPhoneButton.IsEnabled = _remote.IsRunning;
         // A disabled button says why: phone control has to be on first
         ConnectPhoneDesc.Text = Loc.Get(_remote.IsRunning ? "ConnectPhone_Desc" : "ConnectPhone_NeedsControl");
@@ -1658,6 +1667,10 @@ public partial class MainWindow : FluentWindow
         if (_trayIcon == null) return;
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add(Loc.Get("TrayOpen"), null, (_, _) => ShowFromTray());
+        // The child can ask from the tray without leaving the game's desktop
+        var ask = new System.Windows.Forms.ToolStripMenuItem(Loc.Get("AskMore_Button"), null, (_, _) => AskMoreTime());
+        menu.Items.Add(ask);
+        menu.Opening += (_, _) => { ask.Visible = CanAskMoreTime; ask.Enabled = AskAllowedNow; };
         menu.Items.Add(Loc.Get("TrayExit"), null, (_, _) => TrayExit());
         _trayIcon.ContextMenuStrip = menu;
         _trayTip = null; // the language may have changed
@@ -1784,10 +1797,52 @@ public partial class MainWindow : FluentWindow
                 string.Format(Loc.Get("Notif_Started"), LimitText(Math.Max(1, e.Minutes ?? MinutesLeft(_timer.Remaining)))),
             GameTimer.Models.SessionEventType.Stopped or GameTimer.Models.SessionEventType.Reset => Loc.Get("Notif_Stopped"),
             GameTimer.Models.SessionEventType.ScheduleSkipped => Loc.Get("Notif_Lifted"),
+            GameTimer.Models.SessionEventType.TimeRequestDeclined => Loc.Get("Notif_Declined"),
             _ => null
         };
         if (body != null) ShowNotification(Loc.Get("Notif_ParentTitle"), body);
     }
+
+    #region Asking for more time
+
+    // Only with someone to ask: phone control on and a paired parent app
+    private bool CanAskMoreTime => _timer.IsRunning && _remote.IsRunning && _remote.Agent.Peers.Count > 0;
+
+    private bool AskAllowedNow => CanAskMoreTime && AskBlockedFor() == null;
+
+    // Why asking is not possible right now (waiting for an answer, or right after a "no"), or null
+    private string? AskBlockedFor()
+    {
+        if (_timer.RequestWaiting && _timer.PendingRequest is { } p)
+            return string.Format(Loc.Get("AskMore_Pending"), p.Time.LocalDateTime.ToString("t", UiCulture()));
+        if (_timer.RecentlyDeclined) return Loc.Get("AskMore_Declined");
+        return null;
+    }
+
+    private void UpdateAskUi()
+    {
+        if (AskPanel == null || _remote == null) return;
+        bool can = CanAskMoreTime;
+        AskPanel.Visibility = can ? Visibility.Visible : Visibility.Collapsed;
+        if (!can) return;
+        var blocked = AskBlockedFor();
+        AskMoreButton.IsEnabled = blocked == null;
+        if (AskStatusText.Text != (blocked ?? "")) AskStatusText.Text = blocked ?? "";
+        AskStatusText.Visibility = blocked != null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void AskMore_Click(object sender, RoutedEventArgs e) => AskMoreTime();
+
+    private void AskMoreTime()
+    {
+        if (!CanAskMoreTime) return;
+        bool sent = _timer.RequestMoreTime() == TimeRequestResult.Sent; // the answer comes back as more time (+N) or a "no" (both notified)
+        UpdateAskUi();
+        // From the tray the window isn't showing: say that it was sent
+        if (sent && !IsActive && AskBlockedFor() is { } waiting) ShowNotification(Loc.Get("AskMore_Button"), waiting);
+    }
+
+    #endregion
 
     private void NotifyScheduleChanged()
     {

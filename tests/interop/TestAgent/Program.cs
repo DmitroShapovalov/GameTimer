@@ -55,6 +55,7 @@ while ((line = Console.ReadLine()) != null)
         case "code": ui.Answer(parts[1]); break;
         case "cancel": ui.Answer(null); break;
         case "revoke": Out(host.RevokeByOwner(parts[1]) ? "OK" : "NOTFOUND"); break;
+        case "ask": Out(backend.Ask() ? "OK" : "NOTRUNNING"); break; // the child asks for more time (minor 3)
         case "alert": host.Publish("ev.alert", new JsonObject { ["minutes"] = int.Parse(parts[1]) }); Out("OK"); break;
         case "relay":
             host.RemoteAccess = true;
@@ -218,6 +219,18 @@ sealed class SimBackend : IAgentBackend
                     _durationSeconds += min.GetInt32() * 60;
                     Log("extended", context, min.GetInt32());
                     return Changed(context);
+                case "timer.answerRequest": // minor 3, like TimerController.AnswerTimeRequest
+                {
+                    if (!m.TryGetProperty("request", out var idp) || idp.GetString() is not { } id
+                        || !m.TryGetProperty("minutes", out var mp) || !mp.TryGetInt32(out var add)) return Err("bad_request");
+                    if (add < 0 || add > 1440) return Err("invalid_minutes");
+                    if (_request != id) return Err("no_request");
+                    if (add > 0 && !_clock.IsRunning) return Err("not_running");
+                    _request = null;
+                    if (add == 0) Log("timeRequestDeclined", context, null);
+                    else { _durationSeconds += add * 60; Log("extended", context, add); }
+                    return Changed(context);
+                }
                 case "interruption.ack": return Ok();
                 case "settings.get": return Task.FromResult(Reply.Ok(new JsonObject { ["settings"] = WithRev(_settings, _settingsRev) }));
                 case "settings.put":
@@ -288,6 +301,24 @@ sealed class SimBackend : IAgentBackend
     private static Task<Reply> Err(string code) => Task.FromResult(Reply.Error(code));
 
     private bool _skipped, _expired;
+    private string? _request;
+    private DateTimeOffset _requestTime;
+
+    /// <summary>The child asks for more time on the "PC" (console command "ask").</summary>
+    public bool Ask()
+    {
+        lock (_gate)
+        {
+            if (!_clock.IsRunning) return false;
+            _request = Guid.NewGuid().ToString("N")[..16];
+            _requestTime = DateTimeOffset.Now;
+            var e = new JsonObject { ["time"] = _requestTime.ToString("o"), ["type"] = "timeRequested", ["source"] = "pc" };
+            _history.Add(e);
+            Host!.Publish("ev.history", new JsonObject { ["event"] = e.DeepClone() });
+            Host!.Publish("ev.state", new JsonObject { ["state"] = State() });
+            return true;
+        }
+    }
 
     private int Remaining() => Math.Max(0, _durationSeconds - (int)_clock.Elapsed.TotalSeconds);
 
@@ -301,6 +332,7 @@ sealed class SimBackend : IAgentBackend
             _skipped = false;
         }
         bool running = _clock.IsRunning;
+        if (!running) _request = null; // the request goes with its timer
         int remaining = running ? Remaining() : 0;
         bool scheduleOn = _schedule["enabled"]!.GetValue<bool>();
         return new JsonObject
@@ -317,6 +349,7 @@ sealed class SimBackend : IAgentBackend
                 ["availableSeconds"] = scheduleOn && !_skipped ? 7200 : 0, ["usedSecondsToday"] = 0,
             },
             ["interruption"] = null,
+            ["request"] = _request == null ? null : new JsonObject { ["id"] = _request, ["time"] = _requestTime.ToString("o") },
         };
     }
 }

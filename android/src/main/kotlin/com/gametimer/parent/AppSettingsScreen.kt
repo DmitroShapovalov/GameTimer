@@ -100,6 +100,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 NotifySettings.Category.TimeUp to (R.string.ntf_cat_time_up to R.string.ntf_cat_time_up_hint),
                 NotifySettings.Category.Soon to (R.string.ntf_cat_soon to R.string.ntf_cat_soon_hint),
                 NotifySettings.Category.Suspicious to (R.string.ntf_cat_suspicious to R.string.ntf_cat_suspicious_hint),
+                NotifySettings.Category.Requests to (R.string.ntf_cat_requests to R.string.ntf_cat_requests_hint),
                 NotifySettings.Category.Others to (R.string.ntf_cat_others to R.string.ntf_cat_others_hint),
             ).forEach { (category, texts) ->
                 SwitchRow(stringResource(texts.first), stringResource(texts.second), values.getValue(category), enabled = background) {

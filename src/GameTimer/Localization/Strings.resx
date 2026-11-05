@@ -647,4 +647,22 @@
   <data name="Tray_Left" xml:space="preserve">
     <value>{0} left</value>
   </data>
+  <data name="AskMore_Button" xml:space="preserve">
+    <value>Ask for more time</value>
+  </data>
+  <data name="AskMore_Pending" xml:space="preserve">
+    <value>Asked at {0} · waiting for a parent's answer</value>
+  </data>
+  <data name="AskMore_Declined" xml:space="preserve">
+    <value>A parent said no. You can ask again in a few minutes.</value>
+  </data>
+  <data name="Ev_TimeRequested" xml:space="preserve">
+    <value>Asked for more time</value>
+  </data>
+  <data name="Ev_TimeRequestDeclined" xml:space="preserve">
+    <value>Said no to more time</value>
+  </data>
+  <data name="Notif_Declined" xml:space="preserve">
+    <value>A parent said no to more time.</value>
+  </data>
 </root>

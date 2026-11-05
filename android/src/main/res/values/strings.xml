@@ -224,4 +224,13 @@
     <string name="monitor_title">Watching your PCs</string>
     <string name="monitor_text">Notifies you when the time is up</string>
     <string name="ntf_public">New event on a PC</string>
+    <string name="req_title">Asks for more time · %1$s</string>
+    <string name="req_no">No</string>
+    <string name="err_no_request">The request was already answered or has ended</string>
+    <string name="ntf_request">Asks for more time</string>
+    <string name="ntf_declined">Said no to more time</string>
+    <string name="ntf_cat_requests">Requests for more time</string>
+    <string name="ntf_cat_requests_hint">The child asks for more time on the PC; answer from the timer screen.</string>
+    <string name="ev_time_requested">Asked for more time</string>
+    <string name="ev_time_request_declined">Said no to more time</string>
 </resources>

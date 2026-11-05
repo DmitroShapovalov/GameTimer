@@ -647,4 +647,22 @@
   <data name="Tray_Left" xml:space="preserve">
     <value>залишилось {0}</value>
   </data>
+  <data name="AskMore_Button" xml:space="preserve">
+    <value>Попросити ще часу</value>
+  </data>
+  <data name="AskMore_Pending" xml:space="preserve">
+    <value>Попросив о {0} · чекаємо відповіді батьків</value>
+  </data>
+  <data name="AskMore_Declined" xml:space="preserve">
+    <value>Батьки відповіли «ні». Попросити знову можна за кілька хвилин.</value>
+  </data>
+  <data name="Ev_TimeRequested" xml:space="preserve">
+    <value>Попросив ще часу</value>
+  </data>
+  <data name="Ev_TimeRequestDeclined" xml:space="preserve">
+    <value>Відмовив у додатковому часі</value>
+  </data>
+  <data name="Notif_Declined" xml:space="preserve">
+    <value>Батьки відмовили в додатковому часі.</value>
+  </data>
 </root>

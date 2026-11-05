@@ -495,4 +495,29 @@ class HubInteropTests {
         assertIs<RequestOutcome.Ok>(a.endNow())
         assertEquals(RequestOutcome.Refused("not_running"), a.setEndIn(600))
     }
+
+    @Test
+    fun theChildAsksForMoreTimeAndAParentAnswers(): Unit = runBlocking {
+      withTimeout(60.seconds) {
+        val (a, l) = api()
+        assertTrue(AgentApi.supportsRequests(l.awaitOnline().hello)) // minor 3 on both sides
+        assertIs<RequestOutcome.Ok>(a.startInterval(0, 10))
+        fun requestId() = ((l.state.value?.json?.get("request") as? kotlinx.serialization.json.JsonObject)?.get("id") as? JsonPrimitive)?.content
+        // The child asks on the PC: the state carries the request (minor 3)
+        agent.send("ask"); agent.expect("OK")
+        val id = withTimeout(10.seconds) { while (requestId() == null) kotlinx.coroutines.delay(50); requestId()!! }
+        // Yes, +15: more time, and the request is gone; answering it again is refused
+        assertIs<RequestOutcome.Ok>(a.answerRequest(id, 15))
+        assertEquals(null, requestId())
+        assertTrue(l.state.value!!.remainingSecondsNow() > 20 * 60)
+        assertEquals(RequestOutcome.Refused("no_request"), a.answerRequest(id, 30))
+        // A new request, and a no
+        agent.send("ask"); agent.expect("OK")
+        val second = withTimeout(10.seconds) { while (requestId() == null) kotlinx.coroutines.delay(50); requestId()!! }
+        assertIs<RequestOutcome.Ok>(a.answerRequest(second, 0))
+        assertEquals(null, requestId())
+        val types = (a.history(limit = 5) as ApiResult.Ok).value.events.map { it.type }
+        assertEquals(listOf("timeRequestDeclined", "timeRequested", "extended", "timeRequested"), types.take(4))
+      }
+    }
 }

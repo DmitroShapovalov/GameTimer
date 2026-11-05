@@ -224,4 +224,13 @@
     <string name="monitor_title">Je pc\'s in de gaten houden</string>
     <string name="monitor_text">Meldt wanneer de tijd om is</string>
     <string name="ntf_public">Nieuwe gebeurtenis op een pc</string>
+    <string name="req_title">Vraagt om meer tijd · %1$s</string>
+    <string name="req_no">Nee</string>
+    <string name="err_no_request">Het verzoek is al beantwoord of verlopen</string>
+    <string name="ntf_request">Vraagt om meer tijd</string>
+    <string name="ntf_declined">Nee gezegd tegen meer tijd</string>
+    <string name="ntf_cat_requests">Verzoeken om meer tijd</string>
+    <string name="ntf_cat_requests_hint">Het kind vraagt op de pc om meer tijd; antwoord op het timerscherm.</string>
+    <string name="ev_time_requested">Om meer tijd gevraagd</string>
+    <string name="ev_time_request_declined">Nee gezegd tegen meer tijd</string>
 </resources>
