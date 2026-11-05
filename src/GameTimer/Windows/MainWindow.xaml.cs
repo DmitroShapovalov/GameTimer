@@ -16,8 +16,6 @@ public partial class MainWindow : FluentWindow
     private readonly SoundService _soundService = new();
     private readonly TimerController _timer;
     private readonly RemoteServer _remote;
-    private readonly DeviceStore _devices;
-    private readonly PairingService _pairing;
     private readonly SessionLog _sessionLog;
     private readonly GameTimer.Services.V2.WindowsPairingUi _pairingUi;
     private bool _isRemoteBusy;
@@ -55,7 +53,7 @@ public partial class MainWindow : FluentWindow
     private static readonly int[] ScheduleDayOrder = { 1, 2, 3, 4, 5, 6, 0 };
 
     public MainWindow(SettingsService settingsService, AppSettings settings, TimerController timer,
-        RemoteServer remote, DeviceStore devices, PairingService pairing, SessionLog sessionLog,
+        RemoteServer remote, SessionLog sessionLog,
         GameTimer.Services.V2.WindowsPairingUi pairingUi)
     {
         InitializeComponent();
@@ -85,11 +83,8 @@ public partial class MainWindow : FluentWindow
         _timer.InterruptionChanged += UpdateInterruptionBar;
         _timer.ScheduleStateChanged += () => Dispatcher.BeginInvoke(UpdateScheduleStatus);
         _remote = remote;
-        _devices = devices;
-        _pairing = pairing;
         _sessionLog = sessionLog;
         _sessionLog.Changed += () => Dispatcher.BeginInvoke(RefreshHistory);
-        _devices.Changed += RefreshDevicesList;
         _pairingUi = pairingUi;
         _pairingUi.AskForCode = AskPairingCodeAsync;
         _remote.Agent.PeersChanged += () => Dispatcher.BeginInvoke(RefreshDevicesList);
@@ -1561,7 +1556,7 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        new ConnectPhoneDialog(_pairing, _remote.Agent, _pairingUi, address.ToString(), port) { Owner = this }.ShowDialog();
+        new ConnectPhoneDialog(_remote.Agent, _pairingUi, address.ToString(), port) { Owner = this }.ShowDialog();
     }
 
     /// <summary>Protocol v2 pairing: the owner types the phone's 6-digit code, then Windows Hello (§8.2).</summary>
@@ -1598,18 +1593,8 @@ public partial class MainWindow : FluentWindow
         public string RevokeTip => Loc.Get("Delete");
     }
 
-    private async void RevokeDevice_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement { Tag: PairedDevice device }) return;
-        if (!await RequireAuth(fresh: true)) return;
-        _devices.Revoke(device.Id); // its next request gets 401
-    }
-
     private void RefreshDevicesList()
     {
-        DevicesList.ItemsSource = null;
-        DevicesList.ItemsSource = _devices.Devices;
-
         var peers = _remote.Agent.Peers.Select(p =>
         {
             bool admin = p.Role == GameTimer.Protocol.Agent.PeerRole.Admin;
@@ -1619,7 +1604,7 @@ public partial class MainWindow : FluentWindow
                 Loc.Get(admin ? "Peer_MakeParent" : "Peer_MakeAdmin"));
         }).ToList();
         PeersList.ItemsSource = peers;
-        NoDevicesText.Visibility = _devices.Devices.Count == 0 && peers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        NoDevicesText.Visibility = peers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void UpdateRemoteStatus()
@@ -1634,7 +1619,7 @@ public partial class MainWindow : FluentWindow
         {
             // The address the phone uses, so a parent can compare it after a router change
             var host = NetworkFilter.GetLanAddress()?.ToString() ?? "localhost";
-            RemoteStatusText.Text = string.Format(Loc.Get("Remote_Running"), $"http://{host}:{_remote.Port}");
+            RemoteStatusText.Text = string.Format(Loc.Get("Remote_Running"), $"{host}:{_remote.Port}");
         }
         else if (_remote.LastError != null)
             RemoteStatusText.Text = string.Format(Loc.Get("Remote_StartFailed"), _settings.RemotePort, _remote.LastError);

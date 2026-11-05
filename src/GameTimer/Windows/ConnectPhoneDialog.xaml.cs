@@ -18,17 +18,16 @@ namespace GameTimer.Windows;
 /// </summary>
 public partial class ConnectPhoneDialog : FluentWindow
 {
-    private readonly PairingService _pairing;
     private readonly AgentHost _agent;
     private readonly WindowsPairingUi _pairingUi;
     private readonly DispatcherTimer _countdown;
     private bool _connected;
     private bool _aborted;
+    private DateTimeOffset _expiresAt;
 
-    public ConnectPhoneDialog(PairingService pairing, AgentHost agent, WindowsPairingUi pairingUi, string lanAddress, int port)
+    public ConnectPhoneDialog(AgentHost agent, WindowsPairingUi pairingUi, string lanAddress, int port)
     {
         InitializeComponent();
-        _pairing = pairing;
         _agent = agent;
         _pairingUi = pairingUi;
 
@@ -38,14 +37,13 @@ public partial class ConnectPhoneDialog : FluentWindow
         InstructionsText.Text = Loc.Get("ConnectPhone_Instructions");
         CloseButton.Content = Loc.Get("Close");
 
-        // One QR, two independent secrets (protocol §8.2): the v1 code for the browser app in the query,
-        // the v2 pairing secret for the native app in the fragment (browsers never send it to the server)
+        // The pairing secret is in the fragment (protocol §8.2): the app reads it, nothing is sent to a server
         var offer = _agent.StartPairing(Environment.MachineName);
-        var url = $"http://{lanAddress}:{port}/pair?code={_pairing.Begin()}#{offer.QrFragment}";
+        _expiresAt = offer.ExpiresAt;
+        var url = $"http://{lanAddress}:{port}/pair#{offer.QrFragment}";
         UrlText.Text = url;
         QrImage.Source = RenderQr(url);
 
-        _pairing.Paired += OnPaired;
         _agent.Paired += OnV2Paired;
         _pairingUi.Aborted += OnPairingAborted;
         _countdown = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -56,8 +54,6 @@ public partial class ConnectPhoneDialog : FluentWindow
         Closed += (_, _) =>
         {
             _countdown.Stop();
-            _pairing.Paired -= OnPaired;
-            _pairing.Cancel();
             _agent.Paired -= OnV2Paired;
             _pairingUi.Aborted -= OnPairingAborted;
             _agent.CancelPairing();
@@ -68,7 +64,7 @@ public partial class ConnectPhoneDialog : FluentWindow
     {
         if (_connected || _aborted) return;
 
-        var left = _pairing.Remaining;
+        var left = _expiresAt - DateTimeOffset.UtcNow;
         if (left <= TimeSpan.Zero)
         {
             _countdown.Stop();
@@ -79,16 +75,6 @@ public partial class ConnectPhoneDialog : FluentWindow
         }
 
         StatusText.Text = string.Format(Loc.Get("ConnectPhone_ExpiresIn"), $"{(int)left.TotalMinutes}:{left.Seconds:D2}");
-    }
-
-    private void OnPaired(PairedDevice device)
-    {
-        _connected = true;
-        _countdown.Stop();
-        QrImage.Visibility = Visibility.Hidden;
-        UrlText.Visibility = Visibility.Collapsed;
-        ConnectedMark.Visibility = Visibility.Visible;
-        StatusText.Text = string.Format(Loc.Get("ConnectPhone_Connected"), device.Name);
     }
 
     // v2: a parent app finished pairing (any thread)
@@ -108,7 +94,6 @@ public partial class ConnectPhoneDialog : FluentWindow
     {
         _aborted = true;
         _countdown.Stop();
-        _pairing.Cancel();
         QrImage.Visibility = Visibility.Hidden;
         UrlText.Visibility = Visibility.Collapsed;
         StatusText.Text = Loc.Get("ConnectPhone_TwoPhones");

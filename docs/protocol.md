@@ -5,7 +5,8 @@
 > agents. Background and decisions: `.agent/VISION.md` (§3 architecture, decisions D2–D7).
 > Drafts 2 and 3 address two rounds of independent review — see §13.
 
-The v1 API (`/api/*`, `/ws`, bearer tokens, used by the PWA) stays unchanged next to v2.
+The v1 API (`/api/*`, `/ws`, bearer tokens, used by the old phone web page) ran next to v2 until it was removed in
+Windows v1.9; v2 is now the only protocol.
 
 Key words **must / must not / should** are normative. Sections marked *non-normative* describe
 recommended app behaviour that the other side cannot check.
@@ -248,7 +249,7 @@ An agent with relay support (Phase B) also puts `remoteAccess` (bool, top level)
 
 ## 7. Requests and events
 
-Payloads reuse the shapes of the v1 API (`docs/remote-api.http`), so the Windows agent maps them onto
+Payloads reuse the shapes of the former v1 API (now `src/GameTimer/Services/RemoteServer.Model.cs`), so the Windows agent maps them onto
 `TimerController` / `SettingsService` one-to-one.
 
 ### 7.1 State
@@ -337,13 +338,13 @@ Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `in
 ### 8.2 Pairing flow
 
 1. On the PC: Settings → **Connect phone** (Windows Hello). The PC creates, independently:
-   - the v1 code (for the PWA, as today), and
    - a **pairing secret** `s`: 32 random bytes, one use, valid 2 minutes.
-2. **One QR, two independent secrets.** The v2 data is in the URL **fragment**, which browsers never
-   send to the server:
-   `http://<lan-ip>:<port>/pair?code=<v1 code>#v=2&k=<agent public key>&s=<secret>&n=<PC name>`
-   (`k`, `s` base64url; `n` URL-encoded). A phone camera opens the PWA pairing (v1 uses only `code`);
-   the app's scanner uses only the fragment. Neither secret can stand in for the other.
+     (Until v1.9 it also created a v1 code for the old web page, in the query: `/pair?code=…#…`.
+     The app has always ignored the query.)
+2. **The QR.** The v2 data is in the URL **fragment**, which browsers never send to the server:
+   `http://<lan-ip>:<port>/pair#v=2&k=<agent public key>&s=<secret>&n=<PC name>`
+   (`k`, `s` base64url; `n` URL-encoded). The app's scanner uses only the host, the port and the fragment;
+   the path is not served (a phone camera that opens it gets nothing).
 3. The app connects to `/v2/pair` and runs **IKpsk1** with `rs = k`, `psk = s`; msg 1 payload
    `{ "t": "pair" }`. A wrong `s` fails the msg 1 MAC → silent close. A *valid* msg 1 does **not**
    use up `s`: it could be a replay of one sniffed earlier.
@@ -376,7 +377,7 @@ Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `in
 
 On `/v2/pair` only `pair.hello`, `pair.result` and `bye` are allowed.
 
-**Why this is safe.** Someone who sniffs the Wi-Fi sees at most the v1 code, not `s`. A wrong `s`
+**Why this is safe.** Someone who sniffs the Wi-Fi never sees `s` (it is only in the QR). A wrong `s`
 fails at the first message. A fake PC can't answer, because the app pins `k`. Someone who photographed
 the QR and pairs first is caught twice: the PC only accepts the code the parent types in from *their*
 phone — the child's phone shows a different one — and as soon as the parent's phone also scans, the

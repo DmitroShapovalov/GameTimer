@@ -1,14 +1,12 @@
 using System.Text.RegularExpressions;
 using GameTimer.Models;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 
 namespace GameTimer.Services;
 
 /// <summary>
-/// Phone API: timer control and settings (RMT-03). Every handler runs its work on the UI thread
-/// and goes through <see cref="TimerController"/> / <see cref="SettingsService"/>, never the window.
-/// Errors are <c>{ "error": "code" }</c> with 400 (bad input) or 409 (wrong timer state).
+/// The status / settings / schedule shapes the v2 backend sends and accepts (protocol §7), with their
+/// validation. Built and applied on the UI thread, through <see cref="TimerController"/> /
+/// <see cref="SettingsService"/>, never the window.
 /// </summary>
 public sealed partial class RemoteServer
 {
@@ -34,10 +32,6 @@ public sealed partial class RemoteServer
     public sealed record DayDto(bool Allowed, int LimitMinutes, int WindowStartMinutes, int WindowEndMinutes);
     public sealed record ScheduleDto(bool Enabled, List<DayDto> Week);
 
-    public sealed record StartRequest(TimerMode? Mode, int Hours, int Minutes);
-
-    public sealed record ExtendRequest(int Minutes);
-
     public sealed record AlertPointDto(int Minutes, bool Enabled);
 
     public sealed record SettingsDto(
@@ -62,101 +56,6 @@ public sealed partial class RemoteServer
         string? Language);
 
     #endregion
-
-    private void MapTimer(WebApplication app)
-    {
-        app.MapGet("/api/status", () => _ui.InvokeAsync(() => Results.Json(BuildStatus())));
-
-        app.MapPost("/api/timer/start", async (StartRequest? request, HttpContext context) =>
-        {
-            if (request?.Mode is not TimerMode mode)
-                return Error(StatusCodes.Status400BadRequest, "invalid_request");
-
-            var name = CurrentDevice(context).Name;
-            return await _ui.InvokeAsync(() =>
-            {
-                if (_timer.IsRunning)
-                    return Error(StatusCodes.Status409Conflict, "already_running");
-
-                bool started = mode == TimerMode.Interval
-                    ? _timer.StartInterval(request.Hours, request.Minutes, ActionSource.Phone, name)
-                    : _timer.StartAbsolute(request.Hours, request.Minutes, ActionSource.Phone, name);
-
-                return started
-                    ? Results.Json(BuildStatus())
-                    : Error(StatusCodes.Status400BadRequest, "invalid_time");
-            });
-        });
-
-        app.MapGet("/api/history", () =>
-            _ui.InvokeAsync(() => Results.Json(_sessionLog.Recent())));
-
-        // Dismiss the "app was closed while a timer ran" note (shown after a tamper-style restart)
-        app.MapPost("/api/interruption/ack", () => _ui.InvokeAsync(() =>
-        {
-            _timer.AcknowledgeInterruption();
-            return Results.Json(BuildStatus());
-        }));
-
-        // Stop also cancels a pending shutdown (TimerController.Stop)
-        app.MapPost("/api/timer/stop", async (HttpContext context) =>
-        {
-            var name = CurrentDevice(context).Name;
-            return await _ui.InvokeAsync(() =>
-                _timer.Stop(ActionSource.Phone, name)
-                    ? Results.Json(BuildStatus())
-                    : Error(StatusCodes.Status409Conflict, "not_running"));
-        });
-
-        app.MapPost("/api/timer/extend", async (ExtendRequest? request, HttpContext context) =>
-        {
-            if (request == null || request.Minutes == 0 || Math.Abs(request.Minutes) > MaxMinutes)
-                return Error(StatusCodes.Status400BadRequest, "invalid_minutes");
-
-            var name = CurrentDevice(context).Name;
-            return await _ui.InvokeAsync(() =>
-                _timer.Extend(request.Minutes, ActionSource.Phone, name)
-                    ? Results.Json(BuildStatus())
-                    : Error(StatusCodes.Status409Conflict, "not_running"));
-        });
-    }
-
-    private void MapSettings(WebApplication app)
-    {
-        app.MapGet("/api/settings", () => _ui.InvokeAsync(() => Results.Json(BuildSettings())));
-
-        app.MapGet("/api/schedule", () => _ui.InvokeAsync(() => Results.Json(BuildSchedule())));
-
-        app.MapPut("/api/schedule", async (ScheduleDto? update) =>
-        {
-            var error = ValidateSchedule(update);
-            if (error != null)
-                return Error(StatusCodes.Status400BadRequest, error);
-            return await _ui.InvokeAsync(() =>
-            {
-                ApplySchedule(update!);
-                return Results.Json(BuildSchedule());
-            });
-        });
-
-        app.MapPut("/api/settings", async (SettingsUpdate? update) =>
-        {
-            if (update == null)
-                return Error(StatusCodes.Status400BadRequest, "invalid_request");
-
-            var error = Validate(update);
-            if (error != null)
-                return Error(StatusCodes.Status400BadRequest, error);
-
-            return await _ui.InvokeAsync(() =>
-            {
-                Apply(update);
-                _settingsService.Save(_settings);
-                _settingsService.NotifyChanged(this); // the window refreshes its controls and the overlay
-                return Results.Json(BuildSettings());
-            });
-        });
-    }
 
     #region Helpers
 
@@ -196,11 +95,11 @@ public sealed partial class RemoteServer
         (_settings.Week ?? new List<DaySchedule>()).Select(d =>
             new DayDto(d.Allowed, d.LimitMinutes, d.WindowStartMinutes, d.WindowEndMinutes)).ToList());
 
-    /// <summary>Shared by v1 PUT /api/schedule and v2 schedule.put.</summary>
+    /// <summary>For v2 schedule.put.</summary>
     private string? ValidateSchedule(ScheduleDto? update)
     {
         if (update?.Week == null || update.Week.Count != 7)
-            return "invalid_request";
+            return "invalid_schedule";
         foreach (var d in update.Week)
         {
             if (d == null || d.LimitMinutes is < 0 or > 1440
@@ -265,9 +164,6 @@ public sealed partial class RemoteServer
                 .Select(a => new AlertPoint { Minutes = a.Minutes, Enabled = a.Enabled })
                 .ToList();
     }
-
-    private static IResult Error(int status, string code) =>
-        Results.Json(new { error = code }, statusCode: status);
 
     #endregion
 }

@@ -82,9 +82,6 @@ public class AppSettings
     /// </summary>
     public string? V2AgentId { get; set; }
 
-    // Paired phones (token hashes only)
-    public List<PairedDevice> Devices { get; set; } = new();
-
     // Daily schedule: per-weekday allowed window + minute budget, enforced automatically. Off by default.
     public bool ScheduleEnabled { get; set; } = false;
 

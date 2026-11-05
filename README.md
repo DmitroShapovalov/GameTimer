@@ -102,12 +102,7 @@ The relay only passes encrypted messages along: it can't see the timer, names or
 nothing. What it and Google's push service can see (when and how much, not what) is described in
 [`docs/PRIVACY.md`](docs/PRIVACY.md). Turning the option off on the PC disconnects the relay at once.
 
-## Phone web page (older, home Wi-Fi only)
-
-The PC still serves the earlier phone web page for already paired phones: open the address shown under **Phone control**
-on the same Wi-Fi. It can start / stop / extend the timer and change settings. New setups should use the Android app.
-Developers: the old API is documented in [`docs/remote-api.http`](docs/remote-api.http); the encrypted protocol of the
-app in [`docs/protocol.md`](docs/protocol.md).
+Developers: the encrypted protocol between the app and the PC is in [`docs/protocol.md`](docs/protocol.md).
 
 ## Daily schedule
 

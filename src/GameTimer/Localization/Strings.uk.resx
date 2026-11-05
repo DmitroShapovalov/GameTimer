@@ -234,7 +234,7 @@
     <value>Підключити телефон</value>
   </data>
   <data name="ConnectPhone_Instructions" xml:space="preserve">
-    <value>Відскануйте цей код камерою телефона. Телефон має бути в тій самій мережі Wi-Fi, що й цей ПК.</value>
+    <value>Відскануйте цей код у застосунку GameTimer на телефоні. Телефон має бути в тій самій мережі Wi-Fi, що й цей ПК.</value>
   </data>
   <data name="ConnectPhone_ExpiresIn" xml:space="preserve">
     <value>Код дійсний {0}</value>

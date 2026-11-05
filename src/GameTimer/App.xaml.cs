@@ -82,11 +82,9 @@ public partial class App : System.Windows.Application
         var timerController = new TimerController(settings, timerStateStore, sessionLog, usageTracker);
 
         var ui = new UiThread(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
-        var deviceStore = new DeviceStore(settings, () => settingsService.Save(settings), ui);
-        var pairing = new PairingService();
         // Protocol v2 (native parent app): identity + paired apps in a DPAPI file; pairing asks the owner here
         var pairingUi = new GameTimer.Services.V2.WindowsPairingUi(ui);
-        _remoteServer = new RemoteServer(deviceStore, pairing, ui, timerController, settings, settingsService, sessionLog,
+        _remoteServer = new RemoteServer(ui, timerController, settings, settingsService, sessionLog,
             new GameTimer.Services.V2.AgentFileStore(), pairingUi);
 
         var agentId = _remoteServer.Agent.AgentId;
@@ -108,7 +106,7 @@ public partial class App : System.Windows.Application
             settingsService.Save(settings);
         }
 
-        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, deviceStore, pairing, sessionLog, pairingUi);
+        var mainWindow = new MainWindow(settingsService, settings, timerController, _remoteServer, sessionLog, pairingUi);
         MainWindow = mainWindow;
         mainWindow.Show();
 

@@ -768,31 +768,7 @@
 
                         <TextBlock x:Name="PairedDevicesLabel" Text="Paired phones" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
                         <TextBlock x:Name="NoDevicesText" Text="No phones connected yet" Style="{StaticResource CardDescription}"/>
-                        <ItemsControl x:Name="DevicesList" Margin="0">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Style="{StaticResource SettingCard}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}"/>
-                                            <TextBlock Text="{Binding LastSeenText}" FontSize="11"
-                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                                        </StackPanel>
-                                        <ui:Button Grid.Column="1" Appearance="Secondary"
-                                                   Width="30" Height="30" Padding="0"
-                                                   Click="RevokeDevice_Click" Tag="{Binding}" AutomationProperties.Name="{Binding Name}">
-                                            <ui:SymbolIcon Symbol="Delete24" FontSize="14"/>
-                                        </ui:Button>
-                                    </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <!-- Protocol v2 parent apps (role, revoke) -->
+                        <!-- Paired parent apps (role, revoke) -->
                         <ItemsControl x:Name="PeersList" Margin="0,0,0,16">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
