@@ -325,6 +325,21 @@ public sealed partial class RemoteServer
                     if (!Int(m, "minutes", out var minutes) || minutes == 0 || Math.Abs(minutes) > MaxMinutes) return Reply.Error("invalid_minutes");
                     return t.Extend(minutes, ActionSource.Phone, context.HubName) ? Ok("state", State()) : Reply.Error("not_running");
 
+                case "timer.answerRequest":
+                {
+                    // minor 3: the child's request for more time (its id in "request": "id" is the envelope's); minutes 0 = no
+                    var id = Str(m, "request");
+                    if (string.IsNullOrEmpty(id) || !Int(m, "minutes", out var add)) return Reply.Error("bad_request");
+                    if (add < 0 || add > MaxMinutes) return Reply.Error("invalid_minutes");
+                    return t.AnswerTimeRequest(id, add, ActionSource.Phone, context.HubName) switch
+                    {
+                        AnswerResult.Ok => Ok("state", State()),
+                        AnswerResult.NotRunning => Reply.Error("not_running"),
+                        AnswerResult.ScheduleLimit => Reply.Error("schedule_limit"),
+                        _ => Reply.Error("no_request"),
+                    };
+                }
+
                 case "interruption.ack":
                     t.AcknowledgeInterruption();
                     return Ok("state", State());
@@ -393,6 +408,10 @@ public sealed partial class RemoteServer
                     ["usedSecondsToday"] = st.UsedSecondsToday,
                 },
                 ["interruption"] = st.LastInterruption?.ToString("o", CultureInfo.InvariantCulture),
+                // minor 3: the child's request for more time waiting for an answer
+                ["request"] = _s._timer.PendingRequest is { } r
+                    ? new JsonObject { ["id"] = r.Id, ["time"] = r.Time.ToString("o", CultureInfo.InvariantCulture) }
+                    : null,
             };
         }
 

@@ -24,6 +24,7 @@ public sealed partial class RemoteServer
         _timer.InterruptionChanged += OnInterruptionChanged;
         _sessionLog.Added += V2History;
         _timer.ScheduleStateChanged += OnScheduleChanged;
+        _timer.TimeRequestChanged += OnTimeRequestChanged;
 
         // Changes made while the server was off still bump the v2 revs (a stale ifRev must not win)
         var settings = JsonSerializer.Serialize(BuildSettings(), Json);
@@ -44,6 +45,7 @@ public sealed partial class RemoteServer
         _timer.InterruptionChanged -= OnInterruptionChanged;
         _sessionLog.Added -= V2History;
         _timer.ScheduleStateChanged -= OnScheduleChanged;
+        _timer.TimeRequestChanged -= OnTimeRequestChanged;
     }
 
     private void OnTimerStateChanged(TimerState state)
@@ -73,6 +75,9 @@ public sealed partial class RemoteServer
 
     // The "app was closed while a timer ran" note appeared or was dismissed
     private void OnInterruptionChanged() => V2State();
+
+    // The child asked for more time, or the request was answered or dropped
+    private void OnTimeRequestChanged() => V2State();
 
     // The schedule allowed/blocked state or the day's remaining allowance changed
     private void OnScheduleChanged() => V2ScheduleState();

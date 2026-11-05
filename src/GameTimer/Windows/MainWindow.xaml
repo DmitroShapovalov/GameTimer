@@ -263,6 +263,14 @@
                                     <ComboBox x:Name="StepCombo" Width="80" VerticalAlignment="Center"
                                               SelectionChanged="StepCombo_Changed"/>
                                 </WrapPanel>
+                                <!-- The child asks a parent's phone for more time (only with a paired parent app) -->
+                                <StackPanel x:Name="AskPanel" Margin="0,0,0,8" Visibility="Collapsed">
+                                    <ui:Button x:Name="AskMoreButton" Content="Ask for more time" Height="34"
+                                               Icon="{ui:SymbolIcon HandWave24}" Click="AskMore_Click"/>
+                                    <TextBlock x:Name="AskStatusText" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"
+                                               AutomationProperties.LiveSetting="Polite"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                </StackPanel>
                             </StackPanel>
                             <!-- Lift: with a timer, or without one while the schedule limits today -->
                             <WrapPanel Margin="0,0,0,8">

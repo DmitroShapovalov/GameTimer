@@ -157,6 +157,27 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
             }
         }
 
+        // The child asked for more time on the PC (protocol minor 3): answer right here
+        val request = state?.json?.get("request") as? JsonObject
+        val requestId = request?.str("id")
+        if (running && requestId != null) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.req_title, shortTime(request.str("time"))), style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(15, 30).forEach { n ->
+                            Button(onClick = { run { api.answerRequest(requestId, n) } }, enabled = online) {
+                                Text(stringResource(R.string.plus_n, n))
+                            }
+                        }
+                        OutlinedButton(onClick = { run { api.answerRequest(requestId, 0) } }, enabled = online) {
+                            Text(stringResource(R.string.req_no))
+                        }
+                    }
+                }
+            }
+        }
+
         if (running || expired) {
             val fraction = if (running) seconds.toFloat() / maxOf(if (total > 0) total else longest, seconds, 1) else 0f
             TimeRing(fraction, zoneColor, Modifier.size(220.dp)) {

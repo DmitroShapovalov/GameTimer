@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -71,7 +72,8 @@ import kotlinx.serialization.json.JsonObject
 
 private enum class HistoryFilter(val label: Int) { All(R.string.hist_all), Timer(R.string.hist_timer), Alerts(R.string.hist_alerts) }
 
-private val TIMER_TYPES = setOf("started", "stopped", "reset", "extended", "expired", "resumed", "scheduleSkipped", "scheduleRestored")
+private val TIMER_TYPES = setOf("started", "stopped", "reset", "extended", "expired", "resumed", "scheduleSkipped", "scheduleRestored",
+    "timeRequested", "timeRequestDeclined")
 private val ALERT_TYPES = setOf("closed", "tampered")
 
 private fun HistoryFilter.accepts(e: HistoryEvent) = when (this) {
@@ -238,6 +240,8 @@ private fun look(e: HistoryEvent): Pair<ImageVector, Color> {
         "updated" -> Icons.Filled.Settings to c.neutral
         "expired" -> Icons.Filled.Lock to c.timeUp
         "closed", "tampered" -> Icons.Filled.Warning to c.alert
+        "timeRequested" -> Icons.Filled.Notifications to c.changed
+        "timeRequestDeclined" -> Icons.Filled.Close to c.neutral
         else -> Icons.Filled.Edit to c.neutral
     }
 }
@@ -268,5 +272,7 @@ private fun eventText(e: HistoryEvent): String = when (e.type) {
     "updated" -> stringResource(R.string.ev_updated)
     "scheduleSkipped" -> stringResource(R.string.ev_sched_skipped)
     "scheduleRestored" -> stringResource(R.string.ev_sched_restored)
+    "timeRequested" -> stringResource(R.string.ev_time_requested)
+    "timeRequestDeclined" -> stringResource(R.string.ev_time_request_declined)
     else -> e.type
 }

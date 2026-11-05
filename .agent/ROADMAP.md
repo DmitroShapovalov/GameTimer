@@ -242,7 +242,7 @@ Owner's decisions (2026-11-01):
 | W5 | History and Schedule as on the phone: week bars + a day editor (copy to weekdays/weekend/every day); history by day with icons, colours and filters | ✓ (PR #50) |
 | W6 | Windows notifications (red zone, a parent changed the limits; quiet in full screen) and time left in the tray | ✓ (PR #51) |
 | W7 | Remove the old phone web page and the v1 API (QR without the v1 code; docs) | in review |
-| R1 | "Ask for more time": child on the PC → parent on the phone (+15 / +30 / No) | ☐ |
+| R1 | "Ask for more time": child on the PC → parent on the phone (+15 / +30 / No); protocol minor 3 (`state.request`, `timer.answerRequest`) | in review |
 
 ## Backlog / known gaps
 

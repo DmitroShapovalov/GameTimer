@@ -571,6 +571,81 @@ public sealed class TimerController
     private void SetState(TimerState state)
     {
         State = state;
+        // A request for more time is about the running timer: it goes with it
+        if (state != TimerState.Running && PendingRequest != null)
+        {
+            PendingRequest = null;
+            TimeRequestChanged?.Invoke();
+        }
         StateChanged?.Invoke(state);
     }
+
+    #region Asking for more time (protocol minor 3)
+
+    /// <summary>A "no" lets the child ask again only after this long.</summary>
+    public static readonly TimeSpan RequestCooldown = TimeSpan.FromMinutes(5);
+
+    /// <summary>An unanswered request may be replaced by a new one after this long.</summary>
+    public static readonly TimeSpan RequestLifetime = TimeSpan.FromMinutes(15);
+
+    /// <summary>The child's request waiting for a parent, or null. One at a time; cleared when the timer stops.</summary>
+    public TimeRequest? PendingRequest { get; private set; }
+
+    /// <summary>When a parent last said no (for the cooldown), or null.</summary>
+    public DateTimeOffset? DeclinedAt { get; private set; }
+
+    /// <summary>Raised when a request is made, answered, or dropped with its timer.</summary>
+    public event Action? TimeRequestChanged;
+
+    /// <summary>The child asks the parents for more time (from the PC; no auth: it only asks).</summary>
+    public TimeRequestResult RequestMoreTime()
+    {
+        _dispatcher.VerifyAccess();
+        if (!IsRunning) return TimeRequestResult.NotRunning;
+        var now = DateTimeOffset.Now;
+        if (PendingRequest is { } p && now - p.Time < RequestLifetime) return TimeRequestResult.AlreadyPending;
+        if (DeclinedAt is { } d && now - d < RequestCooldown && now >= d) return TimeRequestResult.TooSoon;
+        PendingRequest = new TimeRequest(
+            Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), now);
+        Log(SessionEventType.TimeRequested, ActionSource.Pc);
+        TimeRequestChanged?.Invoke();
+        return TimeRequestResult.Sent;
+    }
+
+    /// <summary>
+    /// A parent answers the request <paramref name="id"/>: <paramref name="minutes"/> &gt; 0 adds that much
+    /// (capped by the schedule like any extend), 0 says no.
+    /// </summary>
+    public AnswerResult AnswerTimeRequest(string id, int minutes, ActionSource source, string? device)
+    {
+        _dispatcher.VerifyAccess();
+        if (PendingRequest is not { } p || p.Id != id) return AnswerResult.NoRequest;
+        if (minutes == 0)
+        {
+            PendingRequest = null;
+            DeclinedAt = DateTimeOffset.Now;
+            Log(SessionEventType.TimeRequestDeclined, source, device);
+            TimeRequestChanged?.Invoke();
+            return AnswerResult.Ok;
+        }
+        if (!IsRunning) return AnswerResult.NotRunning;
+        // Cleared first, so the state the extend publishes already shows it answered
+        PendingRequest = null;
+        if (!Extend(minutes, source, device))
+        {
+            PendingRequest = p; // the schedule allows nothing more today: still waiting (a parent can say no)
+            return AnswerResult.ScheduleLimit;
+        }
+        TimeRequestChanged?.Invoke();
+        return AnswerResult.Ok;
+    }
+
+    #endregion
 }
+
+/// <summary>The child's request for more time: a random id (the parent's answer names it) and when it was made.</summary>
+public sealed record TimeRequest(string Id, DateTimeOffset Time);
+
+public enum TimeRequestResult { Sent, AlreadyPending, TooSoon, NotRunning }
+
+public enum AnswerResult { Ok, NoRequest, NotRunning, ScheduleLimit }

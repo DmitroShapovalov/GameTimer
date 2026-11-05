@@ -260,7 +260,8 @@ Payloads reuse the shapes of the former v1 API (now `src/GameTimer/Services/Remo
   "timer": { "state": "running", "mode": "interval", "remainingSeconds": 1834,
              "targetTime": "2026-10-18T20:30:00+02:00", "action": "lock", "zone": "green" },
   "schedule": { "status": "allowed", "availableSeconds": 2700, "usedSecondsToday": 1800 },
-  "interruption": null                  // or ISO time of the last unclean close
+  "interruption": null,                 // or ISO time of the last unclean close
+  "request": null                       // minor 3: { "id": "…", "time": ISO } — the child asks for more time
 }
 ```
 
@@ -270,6 +271,13 @@ Payloads reuse the shapes of the former v1 API (now `src/GameTimer/Services/Remo
 runs out (that timer is the parent's new limit and isn't capped by the schedule). History types
 `scheduleSkipped` / `scheduleRestored` record both. History events caused by a hub carry its id in
 `hub` (agent v1.7.2), so a hub can tell its own actions from another hub with the same name.
+
+`request` (minor 3): the child pressed "Ask for more time" on the PC and no parent has answered yet.
+At most one at a time; it goes away when it is answered (`timer.answerRequest`), when the timer stops
+or runs out, or when the child asks again after 15 minutes without an answer (a new `id`). After a "no"
+the PC lets the child ask again only after 5 minutes. History types `timeRequested` (source `pc`) and
+`timeRequestDeclined` (a parent said no; a yes is recorded as `extended`). Hubs show `request` only
+while the timer runs, and treat a missing field as `null`.
 
 The hub counts down from `remainingSeconds` using **its own monotonic clock** from the moment the
 message arrived. `targetTime` and `now` are for display only: the PC clock may be wrong or changed.
@@ -284,6 +292,7 @@ message arrived. `targetTime` and `now` are for display only: the PC clock may b
 | `timer.extend` | `timer` | ✓ | any | `minutes` (±) | `state` |
 | `timer.end` | `timer` | ✓ | any | — (minor 1): the running timer ends now, as if its time ran out (the expiry action runs) | `state` |
 | `timer.setEnd` | `timer` | ✓ | any | either `inSeconds` (minor 2, 1–86400): the running timer now ends that many seconds after the agent gets the request — the hub turns the time the parent picked into a duration with its own clock and time zone, so the agent's time zone and clock (which the child may change) don't matter; or `hours` + `minutes` (minor 1): the next such local time of day on the agent. Capped by today's schedule | `state`; `invalid_time` if the end is more than 12 h ahead and later than the current one (a time just passed means "earlier", not "tomorrow"), or out of range; `schedule_limit` if the schedule allows no later end |
+| `timer.answerRequest` | `timer` | ✓ | any | `request` (the `id` from `state.request`; the body can't use `id`, which is the message id), `minutes` (minor 3): 1–1440 adds that much to the running timer, capped by today's schedule like `timer.extend`; 0 = no | `state`; `no_request` if that request was answered or dropped meanwhile; `not_running`; `schedule_limit` if the schedule allows no more (the request stays) |
 | `interruption.ack` | `timer` | ✓ | any | — | `state` |
 | `settings.get` | `settings` | — | any | — | `settings` (incl. `rev`) |
 | `settings.put` | `settings` | ✓ | any | any subset of the v1 settings fields, optional `ifRev` | `settings` |
@@ -307,7 +316,7 @@ Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `in
 `invalid_threshold`, `invalid_alerts`, `invalid_color`, `invalid_language`, `invalid_schedule`) plus
 `bad_request`, `unknown_command`, `unsupported`, `forbidden`, `conflict`, `busy`, `last_admin`, and
 `internal` (the agent failed unexpectedly; the request may be retried with the same `rid`), and
-(minor 1) `schedule_limit`.
+(minor 1) `schedule_limit`, (minor 3) `no_request`.
 
 ### 7.3 Events (agent → hub)
 

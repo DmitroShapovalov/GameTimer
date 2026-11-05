@@ -54,6 +54,13 @@ public class AgentApi(private val link: AgentLink) {
 
     public suspend fun extend(minutes: Int): RequestOutcome = link.send("timer.extend", buildJsonObject { put("minutes", minutes) })
 
+    /**
+     * Answers the child's request for more time (state `request`, minor 3): [minutes] > 0 adds that much,
+     * 0 says no. `no_request` if it was answered or dropped meanwhile.
+     */
+    public suspend fun answerRequest(id: String, minutes: Int): RequestOutcome =
+        link.send("timer.answerRequest", buildJsonObject { put("request", id); put("minutes", minutes) }) // "id" is the envelope's
+
     public suspend fun acknowledgeInterruption(): RequestOutcome = link.send("interruption.ack", JsonObject(emptyMap()))
 
     public suspend fun settings(): ApiResult<AgentSettings> = read("settings.get", null) { it["settings"]!!.decodeAs() }
