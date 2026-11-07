@@ -1,6 +1,6 @@
 // GameTimer Child — Phase C, step C0: a throw-away spike on a test phone (English only, debug builds).
-// It answers: how fast a game can be blocked without Device Owner, what a child can switch off, how the
-// background service survives the vendor's battery manager, and what Device Owner adds.
+// It answers: how fast a game is blocked (polling vs the accessibility service), what a child can switch off
+// with and without strict mode, and how the background service survives the vendor's battery manager.
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -16,17 +16,6 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.0.1-spike"
-        manifestPlaceholders["testOnly"] = "false"
-    }
-
-    buildTypes {
-        // For the Device Owner test only: testOnly, so `adb shell dpm remove-active-admin` can always remove it
-        // (installed with `adb install -t`; the phone's installer refuses testOnly APKs, hence the normal debug build)
-        create("deviceOwner") {
-            initWith(getByName("debug"))
-            manifestPlaceholders["testOnly"] = "true"
-            matchingFallbacks += "debug"
-        }
     }
 
     buildFeatures { compose = true }

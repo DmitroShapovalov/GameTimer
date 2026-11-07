@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="guard_description">GameTimer Child (spike): closes the games your parent limited as soon as they open, and keeps the settings that would switch this app off closed while strict mode is on. It reads only which app and screen is open; nothing leaves the phone.</string>
+</resources>

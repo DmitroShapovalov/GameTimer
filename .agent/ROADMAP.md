@@ -248,21 +248,24 @@ Owner's decisions (2026-11-01):
 ## Phase C — Android agent (the child's phone)
 
 Feasibility study (EN + RU): https://claude.ai/artifact/TvVUe6RfdCPfyyYgR4Kpy7 — what an agent can do on Android
-with and without Device Owner, the walls we don't own (restricted settings for sideloaded APKs, Play's Accessibility
+with and without Device Owner (dropped, see below), the walls we don't own (restricted settings for sideloaded APKs, Play's Accessibility
 policy, developer verification from 2027), and why the phone agent talks mostly through the relay.
 
 Owner's decisions (2026-11-07):
-- **Normal app by default; Device Owner is an option** for a parent willing to factory-reset the child's phone.
+- **Normal app by default; an optional strict mode** (device admin + an accessibility service: instant blocking, and the
+  settings screens that would switch the app off are closed), with no factory reset. **No Device Owner** for now (decided
+  after the study: hard to set up and not always possible; the three levels are enough). The APKs are sideloaded, so
+  Play's Accessibility policy doesn't apply.
 - **A separate app** ("GameTimer Child"), not part of the parent app.
 - **APKs stay on GitHub**; a developer-verification account comes later (it costs money), before the 2027 rollout.
 - The owner has a test phone for the spike.
 
 | # | Step | Status |
 |---|---|---|
-| C0 | Spike on the test phone: usage access + block page, the same with Device Owner; delay, what a child can switch off, battery | in review |
+| C0 | Spike on the test phone: usage access + block page, then strict mode; delay (poll vs accessibility), what a child can switch off, battery | in review (first build PR #55) |
 | C1 | Agent core in `shared` (Noise responder, pairing, peers, requests, events); Kotlin ↔ Kotlin and C# ↔ Kotlin interop | ☐ |
 | C2 | Android agent app: foreground service, relay + LAN, pairing QR on the child's phone | ☐ |
-| C3 | Enforcement: timer, schedule, game list, block page / suspension, ask for more time | ☐ |
+| C3 | Enforcement: timer, schedule, game list, block page, strict mode, ask for more time | ☐ |
 | C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | ☐ |
 | C5 | Acceptance + release (v2.0) | ☐ |
 

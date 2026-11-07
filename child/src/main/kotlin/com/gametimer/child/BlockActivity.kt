@@ -54,16 +54,22 @@ class BlockActivity : ComponentActivity() {
         label = labelOf(intent)
     }
 
+    override fun onPause() {
+        SpikePrefs(this).blockShowing = false
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
         val prefs = SpikePrefs(this)
+        prefs.blockShowing = true
         val pending = prefs.pendingBlock() ?: return
         prefs.clearPendingBlock()
         val ms = System.currentTimeMillis() - pending.fromMs
         // Not counted: a game open before the service (re)started, or a clock change in between
         val counted = pending.measured && ms in 0..600_000
-        if (counted) prefs.addLatency(ms)
-        SpikeLog.add(this, "block page shown over ${pending.pkg} after $ms ms${if (counted) "" else " (not counted)"}")
+        if (counted) prefs.addLatency(pending.source, ms)
+        SpikeLog.add(this, "block page shown over ${pending.pkg} after $ms ms [${pending.source}]${if (counted) "" else " (not counted)"}")
     }
 
     private fun labelOf(intent: Intent): String {

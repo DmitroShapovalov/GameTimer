@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.app.admin.DevicePolicyManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -27,8 +26,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The watcher: polls the usage events for the app in front (about every [POLL_MS] while the screen is on);
- * while blocking is on and a chosen app is in front, it opens the block page (normal mode) or keeps the
- * chosen apps suspended (Device Owner mode). Counts the chosen apps' time in front for the daily budget.
+ * while blocking is on and a chosen app is in front, it opens the block page (unless strict mode's
+ * accessibility service does it first). Counts the chosen apps' time in front for the daily budget.
  */
 class WatchService : Service() {
     private val crashLog = CoroutineExceptionHandler { _, e -> SpikeLog.add(this, "watch loop error: $e") }
@@ -42,10 +41,8 @@ class WatchService : Service() {
     private var blockAskedAt = 0L          // elapsedRealtime of the last block request, for "did it appear"
     private var lastEventMs = 0L
     private var blockingSinceMs = 0L       // when blocking last became on (wall clock), 0 = off
-    private var lastGrants: Grants? = null
     private var carryMs = 0L
     private var startMs = 0L
-    private var refused: Set<String> = emptySet()   // apps the system won't suspend (logged once)
     private var notShown = 0                         // block pages that didn't appear in a row
     private var lastError: String? = null
 
@@ -56,14 +53,33 @@ class WatchService : Service() {
         prefs = SpikePrefs(this)
         val n = prefs.bump("serviceStarts")
         val gapS = if (prefs.lastPollMs > 0) (System.currentTimeMillis() - prefs.lastPollMs) / 1000 else -1
-        SpikeLog.add(this, "service start #$n (last poll ${if (gapS < 0) "never" else "${gapS}s ago"}), battery ${battery()}%")
+        SpikeLog.add(this, "service start #$n (last poll ${if (gapS < 0) "never" else "${gapS}s ago"}), battery ${battery()}%, ${Grants.of(this)}")
         startForegroundCompat()
+        prefs.blockShowing = false // left over if the process died while the page was up
+        clockOffset = System.currentTimeMillis() - SystemClock.elapsedRealtime()
+        registerReceiver(timeChanged, android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED)
+        })
         scope.launch { loop() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
+    // A clock or date change can reset today's budget: logged (strict mode can't guard the Date & time page)
+    // (automatic network-time corrections of under a minute are not news)
+    private var clockOffset = 0L
+    private val timeChanged = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val offset = System.currentTimeMillis() - SystemClock.elapsedRealtime()
+            val jumpS = (offset - clockOffset) / 1000
+            clockOffset = offset
+            if (intent.action == Intent.ACTION_TIMEZONE_CHANGED) SpikeLog.add(context, "time zone changed")
+            else if (kotlin.math.abs(jumpS) >= 60) SpikeLog.add(context, "clock changed by ${jumpS}s (now ${java.time.LocalDateTime.now().withNano(0)})")
+        }
+    }
+
     override fun onDestroy() {
+        runCatching { unregisterReceiver(timeChanged) }
         SpikeLog.add(this, "service destroyed")
         scope.cancel()
         super.onDestroy()
@@ -85,7 +101,7 @@ class WatchService : Service() {
         if (front != null) SpikeLog.add(this, "in front at start: $front")
 
         lastTick = SystemClock.elapsedRealtime()
-        var lastGrantCheck = 0L
+        var lastGrantCheck = SystemClock.elapsedRealtime() + 5_000 // first check ~15 s after start
         var lastSave = 0L
         var lastBattery = SystemClock.elapsedRealtime()
         while (scope.isActive) {
@@ -104,7 +120,7 @@ class WatchService : Service() {
             }
             lastTick = tick
             if (tick - lastSave > 10_000) { lastSave = tick; prefs.lastPollMs = System.currentTimeMillis() }
-            if (tick - lastGrantCheck > 30_000) { lastGrantCheck = tick; checkGrants() }
+            if (tick - lastGrantCheck > 10_000) { lastGrantCheck = tick; checkGrants() }
             if (tick - lastBattery > 30 * 60_000L) { lastBattery = tick; SpikeLog.add(this, "battery ${battery()}%") }
             delay(POLL_MS)
         }
@@ -152,24 +168,9 @@ class WatchService : Service() {
     }
 
     private fun enforce(games: Set<String>, blocked: Boolean, tick: Long) {
-        if (isDeviceOwner(this)) {
-            // Device Owner: the system keeps the chosen apps from opening at all
-            synchronized(DoLock) {
-                if (prefs.releasing || !isDeviceOwner(this)) return
-                val want = (if (blocked) games else emptySet()) - refused
-                val had = prefs.suspended
-                if (want == had) return
-                val dpm = getSystemService(DevicePolicyManager::class.java)
-                val admin = adminComponent(this)
-                val lift = had - want
-                if (lift.isNotEmpty()) dpm.setPackagesSuspended(admin, lift.toTypedArray(), false)
-                val failed = if (want.isNotEmpty()) dpm.setPackagesSuspended(admin, want.toTypedArray(), true).toSet() else emptySet()
-                prefs.suspended = want - failed
-                refused = refused + failed
-                SpikeLog.add(this, "suspended ${want.size - failed.size} app(s)${if (failed.isNotEmpty()) ", refused by the system: $failed" else ""}")
-            }
-            return
-        }
+        // The accessibility service usually opens the page first: don't ask twice
+        val asked = prefs.pendingAskedAt()
+        if ((asked > 0 && tick - asked < 1_500) || prefs.blockShowing) { blockedVisit = true; blockAskedAt = tick; return }
         // The block page was asked for but didn't show (no overlay grant, the vendor's pop-up switch…): try again
         if (blockedVisit && front != packageName && prefs.pendingBlock() != null && tick - blockAskedAt > 2_000) {
             notShown++
@@ -184,7 +185,7 @@ class WatchService : Service() {
         blockAskedAt = tick
         // The delay counts from the game coming to the front, or from blocking turning on in the middle of play
         // A game that was already open when the service (re)started isn't a fair delay: shown, not counted
-        prefs.setPendingBlock(pkg, maxOf(frontSinceMs, blockingSinceMs), measured = frontSinceMs >= startMs)
+        prefs.setPendingBlock(pkg, maxOf(frontSinceMs, blockingSinceMs), measured = frontSinceMs >= startMs, source = "poll")
         startActivity(Intent(this, BlockActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra(BlockActivity.EXTRA_PACKAGE, pkg))
@@ -192,10 +193,10 @@ class WatchService : Service() {
 
     // What a child could switch off: logged the moment it changes
     private fun checkGrants() {
-        val g = Grants.of(this)
-        val prev = lastGrants
+        val g = Grants.of(this).toString() + ", a11y running=${GuardService.connected}, strict=${prefs.strict}, guarding=${prefs.guarding()}"
+        val prev = prefs.lastGrants
         if (prev != null && prev != g) SpikeLog.add(this, "grants changed: $prev → $g")
-        lastGrants = g
+        prefs.lastGrants = g
     }
 
     private fun battery(): Int = getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
