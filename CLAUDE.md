@@ -124,6 +124,8 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            other is abandoned; LinkStatus.Online.viaRelay), DiscoveryTxt,
                            KtorConnector (WebSocket: OkHttp on Android/JVM, Darwin on iOS),
                            Models + AgentApi (typed §7.2 calls; writes send ifRev, conflicts return the current value)
+child/                     Phase C: the child's phone (com.gametimer.child). Now the C0 spike only (child/README.md):
+                           usage-access polling + block page, or Device Owner suspension; a report to copy. English only.
 android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, applicationId com.gametimer.parent):
   HubStore.kt              hub key (AES-GCM wrapped by an Android Keystore key) + paired PCs, in noBackupFilesDir
   LinkHub.kt               App-wide: the hub key, one AgentLink per PC (with the relay path, RelayPath.DEFAULT_URL;

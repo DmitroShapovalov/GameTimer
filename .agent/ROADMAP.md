@@ -245,6 +245,27 @@ Owner's decisions (2026-11-01):
 | W7 | Remove the old phone web page and the v1 API (QR without the v1 code; docs) | ✓ (PR #52) |
 | R1 | "Ask for more time": child on the PC → parent on the phone (+15 / +30 / No); protocol minor 3 (`state.request`, `timer.answerRequest`) | ✓ (PR #53) |
 
+## Phase C — Android agent (the child's phone)
+
+Feasibility study (EN + RU): https://claude.ai/artifact/TvVUe6RfdCPfyyYgR4Kpy7 — what an agent can do on Android
+with and without Device Owner, the walls we don't own (restricted settings for sideloaded APKs, Play's Accessibility
+policy, developer verification from 2027), and why the phone agent talks mostly through the relay.
+
+Owner's decisions (2026-11-07):
+- **Normal app by default; Device Owner is an option** for a parent willing to factory-reset the child's phone.
+- **A separate app** ("GameTimer Child"), not part of the parent app.
+- **APKs stay on GitHub**; a developer-verification account comes later (it costs money), before the 2027 rollout.
+- The owner has a test phone for the spike.
+
+| # | Step | Status |
+|---|---|---|
+| C0 | Spike on the test phone: usage access + block page, the same with Device Owner; delay, what a child can switch off, battery | in review |
+| C1 | Agent core in `shared` (Noise responder, pairing, peers, requests, events); Kotlin ↔ Kotlin and C# ↔ Kotlin interop | ☐ |
+| C2 | Android agent app: foreground service, relay + LAN, pairing QR on the child's phone | ☐ |
+| C3 | Enforcement: timer, schedule, game list, block page / suspension, ask for more time | ☐ |
+| C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | ☐ |
+| C5 | Acceptance + release (v2.0) | ☐ |
+
 ## Backlog / known gaps
 
 Tamper resistance (the child uses the same Windows account, which is an administrator):
