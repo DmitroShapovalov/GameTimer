@@ -394,6 +394,20 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var moreTab by rememberSaveable { mutableIntStateOf(0) }
     var confirmRemove by remember { mutableStateOf(false) }
+    // What this device offers (§6 hello.capabilities): a phone agent before C3 has no timer / schedule /
+    // history / settings, so those tabs are hidden. Unknown until the first hello: everything is shown.
+    var caps by remember(agent.agentId) { mutableStateOf<Set<String>?>(null) }
+    LaunchedEffect(status) {
+        (status as? LinkStatus.Online)?.let { o ->
+            caps = (o.hello["capabilities"] as? kotlinx.serialization.json.JsonArray)
+                ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }?.toSet()
+        }
+    }
+    fun has(capability: String) = caps?.contains(capability) ?: true
+    LaunchedEffect(caps) {
+        if ((tab == 1 && !has("schedule")) || (tab == 2 && !has("history"))) tab = 0
+        if (!has("settings")) moreTab = 1
+    }
 
     Scaffold(
         topBar = {
@@ -421,10 +435,10 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
         bottomBar = {
             // Status, Schedule, History every day; the PC's settings and its parents under More
             NavigationBar {
-                listOf(
+                listOfNotNull(
                     Triple(R.string.tab_status, Icons.Filled.Home, 0),
-                    Triple(R.string.tab_schedule, Icons.Filled.DateRange, 1),
-                    Triple(R.string.tab_history, Icons.AutoMirrored.Filled.List, 2),
+                    Triple(R.string.tab_schedule, Icons.Filled.DateRange, 1).takeIf { has("schedule") },
+                    Triple(R.string.tab_history, Icons.AutoMirrored.Filled.List, 2).takeIf { has("history") },
                     Triple(R.string.tab_more, Icons.Filled.Menu, 3),
                 ).forEach { (label, icon, i) ->
                     NavigationBarItem(selected = tab == i, onClick = { tab = i }, icon = { Icon(icon, null) },
@@ -436,10 +450,14 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             when (tab) {
-                0 -> StatusTab(vm, agent, link)
+                0 -> if (has("timer")) StatusTab(vm, agent, link) else Text(
+                    stringResource(R.string.no_controls),
+                    Modifier.padding(24.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
                 1 -> ScheduleTab(vm, agent, link)
                 2 -> HistoryTab(vm, agent, link)
-                else -> {
+                else -> if (has("settings")) {
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
                         listOf(R.string.tab_settings, R.string.tab_parents).forEachIndexed { i, label ->
                             SegmentedButton(selected = moreTab == i, onClick = { moreTab = i }, shape = SegmentedButtonDefaults.itemShape(i, 2)) {
@@ -450,6 +468,8 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
                     // Removing the PC from the list is enough: the screen for a PC that isn't listed goes home by itself
                     if (moreTab == 0) SettingsTab(vm, agent, link)
                     else ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })
+                } else {
+                    ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })
                 }
             }
         }

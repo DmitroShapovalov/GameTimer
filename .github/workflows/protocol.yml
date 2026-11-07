@@ -80,7 +80,7 @@ jobs:
 
       # Hub client vs the C# agent and vs the Kotlin agent; the C# hub (gt-testhub) vs the Kotlin agent
       - name: Kotlin vectors + behaviour + live interop tests (Noise peer, hub and agent both ways)
-        run: ./gradlew :shared:jvmTest :shared:compileAndroidMain -PcsharpPeer="$RUNNER_TEMP/peer/NoisePeer.dll" -PcsharpAgent="$RUNNER_TEMP/agent/TestAgent.dll" -PcsharpHub="$RUNNER_TEMP/hub/gt-testhub.dll" -PcsharpRelay="$RUNNER_TEMP/relay/GameTimer.Relay.dll"
+        run: ./gradlew :shared:jvmTest :shared:compileAndroidMain -PcsharpPeer="$RUNNER_TEMP/peer/NoisePeer.dll" -PcsharpAgent="$RUNNER_TEMP/agent/TestAgent.dll" -PcsharpHub="$RUNNER_TEMP/hub/gt-testhub.dll" -PcsharpRelay="$RUNNER_TEMP/relay/GameTimer.Relay.dll" -PliveRelay=wss://gametimer-relay.fly.dev/v2/agent
 
       - name: Publish gt-testhub (scripted parent app for testing on a real PC)
         run: dotnet publish tools/GameTimer.TestHub/GameTimer.TestHub.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o "$RUNNER_TEMP/testhub"

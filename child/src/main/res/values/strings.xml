@@ -1,4 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="guard_description">GameTimer Child (spike): closes the games your parent limited as soon as they open, and keeps the settings that would switch this app off closed while strict mode is on. It reads only which app and screen is open; nothing leaves the phone.</string>
+    <string name="app_name" translatable="false">GameTimer Child</string>
+    <string name="ntf_channel">Agent</string>
+    <string name="ntf_text">GameTimer is active on this phone</string>
+    <string name="setup_title">Set up this phone</string>
+    <string name="setup_text">This is the child\'s side of GameTimer. First choose a parent PIN: it protects connecting a parent\'s phone and the agent\'s settings. Use a PIN your child doesn\'t know (not the phone\'s own PIN).</string>
+    <string name="pin_new">New parent PIN (4–12 digits)</string>
+    <string name="pin_repeat">Repeat the PIN</string>
+    <string name="pin_rule">The PIN must be 4 to 12 digits</string>
+    <string name="pin_mismatch">The two PINs don\'t match</string>
+    <string name="setup_start">Save and start</string>
+    <string name="status_title">Status</string>
+    <string name="status_running">The agent is running</string>
+    <string name="status_starting">Starting…</string>
+    <string name="status_unreadable">The agent\'s saved data can\'t be read (for example right after a restart, before the phone was unlocked). Unlock the phone and reopen the app; if it stays like this, start over.</string>
+    <string name="status_failed">The agent couldn\'t start. Reopen the app.</string>
+    <string name="relay_waiting">Reachable from anywhere once a parent\'s phone is connected</string>
+    <string name="relay_connected">Reachable from anywhere (relay connected)</string>
+    <string name="relay_connecting">Connecting to the relay…</string>
+    <string name="lan_on">Home network: %1$s</string>
+    <string name="lan_off">Not on Wi-Fi: parents reach this phone through the relay</string>
+    <string name="start_over">Start over</string>
+    <string name="start_over_text">This creates a new identity for this phone: every parent\'s phone must connect again. Continue?</string>
+    <string name="parents_title">Parents\' phones</string>
+    <string name="parents_none">No parent\'s phone is connected yet</string>
+    <string name="role_admin">Administrator</string>
+    <string name="role_parent">Parent</string>
+    <string name="remove">Remove</string>
+    <string name="remove_title">Remove %1$s?</string>
+    <string name="remove_text">That phone can no longer see or control this one, until it is connected again.</string>
+    <string name="connect_parent">Connect a parent\'s phone</string>
+    <string name="connect_needs_wifi">Connecting a parent\'s phone needs both phones on the same Wi-Fi.</string>
+    <string name="pin_change">Change parent PIN</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="connect">Connect</string>
+    <string name="msg_paired">The parent\'s phone is connected.</string>
+    <string name="msg_two_phones">Two phones scanned the same QR code, so it was cancelled (the code may have been photographed). Start again.</string>
+    <string name="battery_text">So that the parents can always reach this phone, allow GameTimer to run in the background without battery restrictions.</string>
+    <string name="battery_allow">Allow</string>
+    <string name="pair_title">Connect a parent\'s phone</string>
+    <string name="pair_text">On the parent\'s phone, open GameTimer, tap Add device and scan this code. Both phones must be on the same Wi-Fi.</string>
+    <string name="pair_left">Valid for %1$d:%2$02d</string>
+    <string name="code_title">“%1$s” wants to connect</string>
+    <string name="code_text">Enter the 6-digit code shown on that phone.</string>
+    <string name="pin_title">Parent PIN</string>
+    <string name="pin_label">PIN</string>
+    <string name="pin_wrong">Wrong PIN</string>
+    <string name="pin_locked">Too many wrong tries. Try again in %1$d s</string>
 </resources>

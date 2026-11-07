@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">GameTimer</string>
     <string name="home_title">Ваши компьютеры</string>
-    <string name="home_empty">Пока нет компьютеров. На ПК откройте Настройки → Подключить телефон и отсканируйте QR-код.</string>
-    <string name="add_pc">Добавить ПК</string>
+    <string name="home_empty">Пока нет устройств. На ПК откройте Настройки → Подключить телефон, на телефоне ребёнка — GameTimer Child → Подключить телефон родителя. Затем отсканируйте QR-код.</string>
+    <string name="add_pc">Добавить устройство</string>
     <string name="status_online">В сети</string>
     <string name="status_online_relay">В сети через интернет</string>
     <string name="wake_title">Проверка ПК…</string>
@@ -17,7 +17,7 @@
     <string name="cancel">Отмена</string>
     <string name="timer_idle">Таймер не запущен</string>
     <string name="scan_title">Отсканируйте QR-код</string>
-    <string name="scan_hint">Наведите камеру на QR-код в окне «Подключить телефон» на ПК.</string>
+    <string name="scan_hint">Наведите камеру на QR-код на ПК («Подключить телефон») или на телефоне ребёнка (GameTimer Child).</string>
     <string name="scan_paste">Вставить ссылку</string>
     <string name="paste_label">Ссылка для подключения</string>
     <string name="connect">Подключить</string>
@@ -26,12 +26,12 @@
     <string name="not_link">Это не код GameTimer.</string>
     <string name="phone_name">Имя этого телефона (видно на ПК)</string>
     <string name="pair_connecting">Подключение к %1$s…</string>
-    <string name="pair_code_title">Введите этот код на ПК</string>
-    <string name="pair_code_hint">ПК попросит его ввести и подтвердить через Windows Hello. Вводите только на своём ПК.</string>
+    <string name="pair_code_title">Введите этот код на другом устройстве</string>
+    <string name="pair_code_hint">ПК или телефон ребёнка попросит его ввести (ПК затем подтвердит через Windows Hello). Вводите только на устройстве своей семьи.</string>
     <string name="pair_done">Подключено к %1$s</string>
-    <string name="pair_denied">Не подтверждено на ПК (неверный код, отмена или время вышло). Попробуйте снова.</string>
-    <string name="pair_code_used">Этот QR-код использовал другой телефон — возможно, его сфотографировали. Начните заново на ПК.</string>
-    <string name="pair_rejected">Код устарел или заменён. Снова откройте «Подключить телефон» на ПК.</string>
+    <string name="pair_denied">Не подтверждено на другом устройстве (неверный код, отмена или время вышло). Попробуйте снова.</string>
+    <string name="pair_code_used">Этот QR-код использовал другой телефон — возможно, его сфотографировали. Начните заново на другом устройстве.</string>
+    <string name="pair_rejected">Код устарел или заменён. Снова покажите QR-код на другом устройстве.</string>
     <string name="pair_failed">Не удалось подключиться: %1$s</string>
     <string name="ok">OK</string>
     <string name="back">Назад</string>
@@ -233,4 +233,5 @@
     <string name="ntf_cat_requests_hint">Ребёнок просит ещё времени на ПК; ответить можно на экране таймера.</string>
     <string name="ev_time_requested">Попросил ещё времени</string>
     <string name="ev_time_request_declined">Отказал в дополнительном времени</string>
+    <string name="no_controls">Этим устройством пока нельзя управлять отсюда: ограничения времени для телефонов появятся в следующей версии. Оно подключено, а его родителями можно управлять в разделе «Ещё».</string>
 </resources>

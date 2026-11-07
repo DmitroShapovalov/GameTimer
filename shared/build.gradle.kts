@@ -58,9 +58,11 @@ kotlin {
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.ktor.client.cio)
         }
         androidMain.dependencies {
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.ktor.client.cio)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
@@ -96,6 +98,8 @@ tasks.withType<Test>().configureEach {
         systemProperty("csharpHub", hub)
         inputs.dir(file(hub).parentFile).withPropertyName("csharpHubDir").withPathSensitivity(PathSensitivity.RELATIVE)
     }
+    // The agent's relay socket over TLS to a deployed relay: -PliveRelay=wss://gametimer-relay.fly.dev/v2/agent
+    providers.gradleProperty("liveRelay").orNull?.let { systemProperty("liveRelay", it) }
     // … and through the real relay (§10): -PcsharpRelay=<path to GameTimer.Relay.dll>
     providers.gradleProperty("csharpRelay").orNull?.let { relay ->
         systemProperty("csharpRelay", relay)

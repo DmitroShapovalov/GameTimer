@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">GameTimer</string>
     <string name="home_title">Your PCs</string>
-    <string name="home_empty">No PCs yet. On the PC open Settings → Connect phone, then scan the QR code.</string>
-    <string name="add_pc">Add PC</string>
+    <string name="home_empty">No devices yet. On the PC open Settings → Connect phone; on the child\'s phone open GameTimer Child → Connect a parent\'s phone. Then scan the QR code.</string>
+    <string name="add_pc">Add device</string>
     <string name="status_online">Online</string>
     <string name="status_online_relay">Online via the internet</string>
     <string name="wake_title">Checking the PCs…</string>
@@ -17,7 +17,7 @@
     <string name="cancel">Cancel</string>
     <string name="timer_idle">No timer running</string>
     <string name="scan_title">Scan the QR code</string>
-    <string name="scan_hint">Point the camera at the QR code in the PC\'s “Connect phone” window.</string>
+    <string name="scan_hint">Point the camera at the QR code on the PC (“Connect phone”) or on the child\'s phone (GameTimer Child).</string>
     <string name="scan_paste">Paste link instead</string>
     <string name="paste_label">Pairing link</string>
     <string name="connect">Connect</string>
@@ -26,12 +26,12 @@
     <string name="not_link">This isn\'t a GameTimer code.</string>
     <string name="phone_name">This phone\'s name (shown on the PC)</string>
     <string name="pair_connecting">Connecting to %1$s…</string>
-    <string name="pair_code_title">Enter this code on the PC</string>
-    <string name="pair_code_hint">The PC asks for it, then confirms with Windows Hello. Only type it on your own PC.</string>
+    <string name="pair_code_title">Enter this code on the other device</string>
+    <string name="pair_code_hint">The PC or the child\'s phone asks for it (the PC then confirms with Windows Hello). Only type it on your own family\'s device.</string>
     <string name="pair_done">Connected to %1$s</string>
-    <string name="pair_denied">Not confirmed on the PC (wrong code, cancelled or too late). Try again.</string>
-    <string name="pair_code_used">This QR code was used by another phone — it may have been photographed. Start again on the PC.</string>
-    <string name="pair_rejected">The code has expired or was replaced. Open “Connect phone” on the PC again.</string>
+    <string name="pair_denied">Not confirmed on the other device (wrong code, cancelled or too late). Try again.</string>
+    <string name="pair_code_used">This QR code was used by another phone — it may have been photographed. Start again on the other device.</string>
+    <string name="pair_rejected">The code has expired or was replaced. Show the QR code on the other device again.</string>
     <string name="pair_failed">Couldn\'t connect: %1$s</string>
     <string name="ok">OK</string>
     <string name="back">Back</string>
@@ -233,4 +233,5 @@
     <string name="ntf_cat_requests_hint">The child asks for more time on the PC; answer from the timer screen.</string>
     <string name="ev_time_requested">Asked for more time</string>
     <string name="ev_time_request_declined">Said no to more time</string>
+    <string name="no_controls">This device can\'t be controlled from here yet: screen-time limits for phones come in the next version. It is connected, and you can manage its parents under More.</string>
 </resources>

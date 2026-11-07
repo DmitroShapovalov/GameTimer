@@ -1,6 +1,6 @@
 name: Android app
 
-# The parent app (android/) and the child spike (child/, Phase C step C0): debug APKs as artifacts, and an on-device test on an emulator that
+# The parent app (android/) and the child's phone agent (child/, Phase C): debug APKs as artifacts, and an on-device test on an emulator that
 # pairs with and controls the production C# agent (tests/interop/TestAgent --emulator, 10.0.2.2:5123).
 on:
   pull_request:
@@ -68,10 +68,10 @@ jobs:
           path: android/build/outputs/apk/debug/android-debug.apk
           retention-days: 14
 
-      - name: Upload the child spike APK
+      - name: Upload the child agent APK
         uses: actions/upload-artifact@v4
         with:
-          name: gametimer-child-spike-apk
+          name: gametimer-child-debug-apk
           path: child/build/outputs/apk/debug/child-debug.apk
           retention-days: 14
           if-no-files-found: error
