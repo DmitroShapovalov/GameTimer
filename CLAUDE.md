@@ -124,6 +124,14 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            other is abandoned; LinkStatus.Online.viaRelay), DiscoveryTxt,
                            KtorConnector (WebSocket: OkHttp on Android/JVM, Darwin on iOS),
                            Models + AgentApi (typed §7.2 calls; writes send ifRev, conflicts return the current value)
+                           agent/ = the device-agent side (Phase C, C1), a 1:1 port of the C# AgentHost with the same
+                           limits: AgentHost (admission + relay pool, IK + ready rule, hello, sessions with outboxes,
+                           requests + rid cache, §5 ordering via RequestOrigin, /v2/pair with the two-phones rule,
+                           peers / roles, publish + push wake-ups, route claims, discovery tags, known networks).
+                           The app plugs in AgentBackend, PairingUi, AgentStore and a FrameTransport per connection;
+                           StrictJson = I-JSON parsing. Tests: commonTest (virtual time, also on the iOS simulator);
+                           jvmTest runs it behind a Ktor CIO WebSocket server (TestAgentServer + SimBackend) against
+                           the Kotlin hub client and the C# gt-testhub (-PcsharpHub)
 child/                     Phase C: the child's phone (com.gametimer.child). Now the C0 spike only (child/README.md):
                            usage-access polling + block page; strict mode = device admin + an accessibility service
                            (instant block, closes settings screens showing the app) behind a PIN; a report to copy. English only.
@@ -233,7 +241,8 @@ dotnet test tests/GameTimer.Protocol.Tests/GameTimer.Protocol.Tests.csproj
 dotnet test tests/GameTimer.Relay.Tests/GameTimer.Relay.Tests.csproj    # the relay
 dotnet build tests/interop/NoisePeer/NoisePeer.csproj -c Release -o /tmp/peer
 dotnet build tests/interop/TestAgent/TestAgent.csproj -c Release -o /tmp/agent
-./gradlew :shared:jvmTest -PcsharpPeer=/tmp/peer/NoisePeer.dll -PcsharpAgent=/tmp/agent/TestAgent.dll   # without them the interop tests are skipped (CI fails instead)
+dotnet build tools/GameTimer.TestHub/GameTimer.TestHub.csproj -c Release -o /tmp/hub
+./gradlew :shared:jvmTest -PcsharpPeer=/tmp/peer/NoisePeer.dll -PcsharpAgent=/tmp/agent/TestAgent.dll -PcsharpHub=/tmp/hub/gt-testhub.dll   # without them the interop tests are skipped (CI fails instead)
 ```
 
 Release: `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions builds `GameTimerSetup.exe` and the signed parent app `GameTimerParent-X.Y.Z.apk` (tags `vX.Y.Z` or `vX.Y.Z-rcN` only; versionName X.Y.Z, versionCode X·10⁶+Y·10⁴+Z·100+(N or 99)) and attaches both to the GitHub Release. The APK release key exists only in the GitHub environment `release` (deployment rule: tags `v*`) as secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` and the owner's backup (`D:\Projects\_claude\gametimer-release.*`, never in the repo); a tag without them fails. Changing the key means every phone reinstalls and pairs again. Released so far: v1.0.0, v1.0.1, v1.1.0, v1.2.0, v1.3.0, v1.4.0, v1.5.0, v1.6.0, v1.6.1, v1.7.0 (protocol v2 + the Android parent app), v1.7.1 (timer controls: lift restrictions, end now, end at, flexible steps), v1.7.2 (phone notifications while the app is closed), v1.9.0 (relay + push from the 1.8.0 RCs, Windows and parent app redesign, v1 web page removed, ask for more time; no final v1.8.0). Bump `<Version>` in the csproj for local builds; CI takes the version from the tag.

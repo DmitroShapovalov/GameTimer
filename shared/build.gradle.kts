@@ -65,6 +65,10 @@ kotlin {
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
         }
+        jvmTest.dependencies {
+            implementation(libs.ktor.server.cio)
+            implementation(libs.ktor.server.websockets)
+        }
         commonTest {
             kotlin.srcDir(generateNoiseVectors)
             dependencies {
@@ -86,6 +90,11 @@ tasks.withType<Test>().configureEach {
     providers.gradleProperty("csharpAgent").orNull?.let { agent ->
         systemProperty("csharpAgent", agent)
         inputs.dir(file(agent).parentFile).withPropertyName("csharpAgentDir").withPathSensitivity(PathSensitivity.RELATIVE)
+    }
+    // C# hub (tools/GameTimer.TestHub) ↔ Kotlin agent: -PcsharpHub=<path to gt-testhub.dll>
+    providers.gradleProperty("csharpHub").orNull?.let { hub ->
+        systemProperty("csharpHub", hub)
+        inputs.dir(file(hub).parentFile).withPropertyName("csharpHubDir").withPathSensitivity(PathSensitivity.RELATIVE)
     }
     // … and through the real relay (§10): -PcsharpRelay=<path to GameTimer.Relay.dll>
     providers.gradleProperty("csharpRelay").orNull?.let { relay ->
