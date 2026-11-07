@@ -17,6 +17,8 @@ sessions.jsonl
 .gradle/
 /build/
 /shared/build/
+/android/build/
+/child/build/
 .kotlin/
 local.properties
 .idea/

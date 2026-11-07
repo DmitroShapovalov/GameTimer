@@ -1,6 +1,6 @@
-// GameTimer Child — Phase C, step C0: a throw-away spike on a test phone (English only, debug builds).
-// It answers: how fast a game is blocked (polling vs the accessibility service), what a child can switch off
-// with and without strict mode, and how the background service survives the vendor's battery manager.
+// GameTimer Child — Phase C: the agent on the child's phone (protocol v2 agent side from :shared).
+// C2: a foreground service with the AgentHost, the relay (always on) and a LAN server on Wi-Fi, pairing by
+// QR behind a parent PIN. Enforcement (blocking games) comes in C3; the C0 spike's code is kept in spike/.
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -14,8 +14,14 @@ android {
         applicationId = "com.gametimer.child"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.0.1-spike"
+        versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: 1
+        versionName = (findProperty("appVersionName") as String?) ?: "0.2.0-dev"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false // no R8: Ktor and the libsodium JNI bindings would need keep rules
+        }
     }
 
     buildFeatures { compose = true }
@@ -24,6 +30,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    packaging {
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1,INDEX.LIST,io.netty.versions.properties}"
+    }
 }
 
 kotlin {
@@ -31,6 +41,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
@@ -38,4 +49,7 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.core.ktx)
     implementation(libs.coroutines.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.websockets)
+    implementation(libs.zxing.core)
 }

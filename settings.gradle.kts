@@ -1,5 +1,5 @@
 // Kotlin part of GameTimer: the protocol v2 core shared by the Android and iOS hubs (:shared), the Android
-// parent app (:android) and the child's phone (:child, Phase C; for now the C0 spike).
+// parent app (:android) and the agent on the child's phone (:child, Phase C).
 // The Windows agent (C#) builds separately with dotnet; see docs/protocol.md.
 rootProject.name = "gametimer"
 

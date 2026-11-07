@@ -25,7 +25,10 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
-# Tests only: a WebSocket server in front of the Kotlin AgentHost (Kotlin and C# hubs talk to it)
+# The agent's relay socket on JVM / Android: CIO honours maxFrameSize (OkHttp buffers any inbound message whole)
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+# A WebSocket server in front of the Kotlin AgentHost: the child's phone on the home network (:child), and the
+# tests (Kotlin and C# hubs talk to it)
 ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
 ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktor" }
 
@@ -46,6 +49,8 @@ camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref =
 camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 androidx-test-runner = { module = "androidx.test:runner", version = "1.7.0" }
 androidx-test-junit = { module = "androidx.test.ext:junit", version = "1.3.0" }
+# The pairing QR on the child's phone (generating only)
+zxing-core = { module = "com.google.zxing:core", version = "3.5.3" }
 mlkit-barcode = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkit-barcode" }
 # Push wake-ups away from home (protocol §10.6); initialised by hand, no google-services plugin
 firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }

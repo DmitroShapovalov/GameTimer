@@ -260,11 +260,16 @@ Owner's decisions (2026-11-07):
 - **APKs stay on GitHub**; a developer-verification account comes later (it costs money), before the 2027 rollout.
 - The owner has a test phone for the spike.
 
+Owner's decisions for C2 (2026-11-07):
+- **A parent PIN on the child's phone** protects connecting / removing a parent's phone (the child knows the phone's own PIN).
+- **"Control from anywhere" is always on** for a phone agent (no switch): a phone is mostly away from home.
+- **The C0 spike is replaced** by the agent app; its blocking / strict-mode code is kept in `child/spike/` for C3.
+
 | # | Step | Status |
 |---|---|---|
 | C0 | Spike on the test phone: usage access + block page, then strict mode; delay (poll vs accessibility), what a child can switch off, battery | in review (first build PR #55) |
-| C1 | Agent core in `shared` (Noise responder, pairing, peers, requests, events); Kotlin ↔ Kotlin and C# ↔ Kotlin interop | in review ✎ (`shared/.../agent`: a port of the C# AgentHost; the C# agent tests ported; Kotlin hub ↔ Kotlin agent and gt-testhub ↔ Kotlin agent over real WebSockets in CI) |
-| C2 | Android agent app: foreground service, relay + LAN, pairing QR on the child's phone | ☐ |
+| C1 | Agent core in `shared` (Noise responder, pairing, peers, requests, events); Kotlin ↔ Kotlin and C# ↔ Kotlin interop | ✓ (PR #57) |
+| C2 | Android agent app: foreground service, relay + LAN, pairing QR on the child's phone | in review ✎ (child/: agent app, parent PIN; RelayClient in Kotlin; the parent app hides what a device doesn't offer) |
 | C3 | Enforcement: timer, schedule, game list, block page, strict mode, ask for more time | ☐ |
 | C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | ☐ |
 | C5 | Acceptance + release (v2.0) | ☐ |

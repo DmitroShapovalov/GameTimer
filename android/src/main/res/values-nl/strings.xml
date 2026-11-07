@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">GameTimer</string>
     <string name="home_title">Je pc\'s</string>
-    <string name="home_empty">Nog geen pc\'s. Open op de pc Instellingen → Telefoon verbinden en scan de QR-code.</string>
-    <string name="add_pc">Pc toevoegen</string>
+    <string name="home_empty">Nog geen apparaten. Open op de pc Instellingen → Telefoon verbinden; op de telefoon van je kind GameTimer Child → Telefoon van een ouder koppelen. Scan dan de QR-code.</string>
+    <string name="add_pc">Apparaat toevoegen</string>
     <string name="status_online">Online</string>
     <string name="status_online_relay">Online via internet</string>
     <string name="wake_title">Pc\'s controleren…</string>
@@ -17,7 +17,7 @@
     <string name="cancel">Annuleren</string>
     <string name="timer_idle">Geen timer actief</string>
     <string name="scan_title">Scan de QR-code</string>
-    <string name="scan_hint">Richt de camera op de QR-code in het venster ‘Telefoon verbinden’ op de pc.</string>
+    <string name="scan_hint">Richt de camera op de QR-code op de pc (‘Telefoon verbinden’) of op de telefoon van je kind (GameTimer Child).</string>
     <string name="scan_paste">Link plakken</string>
     <string name="paste_label">Koppellink</string>
     <string name="connect">Verbinden</string>
@@ -26,12 +26,12 @@
     <string name="not_link">Dit is geen GameTimer-code.</string>
     <string name="phone_name">Naam van deze telefoon (zichtbaar op de pc)</string>
     <string name="pair_connecting">Verbinden met %1$s…</string>
-    <string name="pair_code_title">Voer deze code in op de pc</string>
-    <string name="pair_code_hint">De pc vraagt erom en bevestigt met Windows Hello. Typ hem alleen op je eigen pc.</string>
+    <string name="pair_code_title">Voer deze code in op het andere apparaat</string>
+    <string name="pair_code_hint">De pc of de telefoon van je kind vraagt erom (de pc bevestigt daarna met Windows Hello). Typ hem alleen op een apparaat van je eigen gezin.</string>
     <string name="pair_done">Verbonden met %1$s</string>
-    <string name="pair_denied">Niet bevestigd op de pc (verkeerde code, geannuleerd of te laat). Probeer opnieuw.</string>
-    <string name="pair_code_used">Deze QR-code is door een andere telefoon gebruikt — misschien gefotografeerd. Begin opnieuw op de pc.</string>
-    <string name="pair_rejected">De code is verlopen of vervangen. Open ‘Telefoon verbinden’ opnieuw op de pc.</string>
+    <string name="pair_denied">Niet bevestigd op het andere apparaat (verkeerde code, geannuleerd of te laat). Probeer opnieuw.</string>
+    <string name="pair_code_used">Deze QR-code is door een andere telefoon gebruikt — misschien gefotografeerd. Begin opnieuw op het andere apparaat.</string>
+    <string name="pair_rejected">De code is verlopen of vervangen. Toon de QR-code opnieuw op het andere apparaat.</string>
     <string name="pair_failed">Kon niet verbinden: %1$s</string>
     <string name="ok">OK</string>
     <string name="back">Terug</string>
@@ -233,4 +233,5 @@
     <string name="ntf_cat_requests_hint">Het kind vraagt op de pc om meer tijd; antwoord op het timerscherm.</string>
     <string name="ev_time_requested">Om meer tijd gevraagd</string>
     <string name="ev_time_request_declined">Nee gezegd tegen meer tijd</string>
+    <string name="no_controls">Dit apparaat kan hier nog niet bediend worden: schermtijdlimieten voor telefoons komen in de volgende versie. Het is gekoppeld, en de ouders ervan beheer je onder Meer.</string>
 </resources>

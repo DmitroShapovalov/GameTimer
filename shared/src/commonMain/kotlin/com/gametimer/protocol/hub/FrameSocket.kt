@@ -60,7 +60,8 @@ public class KtorConnector(private val client: HttpClient = defaultClient()) : C
         }
 
     public companion object {
-        public fun defaultClient(): HttpClient = HttpClient {
+        /** The platform's engine, named explicitly (OkHttp on Android / JVM, Darwin on iOS): the JVM also carries CIO. */
+        public fun defaultClient(): HttpClient = platformHttpClient {
             install(WebSockets) // message size is checked in receive() (OkHttp doesn't support maxFrameSize)
         }
 

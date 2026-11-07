@@ -191,6 +191,10 @@ public class AgentHost(
      */
     public var onWakeNeeded: ((List<String>) -> Unit)? = null
 
+    /** The relay client's own hooks (next to the app's), set while it runs. */
+    @Volatile internal var relayPeersChanged: (() -> Unit)? = null
+    @Volatile internal var relayWake: ((List<String>) -> Unit)? = null
+
     /** The paired hubs (without their push tokens, which never leave the host). */
     public val peerList: List<Peer> get() = lock.withLock { peers.map { it.forApp() } }
 
@@ -336,11 +340,11 @@ public class AgentHost(
     }
 
     private fun raiseWake(kind: String, causedBy: String?, onlyIfAsked: Boolean = false) {
-        val handler = onWakeNeeded
-        if (!remoteAccess || handler == null) return
+        val handlers = listOfNotNull(onWakeNeeded, relayWake)
+        if (!remoteAccess || handlers.isEmpty()) return
         val tokens = pushTokensToWake(kind, causedBy, onlyIfAsked)
         if (tokens.isEmpty()) return
-        try { handler(tokens) } catch (e: Exception) { /* the relay client's business */ }
+        for (h in handlers) try { h(tokens) } catch (e: Exception) { /* the relay client's / app's business */ }
     }
 
     private fun pushTokensToWake(kind: String?, causedBy: String?, onlyIfAsked: Boolean = false): List<String> = lock.withLock {
@@ -565,6 +569,7 @@ public class AgentHost(
     }
 
     internal fun firePeersChanged() {
+        try { relayPeersChanged?.invoke() } catch (e: Exception) { /* the relay client */ }
         try { onPeersChanged?.invoke() } catch (e: Exception) { /* the app's handler */ }
     }
 
