@@ -263,7 +263,7 @@ Owner's decisions (2026-11-07):
 | # | Step | Status |
 |---|---|---|
 | C0 | Spike on the test phone: usage access + block page, then strict mode; delay (poll vs accessibility), what a child can switch off, battery | in review (first build PR #55) |
-| C1 | Agent core in `shared` (Noise responder, pairing, peers, requests, events); Kotlin ↔ Kotlin and C# ↔ Kotlin interop | ☐ |
+| C1 | Agent core in `shared` (Noise responder, pairing, peers, requests, events); Kotlin ↔ Kotlin and C# ↔ Kotlin interop | in review ✎ (`shared/.../agent`: a port of the C# AgentHost; the C# agent tests ported; Kotlin hub ↔ Kotlin agent and gt-testhub ↔ Kotlin agent over real WebSockets in CI) |
 | C2 | Android agent app: foreground service, relay + LAN, pairing QR on the child's phone | ☐ |
 | C3 | Enforcement: timer, schedule, game list, block page, strict mode, ask for more time | ☐ |
 | C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | ☐ |
