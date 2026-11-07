@@ -54,7 +54,8 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 33 &&
+        // Not while strict mode guards: its dialog shows our name and would be closed at once
+        if (Build.VERSION.SDK_INT >= 33 && !SpikePrefs(this).guarding() &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         WatchService.start(this)
@@ -158,6 +159,7 @@ class MainActivity : ComponentActivity() {
                 append("\nLast poll: ${if (prefs.lastPollMs == 0L) "never" else "${ago}s ago"}".also { refresh })
                 append("\nPhone: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
                 append("\nGrants: $grants")
+                append("\nAccessibility service running: ${GuardService.connected}; strict: ${prefs.strict}, guarding: ${prefs.guarding()}")
             })
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
@@ -167,7 +169,7 @@ class MainActivity : ComponentActivity() {
                         SpikeLog.read(this@MainActivity)
                     getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("spike report", text))
                 }) { Text("Copy report") }
-                OutlinedButton(onClick = { SpikeLog.clear(this@MainActivity) }) { Text("Clear log") }
+                OutlinedButton(enabled = !locked, onClick = { SpikeLog.clear(this@MainActivity) }) { Text("Clear log") }
             }
             Text(SpikeLog.read(this@MainActivity).lines().takeLast(40).joinToString("\n").also { refresh },
                 fontFamily = FontFamily.Monospace, fontSize = 11.sp)
@@ -193,10 +195,12 @@ class MainActivity : ComponentActivity() {
     private fun StrictMode(prefs: SpikePrefs, grants: Grants) {
         var refresh by remember { mutableIntStateOf(0) }
         var pinText by remember { mutableStateOf("") }
+        var pinAgain by remember { mutableStateOf("") }
         var message by remember { mutableStateOf("") }
         val guarding = remember(refresh, grants) { prefs.guarding() }
-        Text("Instant blocking, and the settings that would switch this app off are closed at once. " +
-            "What it can't stop: safe mode, a factory reset, a computer with adb.", style = MaterialTheme.typography.bodySmall)
+        Text("The accessibility service sees a game the moment it opens. Strict mode also sends the child home from any " +
+            "system screen that shows this app's name. It can't stop: safe mode, a factory reset, a computer with adb, " +
+            "the clock, or a force-stop that gets through.", style = MaterialTheme.typography.bodySmall)
         GrantRow("Device admin (uninstall needs it switched off first)", grants.admin) {
             startActivity(Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
                 .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent(this))
@@ -205,20 +209,29 @@ class MainActivity : ComponentActivity() {
         GrantRow("Accessibility service (${if (GuardService.connected) "running" else "not running"})", grants.accessibility) {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
+        val settingPin = prefs.pin == null
         OutlinedTextField(value = pinText, onValueChange = { v -> pinText = v.filter { it.isDigit() }.take(8) },
-            label = { Text(if (prefs.pin == null) "Parent PIN (set it, 4+ digits)" else "Parent PIN") },
+            label = { Text(if (settingPin) "New parent PIN (4+ digits)" else "Parent PIN") },
             singleLine = true, visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+        if (settingPin) OutlinedTextField(value = pinAgain, onValueChange = { v -> pinAgain = v.filter { it.isDigit() }.take(8) },
+            label = { Text("The same PIN again") }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!prefs.strict) Button(enabled = pinText.length >= 4 && (prefs.pin == null || pinText == prefs.pin), onClick = {
-                if (prefs.pin == null) prefs.pin = pinText
-                prefs.strict = true; prefs.pausedUntil = 0
-                SpikeLog.add(this@MainActivity, "strict mode ON"); pinText = ""; message = ""; refresh++
-            }) { Text("Turn strict mode on") }
-            else {
+            if (!prefs.strict) {
+                // Only with both in place: afterwards their Settings screens are guarded too
+                val ready = grants.admin && grants.accessibility
+                val pinOk = if (settingPin) pinText.length >= 4 && pinText == pinAgain else pinText == prefs.pin
+                Button(enabled = ready && pinOk, onClick = {
+                    if (settingPin) prefs.pin = pinText
+                    prefs.strict = true; prefs.unpause()
+                    SpikeLog.add(this@MainActivity, "strict mode ON"); pinText = ""; pinAgain = ""; message = ""; refresh++
+                }) { Text("Turn strict mode on") }
+                if (!ready) Text("needs device admin and the accessibility service", style = MaterialTheme.typography.bodySmall)
+            } else {
                 OutlinedButton(onClick = {
                     if (pinText == prefs.pin) {
-                        prefs.pausedUntil = System.currentTimeMillis() + 10 * 60_000L
+                        prefs.pause(10)
                         SpikeLog.add(this@MainActivity, "strict mode paused 10 min"); message = "Paused for 10 minutes"
                     } else { SpikeLog.add(this@MainActivity, "strict mode: wrong PIN"); message = "Wrong PIN" }
                     pinText = ""; refresh++
@@ -233,7 +246,7 @@ class MainActivity : ComponentActivity() {
         }
         Text(when {
             !prefs.strict -> "Strict mode: off"
-            guarding -> "Strict mode: on, guarding" + if (!grants.accessibility) " (needs the accessibility service)" else ""
+            guarding -> "Strict mode: on, guarding" + if (!GuardService.connected) " — but the accessibility service is NOT running" else ""
             else -> "Strict mode: paused"
         } + if (message.isNotEmpty()) " · $message" else "")
     }

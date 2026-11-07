@@ -5,7 +5,7 @@ English only. It answers four questions on a real phone:
 
 1. How long until a chosen game is covered by the block page: polling usage events vs the accessibility service?
 2. What can a child switch off, with and without strict mode, and does the app notice (every change is logged)?
-3. Which settings screens strict mode closes on this phone, and does it close too much?
+3. Which screens strict mode closes on this phone, and does it close too much?
 4. Does the background service survive the vendor's battery manager for a day (service starts, last poll, battery)?
 
 No Device Owner and no factory reset: the owner decided the three levels below are enough.
@@ -14,7 +14,8 @@ No Device Owner and no factory reset: the owner decided the three levels below a
 |---|---|
 | Normal | Usage access + display over other apps: a block page about a second after a chosen app opens |
 | + device admin | The app can't be uninstalled without first switching the admin off in Settings |
-| + accessibility service (strict mode) | Instant block page; closes every settings / installer / permission screen that shows this app's name |
+| + accessibility service | The block page as soon as the app opens (polling stays as a backstop, e.g. for a budget running out mid-game) |
+| + strict mode (PIN) | The child is sent home from any system screen showing this app's name (Settings, installer, permissions, the vendor's security and battery apps) |
 
 ## Install
 
@@ -26,19 +27,38 @@ No Device Owner and no factory reset: the owner decided the three levels below a
 
 ## Strict mode (section 4)
 
-1. Activate **Device admin**.
-2. Switch on the **accessibility service** (Settings → Accessibility → GameTimer Child; the same "restricted settings"
-   step may come first).
-3. Set a parent PIN (4+ digits) and **Turn strict mode on**.
+1. Activate **Device admin** and switch on the **accessibility service** (Settings → Accessibility → GameTimer Child;
+   the "restricted settings" step may come first). Strict mode can't be turned on before both are in place.
+2. Set a parent PIN (4+ digits, entered twice) and **Turn strict mode on**.
 
-While it is on, the app's own settings are locked, and any settings, installer or permission screen that shows
-"GameTimer Child" is closed at once: App info (force stop, uninstall, clear data), the accessibility and device-admin
-pages, the uninstall dialog, the permission lists. That includes the full app list in Settings while our app is
-visible in it — tell me if that gets in the way. **Pause 10 min** or **Turn off** with the PIN.
+While it is on, the app's own settings are locked, and any system app's screen that shows "GameTimer Child" sends the
+child to the home screen: App info (force stop, uninstall, clear data), the accessibility and device-admin pages, the
+uninstall dialog, the permission lists, the vendor's battery and security apps. **Pause 10 min** (ends at a reboot
+too) or **Turn off** with the PIN; the Grant buttons only work while paused or off.
 
-Things to try as "the child": force stop, uninstall from the home screen, switch off the accessibility service or the
-device admin, revoke usage access, change the clock, reboot into safe mode. The report shows what was closed and what
-got through.
+Expect over-blocking, and note it in the report: every list that shows our app is closed (Apps → recently opened,
+Battery usage, Notifications → recently sent, the Accessibility main page, Settings search).
+
+Things to try as "the child", the log shows what got through:
+
+- force stop / uninstall from App info, from a long press on the icon, from Recents → App info
+- Quick Settings → "Active apps" → Stop (Android 13+)
+- switch off the accessibility service or the device admin, revoke usage access
+- split screen or picture-in-picture with a game
+- change the date or time (resets today's budget; logged, not guarded)
+- reboot into safe mode (third-party apps don't run there)
+
+Android 12+ also shows a periodic reminder that an app can see the screen: note whether it appears.
+
+## Ways back (forgotten PIN, a new build)
+
+- In the app: the PIN → **Turn off**.
+- Safe mode: the service doesn't run there → Settings → Device admin apps → switch it off → uninstall.
+- From a computer (USB debugging):
+  `adb shell am force-stop com.gametimer.child` (also switches the accessibility service off), or read the PIN:
+  `adb shell run-as com.gametimer.child cat shared_prefs/spike.xml` (works on this debug build).
+- Each CI run signs with its own debug key, so a newer build doesn't install over an older one: strict mode off,
+  device admin off, uninstall, then install the new one.
 
 ## Report
 

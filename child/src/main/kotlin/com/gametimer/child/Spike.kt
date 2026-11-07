@@ -12,7 +12,8 @@ import java.time.format.DateTimeFormatter
 
 /** What the spike blocks, and when. Plain SharedPreferences: this is a test tool, not the agent. */
 class SpikePrefs(context: Context) {
-    private val p = context.applicationContext.getSharedPreferences("spike", Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val p = appContext.getSharedPreferences("spike", Context.MODE_PRIVATE)
 
     /** Chosen apps ("games"). */
     var games: Set<String>
@@ -49,11 +50,22 @@ class SpikePrefs(context: Context) {
     var pin: String?
         get() = p.getString("pin", null)
         set(v) = p.edit().putString("pin", v).apply()
-    /** Strict mode paused until this wall-clock time (the parent entered the PIN). */
-    var pausedUntil: Long
-        get() = p.getLong("pausedUntil", 0)
-        set(v) = p.edit().putLong("pausedUntil", v).apply()
-    fun guarding(): Boolean = strict && System.currentTimeMillis() >= pausedUntil
+    /**
+     * Strict mode paused (the parent entered the PIN) for a while, on the monotonic clock of this boot: the
+     * child can't stretch it by changing the time, and a reboot ends it.
+     */
+    fun pause(minutes: Int) = p.edit().putLong("pausedUntilElapsed", android.os.SystemClock.elapsedRealtime() + minutes * 60_000L)
+        .putInt("pausedBoot", bootCount()).apply()
+    fun unpause() = p.edit().remove("pausedUntilElapsed").apply()
+    fun paused(): Boolean = p.getInt("pausedBoot", -1) == bootCount() &&
+        android.os.SystemClock.elapsedRealtime() < p.getLong("pausedUntilElapsed", 0)
+    fun guarding(): Boolean = strict && !paused()
+    private fun bootCount(): Int = Settings.Global.getInt(appContext.contentResolver, Settings.Global.BOOT_COUNT, 0)
+
+    /** The grants seen last (also across restarts), to log what changed while the app wasn't running. */
+    var lastGrants: String?
+        get() = p.getString("lastGrants", null)
+        set(v) = p.edit().putString("lastGrants", v).apply()
 
     /** The service's own counters, to see what the vendor's battery manager does. */
     fun bump(key: String): Int { val n = p.getInt(key, 0) + 1; p.edit().putInt(key, n).apply(); return n }
@@ -69,7 +81,9 @@ class SpikePrefs(context: Context) {
      */
     fun setPendingBlock(pkg: String, fromMs: Long, measured: Boolean, source: String) = p.edit()
         .putString("pendingPkg", pkg).putLong("pendingFrom", fromMs).putBoolean("pendingMeasured", measured)
-        .putString("pendingSource", source).apply()
+        .putString("pendingSource", source).putLong("pendingAsked", android.os.SystemClock.elapsedRealtime()).commit()
+    /** elapsedRealtime when the last block page was asked for (0 = none pending). */
+    fun pendingAskedAt(): Long = if (p.contains("pendingPkg")) p.getLong("pendingAsked", 0) else 0
     data class Pending(val pkg: String, val fromMs: Long, val measured: Boolean, val source: String)
     fun pendingBlock(): Pending? = p.getString("pendingPkg", null)?.let {
         Pending(it, p.getLong("pendingFrom", 0), p.getBoolean("pendingMeasured", true), p.getString("pendingSource", "poll")!!)
