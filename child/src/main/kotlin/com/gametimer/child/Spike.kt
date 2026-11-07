@@ -82,6 +82,11 @@ class SpikePrefs(context: Context) {
     fun setPendingBlock(pkg: String, fromMs: Long, measured: Boolean, source: String) = p.edit()
         .putString("pendingPkg", pkg).putLong("pendingFrom", fromMs).putBoolean("pendingMeasured", measured)
         .putString("pendingSource", source).putLong("pendingAsked", android.os.SystemClock.elapsedRealtime()).commit()
+    /** The block page is on screen right now (set by the page itself). */
+    var blockShowing: Boolean
+        get() = p.getBoolean("blockShowing", false)
+        set(v) { p.edit().putBoolean("blockShowing", v).commit() }
+
     /** elapsedRealtime when the last block page was asked for (0 = none pending). */
     fun pendingAskedAt(): Long = if (p.contains("pendingPkg")) p.getLong("pendingAsked", 0) else 0
     data class Pending(val pkg: String, val fromMs: Long, val measured: Boolean, val source: String)

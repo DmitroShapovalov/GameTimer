@@ -54,9 +54,15 @@ class BlockActivity : ComponentActivity() {
         label = labelOf(intent)
     }
 
+    override fun onPause() {
+        SpikePrefs(this).blockShowing = false
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
         val prefs = SpikePrefs(this)
+        prefs.blockShowing = true
         val pending = prefs.pendingBlock() ?: return
         prefs.clearPendingBlock()
         val ms = System.currentTimeMillis() - pending.fromMs

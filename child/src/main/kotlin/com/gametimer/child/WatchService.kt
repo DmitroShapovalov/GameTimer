@@ -55,9 +55,10 @@ class WatchService : Service() {
         val gapS = if (prefs.lastPollMs > 0) (System.currentTimeMillis() - prefs.lastPollMs) / 1000 else -1
         SpikeLog.add(this, "service start #$n (last poll ${if (gapS < 0) "never" else "${gapS}s ago"}), battery ${battery()}%, ${Grants.of(this)}")
         startForegroundCompat()
-        checkGrants() // what changed while the app wasn't running (a force-stop also switches the accessibility service off)
+        prefs.blockShowing = false // left over if the process died while the page was up
+        clockOffset = System.currentTimeMillis() - SystemClock.elapsedRealtime()
         registerReceiver(timeChanged, android.content.IntentFilter().apply {
-            addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_DATE_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED)
         })
         scope.launch { loop() }
     }
@@ -65,9 +66,15 @@ class WatchService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     // A clock or date change can reset today's budget: logged (strict mode can't guard the Date & time page)
+    // (automatic network-time corrections of under a minute are not news)
+    private var clockOffset = 0L
     private val timeChanged = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            SpikeLog.add(context, "clock changed: ${intent.action?.substringAfterLast('.')} (now ${java.time.LocalDateTime.now().withNano(0)})")
+            val offset = System.currentTimeMillis() - SystemClock.elapsedRealtime()
+            val jumpS = (offset - clockOffset) / 1000
+            clockOffset = offset
+            if (intent.action == Intent.ACTION_TIMEZONE_CHANGED) SpikeLog.add(context, "time zone changed")
+            else if (kotlin.math.abs(jumpS) >= 60) SpikeLog.add(context, "clock changed by ${jumpS}s (now ${java.time.LocalDateTime.now().withNano(0)})")
         }
     }
 
@@ -94,7 +101,7 @@ class WatchService : Service() {
         if (front != null) SpikeLog.add(this, "in front at start: $front")
 
         lastTick = SystemClock.elapsedRealtime()
-        var lastGrantCheck = 0L
+        var lastGrantCheck = SystemClock.elapsedRealtime() + 5_000 // first check ~15 s after start
         var lastSave = 0L
         var lastBattery = SystemClock.elapsedRealtime()
         while (scope.isActive) {
@@ -163,7 +170,7 @@ class WatchService : Service() {
     private fun enforce(games: Set<String>, blocked: Boolean, tick: Long) {
         // The accessibility service usually opens the page first: don't ask twice
         val asked = prefs.pendingAskedAt()
-        if (asked > 0 && tick - asked < 1_500) { blockedVisit = true; blockAskedAt = asked; return }
+        if ((asked > 0 && tick - asked < 1_500) || prefs.blockShowing) { blockedVisit = true; blockAskedAt = tick; return }
         // The block page was asked for but didn't show (no overlay grant, the vendor's pop-up switch…): try again
         if (blockedVisit && front != packageName && prefs.pendingBlock() != null && tick - blockAskedAt > 2_000) {
             notShown++

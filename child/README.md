@@ -15,7 +15,7 @@ No Device Owner and no factory reset: the owner decided the three levels below a
 | Normal | Usage access + display over other apps: a block page about a second after a chosen app opens |
 | + device admin | The app can't be uninstalled without first switching the admin off in Settings |
 | + accessibility service | The block page as soon as the app opens (polling stays as a backstop, e.g. for a budget running out mid-game) |
-| + strict mode (PIN) | The child is sent home from any system screen showing this app's name (Settings, installer, permissions, the vendor's security and battery apps) |
+| + strict mode (PIN) | The child is sent home from any screen of Settings, the installer, the permission screens, the vendor's security and battery apps (and other system apps without an icon) that shows this app's name |
 
 ## Install
 
@@ -31,8 +31,8 @@ No Device Owner and no factory reset: the owner decided the three levels below a
    the "restricted settings" step may come first). Strict mode can't be turned on before both are in place.
 2. Set a parent PIN (4+ digits, entered twice) and **Turn strict mode on**.
 
-While it is on, the app's own settings are locked, and any system app's screen that shows "GameTimer Child" sends the
-child to the home screen: App info (force stop, uninstall, clear data), the accessibility and device-admin pages, the
+While it is on, the app's own settings are locked, and any full-screen page of those apps that shows "GameTimer Child"
+sends the child to the home screen (a browser or mail app showing the name is left alone): App info (force stop, uninstall, clear data), the accessibility and device-admin pages, the
 uninstall dialog, the permission lists, the vendor's battery and security apps. **Pause 10 min** (ends at a reboot
 too) or **Turn off** with the PIN; the Grant buttons only work while paused or off.
 

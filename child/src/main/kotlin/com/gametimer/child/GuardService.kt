@@ -85,8 +85,10 @@ class GuardService : AccessibilityService() {
         }
         lastScan = now
         val root = rootInActiveWindow ?: return
-        // Only the window the event came from (not our own app, or the other half of a split screen)
+        // Only the window the event came from (not our own app, or the other half of a split screen), and only a
+        // full-screen app window (not the notification shade, an edge panel or the lock screen)
         if (root.packageName?.toString() != pkg) return
+        if (root.window?.type != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) return
         val hits = try { root.findAccessibilityNodeInfosByText(NAME) } catch (e: RuntimeException) { return }
         if (hits.isEmpty()) return
         performGlobalAction(GLOBAL_ACTION_HOME)
@@ -98,17 +100,26 @@ class GuardService : AccessibilityService() {
         }
     }
 
-    // Any system app's screen, except the home screen, the system bars and the keyboard
+    // The screens that can switch this app off: Settings, the installer and permission screens, the vendors'
+    // security and battery apps, and other system apps without an icon of their own. Not a browser or mail app
+    // (preinstalled, so "system" too), not any home screen, the system bars or the keyboard.
     private fun isGuarded(pkg: String): Boolean {
-        if (pkg == packageName || pkg == "com.android.systemui" || pkg == home || pkg == keyboard) return false
+        if (pkg == packageName || pkg == "com.android.systemui" || pkg in homes || pkg == keyboard) return false
         return systemApp.getOrPut(pkg) {
-            runCatching { packageManager.getApplicationInfo(pkg, 0).flags and ApplicationInfo.FLAG_SYSTEM != 0 }.getOrDefault(false)
+            pkg == "com.android.settings" || pkg in VENDOR || "packageinstaller" in pkg || "permissioncontroller" in pkg ||
+                "securitycenter" in pkg || pkg.endsWith(".settings") ||
+                runCatching {
+                    packageManager.getApplicationInfo(pkg, 0).flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
+                        packageManager.getLaunchIntentForPackage(pkg) == null
+                }.getOrDefault(false)
         }
     }
 
-    private val home: String? by lazy {
+    // Every app that can be the home screen (with no default set, "the" home app is the system's chooser)
+    private val homes: Set<String> by lazy {
         @Suppress("DEPRECATION")
-        packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
+        packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+            .map { it.activityInfo.packageName }.toSet()
     }
     private val keyboard: String? by lazy {
         Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)?.substringBefore('/')
@@ -119,5 +130,12 @@ class GuardService : AccessibilityService() {
         private const val NAME = "GameTimer Child"
 
         @Volatile var connected = false
+
+        /** Vendor screens that can switch an app off (accessibility, battery limits, permissions). */
+        private val VENDOR = setOf(
+            "com.samsung.accessibility", "com.samsung.android.lool", "com.samsung.android.sm",
+            "com.lbe.security.miui", "com.miui.powerkeeper", "com.huawei.systemmanager",
+            "com.coloros.safecenter", "com.oplus.battery", "com.iqoo.secure", "com.vivo.permissionmanager",
+        )
     }
 }
