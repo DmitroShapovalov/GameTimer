@@ -13,16 +13,23 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** The block page over a chosen app (normal mode). Back and the button go to the home screen. */
+/**
+ * The block page over a chosen app (normal mode). Back and the button go to the home screen. It records
+ * the block delay itself, when it is actually on screen.
+ */
 class BlockActivity : ComponentActivity() {
+    private var label by mutableStateOf("")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val pkg = intent.getStringExtra(EXTRA_PACKAGE).orEmpty()
-        val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+        label = labelOf(intent)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = goHome()
         })
@@ -38,6 +45,28 @@ class BlockActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // A single instance: a later block reuses this page, so it takes the new app's name
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        label = labelOf(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = SpikePrefs(this)
+        val (pkg, fromMs) = prefs.pendingBlock() ?: return
+        prefs.clearPendingBlock()
+        val ms = System.currentTimeMillis() - fromMs
+        prefs.addLatency(ms)
+        SpikeLog.add(this, "block page shown over $pkg after $ms ms")
+    }
+
+    private fun labelOf(intent: Intent): String {
+        val pkg = intent.getStringExtra(EXTRA_PACKAGE).orEmpty()
+        return runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
     }
 
     private fun goHome() {

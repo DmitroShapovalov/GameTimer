@@ -10,14 +10,16 @@ English only. It answers four questions on a real phone:
 
 ## Install (normal mode)
 
-1. Download `gametimer-child-spike-apk` from the PR's "Android app" CI run and install it.
-2. Android 13+: Settings → Apps → GameTimer Child → ⋮ → **Allow restricted settings**.
-3. In the app: grant Usage access, Display over other apps and No battery optimisation.
+1. Download `gametimer-child-spike-apk` from the PR's "Android app" CI run (a zip: unzip it) and install the APK.
+2. In the app, try to grant Usage access and Display over other apps. Android 13+ refuses the first time for an app
+   installed from a file; then Settings → Apps → GameTimer Child → ⋮ → **Allow restricted settings**, and grant again.
+3. Grant No battery optimisation too.
 4. Pick a game or two, choose "Block now" or a small daily budget, and open the game.
 
 ## Device Owner (optional, on a test phone only)
 
-Needs a phone that was just reset, with **no Google account added yet**, and USB debugging on:
+Needs a phone that was just reset, with **no accounts of any kind** (Google, Samsung, Xiaomi…) and no extra users,
+and USB debugging on:
 
 ```
 adb install child-debug.apk
@@ -25,10 +27,13 @@ adb shell dpm set-device-owner com.gametimer.child/.AdminReceiver
 ```
 
 The app then suspends the chosen apps instead of covering them, and offers to block uninstalling, safe mode,
-factory reset, developer options and new users. **Remove Device Owner** in the app undoes all of it.
-Don't turn on "Block developer options" before you know how to remove Device Owner from the app.
+factory reset and new users. **Remove Device Owner** in the app lifts every suspension it made (and of every listed
+app), clears those blocks and gives up Device Owner. Settings, the home screen and Play Store can't be chosen, and
+developer options are never blocked, so adb stays available. If the app itself were ever unusable, the last resort is
+a factory reset from recovery mode ("Block factory reset" only blocks the reset in Settings).
 
 ## Report
 
-Section 5 → **Copy report** copies the measured delays, service starts, phone model and the event log, to paste
-back into the PR or chat.
+Section 5 → **Copy report** copies the measured delays, service starts, phone model and the event log (with the battery
+level every 30 minutes), to paste back into the PR or chat. The delay is measured when the block page is on screen,
+from the later of "the game came to the front" and "blocking turned on".

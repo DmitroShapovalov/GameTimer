@@ -58,14 +58,23 @@ class MainActivity : ComponentActivity() {
         setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
     }
 
-    private data class App(val pkg: String, val label: String)
+    private data class App(val pkg: String, val label: String, val system: Boolean)
 
+    // Launchable apps, without the ones that must never be blocked: this app, Settings (the way back),
+    // the home screen and Play Store
     private fun launchableApps(): List<App> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")
         val list = packageManager.queryIntentActivities(intent, 0)
-        return list.map { App(it.activityInfo.packageName, it.loadLabel(packageManager).toString()) }
-            .filter { it.pkg != packageName }.distinctBy { it.pkg }.sortedBy { it.label.lowercase() }
+        @Suppress("DEPRECATION")
+        val home = packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+            ?.activityInfo?.packageName
+        val never = setOf(packageName, "com.android.settings", "com.android.vending", home)
+        return list.map {
+            val info = it.activityInfo.applicationInfo
+            App(it.activityInfo.packageName, it.loadLabel(packageManager).toString(),
+                info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM != 0)
+        }.filter { it.pkg !in never }.distinctBy { it.pkg }.sortedWith(compareBy({ it.system }, { it.label.lowercase() }))
     }
 
     @Composable
@@ -121,12 +130,12 @@ class MainActivity : ComponentActivity() {
                         games = if (on) games + app.pkg else games - app.pkg
                         prefs.games = games
                     })
-                    Text(app.label)
+                    Text(if (app.system) "${app.label} (system)" else app.label)
                 }
             }
 
             Section("4. Device Owner (optional)")
-            DeviceOwner(grants.deviceOwner)
+            DeviceOwner(grants.deviceOwner, apps.map { it.pkg })
 
             Section("5. Report")
             val lat = prefs.latencies()
@@ -167,43 +176,37 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Device Owner extras: set up from a computer, and always removable from here
+    // Device Owner extras: set up from a computer, and always removable from here (never throws)
     @Composable
-    private fun DeviceOwner(isOwner: Boolean) {
-        if (!isOwner) {
-            Text("Not Device Owner. To try it on a reset test phone with no Google account added yet (USB debugging on):",
-                style = MaterialTheme.typography.bodySmall)
+    private fun DeviceOwner(ownerNow: Boolean, allApps: List<String>) {
+        var removed by remember { mutableStateOf(false) }
+        if (!ownerNow || removed) {
+            Text("Not Device Owner. To try it on a test phone just reset, with no accounts added (Google, Samsung, Xiaomi…) " +
+                "and USB debugging on:", style = MaterialTheme.typography.bodySmall)
             Text("adb shell dpm set-device-owner com.gametimer.child/.AdminReceiver", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
             return
         }
         val dpm = getSystemService(DevicePolicyManager::class.java)
         val admin = adminComponent(this)
         var refresh by remember { mutableIntStateOf(0) }
-        val uninstallBlocked = remember(refresh) { dpm.isUninstallBlocked(admin, packageName) }
-        val restrictions = remember(refresh) { dpm.getUserRestrictions(admin) }
+        val uninstallBlocked = remember(refresh) { runCatching { dpm.isUninstallBlocked(admin, packageName) }.getOrDefault(false) }
+        val restrictions = remember(refresh) { runCatching { dpm.getUserRestrictions(admin) }.getOrNull() }
         Text("Device Owner: yes. Chosen apps are suspended by the system while blocking is on.")
-        ToggleRow("Block uninstalling this app", uninstallBlocked) { dpm.setUninstallBlocked(admin, packageName, it); refresh++ }
-        listOf(
-            UserManager.DISALLOW_SAFE_BOOT to "Block safe mode",
-            UserManager.DISALLOW_FACTORY_RESET to "Block factory reset",
-            UserManager.DISALLOW_DEBUGGING_FEATURES to "Block developer options / USB debugging",
-            UserManager.DISALLOW_ADD_USER to "Block adding users",
-        ).forEach { (key, label) ->
-            ToggleRow(label, restrictions.getBoolean(key)) { on ->
-                if (on) dpm.addUserRestriction(admin, key) else dpm.clearUserRestriction(admin, key); refresh++
+        ToggleRow("Block uninstalling this app", uninstallBlocked) { on ->
+            runCatching { dpm.setUninstallBlocked(admin, packageName, on) }.onFailure { SpikeLog.add(this, "uninstall block: $it") }
+            refresh++
+        }
+        val labels = mapOf(UserManager.DISALLOW_SAFE_BOOT to "Block safe mode", UserManager.DISALLOW_FACTORY_RESET to "Block factory reset",
+            UserManager.DISALLOW_ADD_USER to "Block adding users")
+        RESTRICTIONS.forEach { key ->
+            ToggleRow(labels.getValue(key), restrictions?.getBoolean(key) == true) { on ->
+                runCatching { if (on) dpm.addUserRestriction(admin, key) else dpm.clearUserRestriction(admin, key) }
+                    .onFailure { SpikeLog.add(this, "restriction $key: $it") }
+                refresh++
             }
         }
-        Button(onClick = {
-            // Undo everything first, so the test phone is left as it was
-            SpikePrefs(this).games.takeIf { it.isNotEmpty() }?.let { dpm.setPackagesSuspended(admin, it.toTypedArray(), false) }
-            dpm.setUninstallBlocked(admin, packageName, false)
-            listOf(UserManager.DISALLOW_SAFE_BOOT, UserManager.DISALLOW_FACTORY_RESET, UserManager.DISALLOW_DEBUGGING_FEATURES,
-                UserManager.DISALLOW_ADD_USER).forEach { dpm.clearUserRestriction(admin, it) }
-            @Suppress("DEPRECATION")
-            dpm.clearDeviceOwnerApp(packageName)
-            SpikeLog.add(this, "Device Owner removed")
-            refresh++
-        }) { Text("Remove Device Owner") }
+        Text("Developer options are never blocked here: with them adb stays a way back.", style = MaterialTheme.typography.bodySmall)
+        Button(onClick = { releaseDeviceOwner(this, allApps); removed = true }) { Text("Remove Device Owner") }
     }
 
     @Composable

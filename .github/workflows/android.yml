@@ -74,6 +74,7 @@ jobs:
           name: gametimer-child-spike-apk
           path: child/build/outputs/apk/debug/child-debug.apk
           retention-days: 14
+          if-no-files-found: error
 
       - name: Start the C# test agent
         run: |

@@ -47,6 +47,19 @@ class SpikePrefs(context: Context) {
         get() = p.getLong("lastPoll", 0)
         set(v) = p.edit().putLong("lastPoll", v).apply()
 
+    /** Apps this app suspended (Device Owner), kept so a restart or "Remove" can always lift them. */
+    var suspended: Set<String>
+        get() = p.getStringSet("suspended", emptySet()) ?: emptySet()
+        set(v) { p.edit().putStringSet("suspended", v).commit() }
+
+    /**
+     * A block page the service asked for: the app, and the moment the delay is measured from (the later of
+     * "the game came to the front" and "blocking became on"). The page itself records the delay when it shows.
+     */
+    fun setPendingBlock(pkg: String, fromMs: Long) = p.edit().putString("pendingPkg", pkg).putLong("pendingFrom", fromMs).apply()
+    fun pendingBlock(): Pair<String, Long>? = p.getString("pendingPkg", null)?.let { it to p.getLong("pendingFrom", 0) }
+    fun clearPendingBlock() = p.edit().remove("pendingPkg").remove("pendingFrom").apply()
+
     /** Block delays measured (ms), the newest last. */
     fun addLatency(ms: Long) {
         val list = latencies().takeLast(49) + ms
@@ -58,11 +71,12 @@ class SpikePrefs(context: Context) {
 /** A short event log for the report the owner sends back (newest last, 300 lines). */
 object SpikeLog {
     private val time = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")
+    @Synchronized
     fun add(context: Context, line: String) {
         val p = context.applicationContext.getSharedPreferences("spike_log", Context.MODE_PRIVATE)
         val lines = (p.getString("log", "") ?: "").lines().filter { it.isNotBlank() }.takeLast(299) +
             "${java.time.LocalDateTime.now().format(time)} $line"
-        p.edit().putString("log", lines.joinToString("\n")).apply()
+        p.edit().putString("log", lines.joinToString("\n")).commit() // written at once: the next moment may be a crash
     }
     fun read(context: Context): String =
         context.applicationContext.getSharedPreferences("spike_log", Context.MODE_PRIVATE).getString("log", "") ?: ""
@@ -88,4 +102,29 @@ fun isDeviceOwner(context: Context): Boolean =
     context.getSystemService(DevicePolicyManager::class.java).isDeviceOwnerApp(context.packageName)
 
 fun adminComponent(context: Context) = ComponentName(context, AdminReceiver::class.java)
+
+/**
+ * Lifts every suspension this app may have made and its restrictions, then gives up Device Owner. Never
+ * throws: it is the way back on the test phone.
+ */
+fun releaseDeviceOwner(context: Context, alsoLift: Collection<String>) {
+    val dpm = context.getSystemService(DevicePolicyManager::class.java)
+    val admin = adminComponent(context)
+    val prefs = SpikePrefs(context)
+    val lift = (prefs.suspended + prefs.games + alsoLift).toTypedArray()
+    runCatching { if (lift.isNotEmpty()) dpm.setPackagesSuspended(admin, lift, false) }
+        .onFailure { SpikeLog.add(context, "lift failed: $it") }
+    prefs.suspended = emptySet()
+    runCatching { dpm.setUninstallBlocked(admin, context.packageName, false) }
+    for (r in RESTRICTIONS) runCatching { dpm.clearUserRestriction(admin, r) }
+    runCatching {
+        @Suppress("DEPRECATION")
+        dpm.clearDeviceOwnerApp(context.packageName)
+    }.onFailure { SpikeLog.add(context, "clear Device Owner failed: $it") }
+    SpikeLog.add(context, "Device Owner removed (lifted ${lift.size} app(s))")
+}
+
+/** The restrictions the spike can set (developer options are left alone: they are the way back). */
+val RESTRICTIONS = listOf(android.os.UserManager.DISALLOW_SAFE_BOOT, android.os.UserManager.DISALLOW_FACTORY_RESET,
+    android.os.UserManager.DISALLOW_ADD_USER)
 
