@@ -18,19 +18,27 @@ English only. It answers four questions on a real phone:
 
 ## Device Owner (optional, on a test phone only)
 
-Needs a phone that was just reset, with **no accounts of any kind** (Google, Samsung, Xiaomi…) and no extra users,
-and USB debugging on:
+Use `child-deviceOwner.apk` from the same zip (a test-only build). It needs a phone that was just reset, with
+**no accounts of any kind** (Google, Samsung, Xiaomi…) and no extra users, and USB debugging on:
 
 ```
-adb install child-debug.apk
+adb install -t child-deviceOwner.apk
 adb shell dpm set-device-owner com.gametimer.child/.AdminReceiver
 ```
 
 The app then suspends the chosen apps instead of covering them, and offers to block uninstalling, safe mode,
-factory reset and new users. **Remove Device Owner** in the app lifts every suspension it made (and of every listed
-app), clears those blocks and gives up Device Owner. Settings, the home screen and Play Store can't be chosen, and
-developer options are never blocked, so adb stays available. If the app itself were ever unusable, the last resort is
-a factory reset from recovery mode ("Block factory reset" only blocks the reset in Settings).
+factory reset (in Settings) and new users. Settings, the home screen, Play Store, the dialer and the SMS app can't be
+chosen, and developer options are never blocked.
+
+Ways back, in order:
+1. **Remove Device Owner** in the app: lifts every suspension it made (and of every launchable app), clears those
+   blocks and gives up Device Owner.
+2. From a computer: `adb shell dpm remove-active-admin com.gametimer.child/.AdminReceiver` (works because the build is
+   test-only), then `adb uninstall com.gametimer.child`. Suspended apps may then need the app reinstalled and step 1.
+3. Last resort: a factory reset from recovery mode.
+
+Each CI run signs with its own debug key, so a newer build doesn't install over an older one: remove the old one
+first (step 1 or 2).
 
 ## Report
 

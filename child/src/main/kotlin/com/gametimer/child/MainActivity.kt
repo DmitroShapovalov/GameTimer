@@ -60,6 +60,13 @@ class MainActivity : ComponentActivity() {
 
     private data class App(val pkg: String, val label: String, val system: Boolean)
 
+    // Every launchable app, for lifting suspensions (lifting is always harmless)
+    private fun allLaunchable(): List<String> {
+        @Suppress("DEPRECATION")
+        val list = packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+        return list.map { it.activityInfo.packageName }.distinct()
+    }
+
     // Launchable apps, without the ones that must never be blocked: this app, Settings (the way back),
     // the home screen and Play Store
     private fun launchableApps(): List<App> {
@@ -69,7 +76,9 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         val home = packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
             ?.activityInfo?.packageName
-        val never = setOf(packageName, "com.android.settings", "com.android.vending", home)
+        val dialer = runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()
+        val sms = runCatching { android.provider.Telephony.Sms.getDefaultSmsPackage(this) }.getOrNull()
+        val never = setOf(packageName, "com.android.settings", "com.android.vending", home, dialer, sms)
         return list.map {
             val info = it.activityInfo.applicationInfo
             App(it.activityInfo.packageName, it.loadLabel(packageManager).toString(),
@@ -135,7 +144,7 @@ class MainActivity : ComponentActivity() {
             }
 
             Section("4. Device Owner (optional)")
-            DeviceOwner(grants.deviceOwner, apps.map { it.pkg })
+            DeviceOwner(grants.deviceOwner, allLaunchable())
 
             Section("5. Report")
             val lat = prefs.latencies()
@@ -205,8 +214,9 @@ class MainActivity : ComponentActivity() {
                 refresh++
             }
         }
-        Text("Developer options are never blocked here: with them adb stays a way back.", style = MaterialTheme.typography.bodySmall)
-        Button(onClick = { releaseDeviceOwner(this, allApps); removed = true }) { Text("Remove Device Owner") }
+        Text("Developer options are never blocked here, so adb keeps working (with the device-owner build: dpm remove-active-admin).",
+            style = MaterialTheme.typography.bodySmall)
+        Button(onClick = { releaseDeviceOwner(this, allApps); removed = !isDeviceOwner(this) }) { Text("Remove Device Owner") }
     }
 
     @Composable

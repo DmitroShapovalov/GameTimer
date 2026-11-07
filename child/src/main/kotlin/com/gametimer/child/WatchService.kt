@@ -44,6 +44,10 @@ class WatchService : Service() {
     private var blockingSinceMs = 0L       // when blocking last became on (wall clock), 0 = off
     private var lastGrants: Grants? = null
     private var carryMs = 0L
+    private var startMs = 0L
+    private var refused: Set<String> = emptySet()   // apps the system won't suspend (logged once)
+    private var notShown = 0                         // block pages that didn't appear in a row
+    private var lastError: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -74,13 +78,13 @@ class WatchService : Service() {
         val usm = getSystemService(UsageStatsManager::class.java)
         val power = getSystemService(PowerManager::class.java)
         // A game that was already open when the service (re)started is picked up from the recent past
-        val startMs = System.currentTimeMillis()
+        startMs = System.currentTimeMillis()
         lastEventMs = startMs - 3 * 3600_000L
         readEvents(usm, startMs)
         if (prefs.isBlockedNow()) blockingSinceMs = startMs
         if (front != null) SpikeLog.add(this, "in front at start: $front")
 
-        var lastTick = SystemClock.elapsedRealtime()
+        lastTick = SystemClock.elapsedRealtime()
         var lastGrantCheck = 0L
         var lastSave = 0L
         var lastBattery = SystemClock.elapsedRealtime()
@@ -93,6 +97,22 @@ class WatchService : Service() {
                 delay(5_000)
                 continue
             }
+            try { pass(usm, tick) } catch (e: Exception) {
+                // One bad pass must not stop the watcher while the service still looks alive
+                if (e.toString() != lastError) SpikeLog.add(this, "watch pass error: $e")
+                lastError = e.toString()
+            }
+            lastTick = tick
+            if (tick - lastSave > 10_000) { lastSave = tick; prefs.lastPollMs = System.currentTimeMillis() }
+            if (tick - lastGrantCheck > 30_000) { lastGrantCheck = tick; checkGrants() }
+            if (tick - lastBattery > 30 * 60_000L) { lastBattery = tick; SpikeLog.add(this, "battery ${battery()}%") }
+            delay(POLL_MS)
+        }
+    }
+
+    private var lastTick = 0L
+
+    private fun pass(usm: UsageStatsManager, tick: Long) {
             val nowMs = System.currentTimeMillis()
             if (lastEventMs > nowMs) {
                 SpikeLog.add(this, "clock went back ${(lastEventMs - nowMs) / 1000}s: event window reset")
@@ -106,18 +126,10 @@ class WatchService : Service() {
                 carryMs += (tick - lastTick).coerceIn(0, 5_000)
                 if (carryMs >= 1000) { prefs.usedToday = prefs.usedToday + (carryMs / 1000).toInt(); carryMs %= 1000 }
             }
-            lastTick = tick
-
             val blocked = prefs.isBlockedNow()
             if (blocked && blockingSinceMs == 0L) blockingSinceMs = nowMs
             if (!blocked) blockingSinceMs = 0L
             enforce(games, blocked, tick)
-
-            if (tick - lastSave > 10_000) { lastSave = tick; prefs.lastPollMs = nowMs }
-            if (tick - lastGrantCheck > 30_000) { lastGrantCheck = tick; checkGrants() }
-            if (tick - lastBattery > 30 * 60_000L) { lastBattery = tick; SpikeLog.add(this, "battery ${battery()}%") }
-            delay(POLL_MS)
-        }
     }
 
     // Usage events since the last read: the newest "resumed" activity is the app in front; the screen going
@@ -142,33 +154,37 @@ class WatchService : Service() {
     private fun enforce(games: Set<String>, blocked: Boolean, tick: Long) {
         if (isDeviceOwner(this)) {
             // Device Owner: the system keeps the chosen apps from opening at all
-            val want = if (blocked) games else emptySet()
-            val had = prefs.suspended
-            if (want != had) {
+            synchronized(DoLock) {
+                if (prefs.releasing || !isDeviceOwner(this)) return
+                val want = (if (blocked) games else emptySet()) - refused
+                val had = prefs.suspended
+                if (want == had) return
                 val dpm = getSystemService(DevicePolicyManager::class.java)
                 val admin = adminComponent(this)
-                runCatching {
-                    val lift = had - want
-                    if (lift.isNotEmpty()) dpm.setPackagesSuspended(admin, lift.toTypedArray(), false)
-                    val failed = if (want.isNotEmpty()) dpm.setPackagesSuspended(admin, want.toTypedArray(), true).toList() else emptyList()
-                    prefs.suspended = want - failed.toSet()
-                    SpikeLog.add(this, "suspended ${want.size - failed.size} app(s)${if (failed.isNotEmpty()) ", refused by the system: $failed" else ""}")
-                }.onFailure { SpikeLog.add(this, "suspend failed: $it") }
+                val lift = had - want
+                if (lift.isNotEmpty()) dpm.setPackagesSuspended(admin, lift.toTypedArray(), false)
+                val failed = if (want.isNotEmpty()) dpm.setPackagesSuspended(admin, want.toTypedArray(), true).toSet() else emptySet()
+                prefs.suspended = want - failed
+                refused = refused + failed
+                SpikeLog.add(this, "suspended ${want.size - failed.size} app(s)${if (failed.isNotEmpty()) ", refused by the system: $failed" else ""}")
             }
             return
         }
         // The block page was asked for but didn't show (no overlay grant, the vendor's pop-up switch…): try again
         if (blockedVisit && front != packageName && prefs.pendingBlock() != null && tick - blockAskedAt > 2_000) {
-            SpikeLog.add(this, "block page did not appear over $front, retrying")
+            notShown++
+            if (notShown == 1 || notShown % 20 == 0) SpikeLog.add(this, "block page did not appear over $front (×$notShown), retrying")
             prefs.clearPendingBlock()
             blockedVisit = false
         }
+        if (front == packageName) notShown = 0
         val pkg = front ?: return
         if (!blocked || pkg !in games || pkg == packageName || blockedVisit) return
         blockedVisit = true
         blockAskedAt = tick
         // The delay counts from the game coming to the front, or from blocking turning on in the middle of play
-        prefs.setPendingBlock(pkg, maxOf(frontSinceMs, blockingSinceMs))
+        // A game that was already open when the service (re)started isn't a fair delay: shown, not counted
+        prefs.setPendingBlock(pkg, maxOf(frontSinceMs, blockingSinceMs), measured = frontSinceMs >= startMs)
         startActivity(Intent(this, BlockActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra(BlockActivity.EXTRA_PACKAGE, pkg))

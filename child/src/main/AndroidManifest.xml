@@ -22,6 +22,7 @@
 
     <application
         android:allowBackup="false"
+        android:testOnly="${testOnly}"
         android:label="GameTimer Child (spike)"
         android:icon="@android:drawable/ic_lock_idle_alarm"
         android:theme="@android:style/Theme.Material.NoActionBar">

@@ -7,7 +7,10 @@ import android.content.Intent
 
 /** Device Owner / device admin entry point (needed even when it does nothing itself). */
 class AdminReceiver : DeviceAdminReceiver() {
-    override fun onEnabled(context: Context, intent: Intent) = SpikeLog.add(context, "device admin enabled")
+    override fun onEnabled(context: Context, intent: Intent) {
+        SpikePrefs(context).releasing = false
+        SpikeLog.add(context, "device admin enabled")
+    }
     override fun onDisabled(context: Context, intent: Intent) = SpikeLog.add(context, "device admin disabled")
 }
 

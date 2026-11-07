@@ -56,9 +56,16 @@ class SpikePrefs(context: Context) {
      * A block page the service asked for: the app, and the moment the delay is measured from (the later of
      * "the game came to the front" and "blocking became on"). The page itself records the delay when it shows.
      */
-    fun setPendingBlock(pkg: String, fromMs: Long) = p.edit().putString("pendingPkg", pkg).putLong("pendingFrom", fromMs).apply()
-    fun pendingBlock(): Pair<String, Long>? = p.getString("pendingPkg", null)?.let { it to p.getLong("pendingFrom", 0) }
-    fun clearPendingBlock() = p.edit().remove("pendingPkg").remove("pendingFrom").apply()
+    fun setPendingBlock(pkg: String, fromMs: Long, measured: Boolean) =
+        p.edit().putString("pendingPkg", pkg).putLong("pendingFrom", fromMs).putBoolean("pendingMeasured", measured).apply()
+    data class Pending(val pkg: String, val fromMs: Long, val measured: Boolean)
+    fun pendingBlock(): Pending? = p.getString("pendingPkg", null)?.let { Pending(it, p.getLong("pendingFrom", 0), p.getBoolean("pendingMeasured", true)) }
+    fun clearPendingBlock() = p.edit().remove("pendingPkg").remove("pendingFrom").remove("pendingMeasured").apply()
+
+    /** Set while "Remove Device Owner" runs (and if it failed): the service suspends nothing. */
+    var releasing: Boolean
+        get() = p.getBoolean("releasing", false)
+        set(v) { p.edit().putBoolean("releasing", v).commit() }
 
     /** Block delays measured (ms), the newest last. */
     fun addLatency(ms: Long) {
@@ -107,10 +114,14 @@ fun adminComponent(context: Context) = ComponentName(context, AdminReceiver::cla
  * Lifts every suspension this app may have made and its restrictions, then gives up Device Owner. Never
  * throws: it is the way back on the test phone.
  */
-fun releaseDeviceOwner(context: Context, alsoLift: Collection<String>) {
+/** Serialises Device Owner changes between the service and "Remove Device Owner". */
+object DoLock
+
+fun releaseDeviceOwner(context: Context, alsoLift: Collection<String>) = synchronized(DoLock) {
     val dpm = context.getSystemService(DevicePolicyManager::class.java)
     val admin = adminComponent(context)
     val prefs = SpikePrefs(context)
+    prefs.releasing = true // the service suspends nothing from here on
     val lift = (prefs.suspended + prefs.games + alsoLift).toTypedArray()
     runCatching { if (lift.isNotEmpty()) dpm.setPackagesSuspended(admin, lift, false) }
         .onFailure { SpikeLog.add(context, "lift failed: $it") }
@@ -121,7 +132,9 @@ fun releaseDeviceOwner(context: Context, alsoLift: Collection<String>) {
         @Suppress("DEPRECATION")
         dpm.clearDeviceOwnerApp(context.packageName)
     }.onFailure { SpikeLog.add(context, "clear Device Owner failed: $it") }
-    SpikeLog.add(context, "Device Owner removed (lifted ${lift.size} app(s))")
+    val stillOwner = isDeviceOwner(context)
+    if (!stillOwner) prefs.releasing = false
+    SpikeLog.add(context, if (stillOwner) "Device Owner could NOT be removed" else "Device Owner removed (lifted ${lift.size} app(s))")
 }
 
 /** The restrictions the spike can set (developer options are left alone: they are the way back). */

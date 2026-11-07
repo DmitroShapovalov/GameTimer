@@ -16,6 +16,17 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.0.1-spike"
+        manifestPlaceholders["testOnly"] = "false"
+    }
+
+    buildTypes {
+        // For the Device Owner test only: testOnly, so `adb shell dpm remove-active-admin` can always remove it
+        // (installed with `adb install -t`; the phone's installer refuses testOnly APKs, hence the normal debug build)
+        create("deviceOwner") {
+            initWith(getByName("debug"))
+            manifestPlaceholders["testOnly"] = "true"
+            matchingFallbacks += "debug"
+        }
     }
 
     buildFeatures { compose = true }
