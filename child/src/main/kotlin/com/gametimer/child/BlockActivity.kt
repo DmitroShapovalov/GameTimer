@@ -62,8 +62,8 @@ class BlockActivity : ComponentActivity() {
         val ms = System.currentTimeMillis() - pending.fromMs
         // Not counted: a game open before the service (re)started, or a clock change in between
         val counted = pending.measured && ms in 0..600_000
-        if (counted) prefs.addLatency(ms)
-        SpikeLog.add(this, "block page shown over ${pending.pkg} after $ms ms${if (counted) "" else " (not counted)"}")
+        if (counted) prefs.addLatency(pending.source, ms)
+        SpikeLog.add(this, "block page shown over ${pending.pkg} after $ms ms [${pending.source}]${if (counted) "" else " (not counted)"}")
     }
 
     private fun labelOf(intent: Intent): String {

@@ -22,7 +22,6 @@
 
     <application
         android:allowBackup="false"
-        android:testOnly="${testOnly}"
         android:label="GameTimer Child (spike)"
         android:icon="@android:drawable/ic_lock_idle_alarm"
         android:theme="@android:style/Theme.Material.NoActionBar">
@@ -58,7 +57,18 @@
             </intent-filter>
         </receiver>
 
-        <!-- Device Owner (optional): adb shell dpm set-device-owner com.gametimer.child/.AdminReceiver -->
+        <!-- Strict mode: the accessibility service (instant blocking, guards the settings screens) -->
+        <service
+            android:name=".GuardService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/guard_service" />
+        </service>
+
+        <!-- Device admin (not Device Owner): uninstalling first needs it switched off -->
         <receiver
             android:name=".AdminReceiver"
             android:exported="true"

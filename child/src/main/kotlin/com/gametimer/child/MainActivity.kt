@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.UserManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,6 +25,10 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,7 +48,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 
 /**
- * The spike's one screen: what is granted, which apps to block and when, Device Owner extras, and the
+ * The spike's one screen: what is granted, which apps to block and when, strict mode, and the
  * report (measured block delays, service restarts, the event log) to copy and send back.
  */
 class MainActivity : ComponentActivity() {
@@ -59,13 +62,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private data class App(val pkg: String, val label: String, val system: Boolean)
-
-    // Every launchable app, for lifting suspensions (lifting is always harmless)
-    private fun allLaunchable(): List<String> {
-        @Suppress("DEPRECATION")
-        val list = packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
-        return list.map { it.activityInfo.packageName }.distinct()
-    }
 
     // Launchable apps, without the ones that must never be blocked: this app, Settings (the way back),
     // the home screen and Play Store
@@ -117,25 +113,29 @@ class MainActivity : ComponentActivity() {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
             }) { Text("Open App info") }
 
+            val locked = prefs.guarding().also { refresh }
+            if (locked) Text("Strict mode is on: the settings below are locked. Pause it with the PIN in section 4.",
+                color = MaterialTheme.colorScheme.error)
+
             Section("2. When to block")
             listOf("off" to "Off", "always" to "Block the chosen apps now", "budget" to "Block after a daily budget").forEach { (k, label) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = mode == k, onClick = { mode = k; prefs.mode = k })
+                    RadioButton(selected = mode == k, enabled = !locked, onClick = { mode = k; prefs.mode = k })
                     Text(label)
                 }
             }
             if (mode == "budget") Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { budget = (budget - 1).coerceAtLeast(1); prefs.budgetMinutes = budget }) { Text("−") }
+                OutlinedButton(enabled = !locked, onClick = { budget = (budget - 1).coerceAtLeast(1); prefs.budgetMinutes = budget }) { Text("−") }
                 Text("$budget min")
-                OutlinedButton(onClick = { budget += 1; prefs.budgetMinutes = budget }) { Text("+") }
+                OutlinedButton(enabled = !locked, onClick = { budget += 1; prefs.budgetMinutes = budget }) { Text("+") }
                 Text("used today: ${prefs.usedToday / 60}:${"%02d".format(prefs.usedToday % 60)}".also { refresh })
             }
-            if (mode == "budget") OutlinedButton(onClick = { prefs.usedToday = 0 }) { Text("Reset today's use") }
+            if (mode == "budget") OutlinedButton(enabled = !locked, onClick = { prefs.usedToday = 0 }) { Text("Reset today's use") }
 
             Section("3. Apps to block (${games.size})")
             apps.forEach { app ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = app.pkg in games, onCheckedChange = { on ->
+                    Checkbox(checked = app.pkg in games, enabled = !locked, onCheckedChange = { on ->
                         games = if (on) games + app.pkg else games - app.pkg
                         prefs.games = games
                     })
@@ -143,15 +143,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            Section("4. Device Owner (optional)")
-            DeviceOwner(grants.deviceOwner, allLaunchable())
+            Section("4. Strict mode (optional)")
+            StrictMode(prefs, grants)
 
             Section("5. Report")
-            val lat = prefs.latencies()
             Text(buildString {
-                append("Block delay: ")
-                append(if (lat.isEmpty()) "no blocks yet" else "median ${lat.sorted()[lat.size / 2]} ms, max ${lat.max()} ms (${lat.size} blocks)")
-                append("\nService starts: ${prefs.count("serviceStarts")}")
+                for (source in listOf("poll", "a11y")) {
+                    val lat = prefs.latencies(source)
+                    append("Block delay [$source]: ")
+                    append(if (lat.isEmpty()) "no blocks yet\n" else "median ${lat.sorted()[lat.size / 2]} ms, max ${lat.max()} ms (${lat.size} blocks)\n")
+                }
+                append("Service starts: ${prefs.count("serviceStarts")}")
                 val ago = (System.currentTimeMillis() - prefs.lastPollMs) / 1000
                 append("\nLast poll: ${if (prefs.lastPollMs == 0L) "never" else "${ago}s ago"}".also { refresh })
                 append("\nPhone: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
@@ -159,7 +161,8 @@ class MainActivity : ComponentActivity() {
             })
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
-                    val text = "Block delays ms: ${prefs.latencies()}\nService starts: ${prefs.count("serviceStarts")}\n" +
+                    val text = "Block delays ms: poll ${prefs.latencies("poll")}, a11y ${prefs.latencies("a11y")}\n" +
+                        "Service starts: ${prefs.count("serviceStarts")}, strict ${prefs.strict}\n" +
                         "Phone: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}\nGrants: ${Grants.of(this@MainActivity)}\n\n" +
                         SpikeLog.read(this@MainActivity)
                     getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("spike report", text))
@@ -185,45 +188,53 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Device Owner extras: set up from a computer, and always removable from here (never throws)
+    // Strict mode: device admin + the accessibility service + a PIN the parent sets
     @Composable
-    private fun DeviceOwner(ownerNow: Boolean, allApps: List<String>) {
-        var removed by remember { mutableStateOf(false) }
-        if (!ownerNow || removed) {
-            Text("Not Device Owner. To try it on a test phone just reset, with no accounts added (Google, Samsung, Xiaomi…) " +
-                "and USB debugging on:", style = MaterialTheme.typography.bodySmall)
-            Text("adb shell dpm set-device-owner com.gametimer.child/.AdminReceiver", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-            return
-        }
-        val dpm = getSystemService(DevicePolicyManager::class.java)
-        val admin = adminComponent(this)
+    private fun StrictMode(prefs: SpikePrefs, grants: Grants) {
         var refresh by remember { mutableIntStateOf(0) }
-        val uninstallBlocked = remember(refresh) { runCatching { dpm.isUninstallBlocked(admin, packageName) }.getOrDefault(false) }
-        val restrictions = remember(refresh) { runCatching { dpm.getUserRestrictions(admin) }.getOrNull() }
-        Text("Device Owner: yes. Chosen apps are suspended by the system while blocking is on.")
-        ToggleRow("Block uninstalling this app", uninstallBlocked) { on ->
-            runCatching { dpm.setUninstallBlocked(admin, packageName, on) }.onFailure { SpikeLog.add(this, "uninstall block: $it") }
-            refresh++
+        var pinText by remember { mutableStateOf("") }
+        var message by remember { mutableStateOf("") }
+        val guarding = remember(refresh, grants) { prefs.guarding() }
+        Text("Instant blocking, and the settings that would switch this app off are closed at once. " +
+            "What it can't stop: safe mode, a factory reset, a computer with adb.", style = MaterialTheme.typography.bodySmall)
+        GrantRow("Device admin (uninstall needs it switched off first)", grants.admin) {
+            startActivity(Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent(this))
+                .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Keeps the screen-time limits from being removed without a parent."))
         }
-        val labels = mapOf(UserManager.DISALLOW_SAFE_BOOT to "Block safe mode", UserManager.DISALLOW_FACTORY_RESET to "Block factory reset",
-            UserManager.DISALLOW_ADD_USER to "Block adding users")
-        RESTRICTIONS.forEach { key ->
-            ToggleRow(labels.getValue(key), restrictions?.getBoolean(key) == true) { on ->
-                runCatching { if (on) dpm.addUserRestriction(admin, key) else dpm.clearUserRestriction(admin, key) }
-                    .onFailure { SpikeLog.add(this, "restriction $key: $it") }
-                refresh++
+        GrantRow("Accessibility service (${if (GuardService.connected) "running" else "not running"})", grants.accessibility) {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        OutlinedTextField(value = pinText, onValueChange = { v -> pinText = v.filter { it.isDigit() }.take(8) },
+            label = { Text(if (prefs.pin == null) "Parent PIN (set it, 4+ digits)" else "Parent PIN") },
+            singleLine = true, visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!prefs.strict) Button(enabled = pinText.length >= 4 && (prefs.pin == null || pinText == prefs.pin), onClick = {
+                if (prefs.pin == null) prefs.pin = pinText
+                prefs.strict = true; prefs.pausedUntil = 0
+                SpikeLog.add(this@MainActivity, "strict mode ON"); pinText = ""; message = ""; refresh++
+            }) { Text("Turn strict mode on") }
+            else {
+                OutlinedButton(onClick = {
+                    if (pinText == prefs.pin) {
+                        prefs.pausedUntil = System.currentTimeMillis() + 10 * 60_000L
+                        SpikeLog.add(this@MainActivity, "strict mode paused 10 min"); message = "Paused for 10 minutes"
+                    } else { SpikeLog.add(this@MainActivity, "strict mode: wrong PIN"); message = "Wrong PIN" }
+                    pinText = ""; refresh++
+                }) { Text("Pause 10 min") }
+                OutlinedButton(onClick = {
+                    if (pinText == prefs.pin) {
+                        prefs.strict = false; SpikeLog.add(this@MainActivity, "strict mode OFF"); message = ""
+                    } else { SpikeLog.add(this@MainActivity, "strict mode: wrong PIN"); message = "Wrong PIN" }
+                    pinText = ""; refresh++
+                }) { Text("Turn off") }
             }
         }
-        Text("Developer options are never blocked here, so adb keeps working (with the device-owner build: dpm remove-active-admin).",
-            style = MaterialTheme.typography.bodySmall)
-        Button(onClick = { releaseDeviceOwner(this, allApps); removed = !isDeviceOwner(this) }) { Text("Remove Device Owner") }
-    }
-
-    @Composable
-    private fun ToggleRow(label: String, on: Boolean, set: (Boolean) -> Unit) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = on, onCheckedChange = set)
-            Text(label)
-        }
+        Text(when {
+            !prefs.strict -> "Strict mode: off"
+            guarding -> "Strict mode: on, guarding" + if (!grants.accessibility) " (needs the accessibility service)" else ""
+            else -> "Strict mode: paused"
+        } + if (message.isNotEmpty()) " · $message" else "")
     }
 }

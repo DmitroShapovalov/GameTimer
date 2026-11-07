@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.app.admin.DevicePolicyManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -27,8 +26,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The watcher: polls the usage events for the app in front (about every [POLL_MS] while the screen is on);
- * while blocking is on and a chosen app is in front, it opens the block page (normal mode) or keeps the
- * chosen apps suspended (Device Owner mode). Counts the chosen apps' time in front for the daily budget.
+ * while blocking is on and a chosen app is in front, it opens the block page (unless strict mode's
+ * accessibility service does it first). Counts the chosen apps' time in front for the daily budget.
  */
 class WatchService : Service() {
     private val crashLog = CoroutineExceptionHandler { _, e -> SpikeLog.add(this, "watch loop error: $e") }
@@ -45,7 +44,6 @@ class WatchService : Service() {
     private var lastGrants: Grants? = null
     private var carryMs = 0L
     private var startMs = 0L
-    private var refused: Set<String> = emptySet()   // apps the system won't suspend (logged once)
     private var notShown = 0                         // block pages that didn't appear in a row
     private var lastError: String? = null
 
@@ -152,24 +150,8 @@ class WatchService : Service() {
     }
 
     private fun enforce(games: Set<String>, blocked: Boolean, tick: Long) {
-        if (isDeviceOwner(this)) {
-            // Device Owner: the system keeps the chosen apps from opening at all
-            synchronized(DoLock) {
-                if (prefs.releasing || !isDeviceOwner(this)) return
-                val want = (if (blocked) games else emptySet()) - refused
-                val had = prefs.suspended
-                if (want == had) return
-                val dpm = getSystemService(DevicePolicyManager::class.java)
-                val admin = adminComponent(this)
-                val lift = had - want
-                if (lift.isNotEmpty()) dpm.setPackagesSuspended(admin, lift.toTypedArray(), false)
-                val failed = if (want.isNotEmpty()) dpm.setPackagesSuspended(admin, want.toTypedArray(), true).toSet() else emptySet()
-                prefs.suspended = want - failed
-                refused = refused + failed
-                SpikeLog.add(this, "suspended ${want.size - failed.size} app(s)${if (failed.isNotEmpty()) ", refused by the system: $failed" else ""}")
-            }
-            return
-        }
+        // Strict mode's accessibility service sees the game at once and opens the page itself
+        if (GuardService.connected) return
         // The block page was asked for but didn't show (no overlay grant, the vendor's pop-up switch…): try again
         if (blockedVisit && front != packageName && prefs.pendingBlock() != null && tick - blockAskedAt > 2_000) {
             notShown++
@@ -184,7 +166,7 @@ class WatchService : Service() {
         blockAskedAt = tick
         // The delay counts from the game coming to the front, or from blocking turning on in the middle of play
         // A game that was already open when the service (re)started isn't a fair delay: shown, not counted
-        prefs.setPendingBlock(pkg, maxOf(frontSinceMs, blockingSinceMs), measured = frontSinceMs >= startMs)
+        prefs.setPendingBlock(pkg, maxOf(frontSinceMs, blockingSinceMs), measured = frontSinceMs >= startMs, source = "poll")
         startActivity(Intent(this, BlockActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra(BlockActivity.EXTRA_PACKAGE, pkg))
