@@ -22,6 +22,7 @@
 | v1.7.0 | Phase A: encrypted protocol v2 (Noise) and the native Android parent app (signed APK in the release): QR pairing with a typed code, live timer, settings, schedule, history, parents and roles, re-auth before admin actions, discovery after an IP change (mDNS, known networks only) |
 | v1.7.1 | Timer controls on phone and PC: lift restrictions (optionally the schedule for today), end now, end at a time, − / + with a chosen step; history of lifts |
 | v1.7.2 | Phone notifications while the app is closed (home network): time's up, time almost up, suspicious events, others' actions — each switchable; missed events caught up on reconnect; history records which phone did what |
+| v1.9.0 | (includes the 1.8.0 release candidates) Control from anywhere through the relay and push notifications away from home (Phase B); parent app UI redesign; Windows app redesign (navigation, 5-minute parent lock, Status ring, schedule week view, history by day, overlay preview, tray time left, Windows notifications only for the red zone and parent changes); old phone web page and v1 API removed; "Ask for more time" (protocol minor 3) |
 
 ---
 
@@ -72,7 +73,7 @@ peer-to-peer WebRTC (needs a TURN relay anyway), UnifiedPush (too complex to set
 | B3 | **PC side**: `RelayClient` + `RelayFrameTransport` into `AgentHost`; admission limits per token; "Control from anywhere" setting (Windows Hello), `remoteAccess` in settings | `gt-testhub` controls the real PC through the test relay | ✓ (PR #35) |
 | B4 | **Phone side**: relay connector in `shared` (LAN first, relay after ~2 s or off Wi-Fi), "via internet" status in the app | CI interop test runs Kotlin ↔ C# through a real relay process; the owner's phone controls the PC over mobile data | ✓ (PR #36) |
 | B5 | **Notifications away from home** via FCM: wake-up frame, relay sends the push, the phone connects and catches up history | "Time's up" arrives within a minute on mobile data | ✓ (PR #37, checked by the owner in v1.8.0-rc1; the ongoing notification goes away once push covers all PCs, PR #38) |
-| B6 | **Acceptance + release**: privacy note (`docs/PRIVACY.md`), README, production relay, real-device checklist | v1.8.0 tagged | in review |
+| B6 | **Acceptance + release**: privacy note (`docs/PRIVACY.md`), README, production relay, real-device checklist | v1.8.0 tagged | ✓ (PR #45; shipped in v1.9.0, 1.8.0 stayed at rc2) |
 
 Also in v1.8.0, after the owner tested rc1:
 - **Parent app UX** (PR #39–#43), from a study of Family Link, Microsoft Family Safety, Apple Screen Time, Qustodio and
@@ -241,8 +242,8 @@ Owner's decisions (2026-11-01):
 | W4 | Overlay page: live preview, colour swatches, alert chips and sounds | ✓ (PR #49) |
 | W5 | History and Schedule as on the phone: week bars + a day editor (copy to weekdays/weekend/every day); history by day with icons, colours and filters | ✓ (PR #50) |
 | W6 | Windows notifications (red zone, a parent changed the limits; quiet in full screen) and time left in the tray | ✓ (PR #51) |
-| W7 | Remove the old phone web page and the v1 API (QR without the v1 code; docs) | in review |
-| R1 | "Ask for more time": child on the PC → parent on the phone (+15 / +30 / No); protocol minor 3 (`state.request`, `timer.answerRequest`) | in review |
+| W7 | Remove the old phone web page and the v1 API (QR without the v1 code; docs) | ✓ (PR #52) |
+| R1 | "Ask for more time": child on the PC → parent on the phone (+15 / +30 / No); protocol minor 3 (`state.request`, `timer.answerRequest`) | ✓ (PR #53) |
 
 ## Backlog / known gaps
 
