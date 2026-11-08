@@ -229,7 +229,8 @@ supports and the hub adapts.
 `timer.stop` with `skipScheduleToday`, and the schedule status `skippedToday`. A hub shows those
 controls only when `hello.minor` ≥ 1. `2` (agent v1.8.0): `timer.setEnd` with `inSeconds`; a hub
 sends it only when `hello.minor` ≥ 2 and falls back to `hours` + `minutes` otherwise. `3` (agent v1.9):
-`state.request` and `timer.answerRequest` (the child asks for more time on the PC, §7.1).
+`state.request` and `timer.answerRequest` (the child asks for more time on the PC, §7.1). `4` (the phone
+agent, Phase C): `timer.state` `paused` and the `apps` capability (§7.4); the Windows agent stays at 3.
 
 **Capabilities** — the hub renders a control only if the agent lists the capability. Names are
 stable; a breaking change gets a new name (`timer2`).
@@ -241,8 +242,8 @@ stable; a breaking change gets a new name (`timer2`).
 | `settings` | expiry action, warning thresholds, sound alerts, colors, language | ✓ |
 | `history` | session event log | ✓ |
 | `peers` | list paired parents, roles, revoke | ✓ |
-| `apps.usage` | per-app usage report | — (future: Android) |
-| `apps.block` | block / allow specific apps | — (future: Android, iOS) |
+| `apps` | (minor 4) the device's apps and which ones are limited ("games", §7.4) | — (phone agent) |
+| `apps.usage` | per-app usage report | — (future) |
 | `lock` | lock the device now | — (future) |
 
 An agent with relay support (Phase B) also puts `remoteAccess` (bool, top level) in `hello`: whether
@@ -321,6 +322,10 @@ Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `in
 `internal` (the agent failed unexpectedly; the request may be retried with the same `rid`), and
 (minor 1) `schedule_limit`, (minor 3) `no_request`.
 
+`apps.get` (`apps`, no `rid`, any role) → `apps`: `{ "installed": [{ "id", "name", "limited" }], "rev" }`;
+`apps.put` (`apps`, `rid`, any role): `limited` (array of `id`s, ≤ 500), optional `ifRev` → `apps`, or
+`conflict` with the current `value`. See §7.4.
+
 ### 7.3 Events (agent → hub)
 
 | Type | When | Body |
@@ -332,6 +337,42 @@ Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `in
 | `ev.schedule` | schedule changed | `schedule` |
 | `ev.history` | a history event was recorded | `event` |
 | `ev.peers` | a parent was added, revoked or changed role | `peers[]`, `change` (`added` / `revoked` / `role`), `peer` (hub id) |
+| `ev.apps` | (minor 4) the limited apps changed | `apps` |
+
+### 7.4 The phone agent (Phase C, minor 4)
+
+The child's phone (`platform` `android`) announces `timer`, `schedule`, `history` and `apps` (no
+`settings`) and uses the same shapes, with these rules (owner's decisions for C3):
+
+- **Game time.** The timer counts down only while one of the **limited apps** is in front: `timer.state`
+  is `running` then, and `paused` while no limited app is open (time left, nothing counting; a hub shows
+  the time left without counting it down). Only the limited apps are blocked; everything else always works.
+  `usedSecondsToday` is game time.
+- **Time's up** (`expired`): the limited apps stay blocked until a parent adds time (`timer.extend` with
+  minutes > 0 — accepted with no timer while the apps are blocked — or a "yes"), starts a new timer or stops
+  it (`timer.stop` = no limit; with the schedule on, the day's allowance applies again).
+- **Schedule.** As on the PC, per weekday: `limitMinutes` of game time inside the allowed hours. With the
+  schedule on and no timer, what is left of the day's allowance becomes the timer by itself (the PC's auto
+  start), also when the allowed hours begin. With the schedule on every local day starts afresh: no timer or
+  time's up carries over midnight. Within one boot the days go by the phone's monotonic clock
+  alone: a new day starts when the counted day's midnight is reached and the next one 24 hours later, whatever
+  the phone's date and time say, and the schedule takes the weekday and the time of day from that day and that
+  clock — moving the date, the time or the time zone gains nothing (daylight saving time and travelling shift
+  the hours by as much until the next reboot). This holds across app restarts; a reboot takes the phone's date
+  and time as they are (until C4 reports clock changes to the parents). Outside the allowed hours or on a day without games the limited apps are blocked
+  (`outsideWindow` / `dayDisabled`). `timer.start` is capped by what is left today (`schedule_limit` when
+  nothing is), except during a lift (`skippedToday`).
+- **More time.** `timer.extend` with minutes > 0, a "yes" to the child's request (`timer.answerRequest`) and
+  a later `timer.setEnd` are a parent's own decision: they are granted even past today's schedule — they raise
+  today's limit by the same amount. Given while games aren't allowed at this hour, the granted minutes (only
+  those) can be played now; when the allowed hours begin, today's allowance takes the rest over. The child asks on the block page (`state.request` as in minor 3, also when the time is up: hubs show
+  `request` whenever it is set); a request goes away when the apps are no longer blocked, and the child can
+  ask again after 15 minutes without an answer (5 minutes after a "no").
+- `timer.start` takes `mode` `interval` only (`invalid_time` otherwise); `timer.setEnd` takes `inSeconds`
+  only (= that much game time left).
+- `apps.put` keeps only apps the phone lists in `apps.get` (a home screen, the phone app and the agent itself
+  are never listed: they can't be limited).
+- History types as on the PC; the child's own request has `source` `pc` (= on the device itself).
 
 ## 8. Roles and pairing
 

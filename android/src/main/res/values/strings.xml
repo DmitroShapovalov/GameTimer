@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GameTimer</string>
-    <string name="home_title">Your PCs</string>
+    <string name="home_title">Your devices</string>
     <string name="home_empty">No devices yet. On the PC open Settings → Connect phone; on the child\'s phone open GameTimer Child → Connect a parent\'s phone. Then scan the QR code.</string>
     <string name="add_pc">Add device</string>
     <string name="status_online">Online</string>
@@ -11,7 +11,7 @@
     <string name="status_offline">Offline</string>
     <string name="status_refused">This phone isn\'t paired with the PC any more</string>
     <string name="status_wrong_device">Another device answered — not your PC</string>
-    <string name="status_revoked">Removed on the PC</string>
+    <string name="status_revoked">Removed on the device</string>
     <string name="remove">Remove</string>
     <string name="remove_confirm">Remove %1$s from this phone?</string>
     <string name="cancel">Cancel</string>
@@ -38,8 +38,8 @@
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="minutes">Minutes</string>
-    <string name="request_refused">The PC refused: %1$s</string>
-    <string name="request_gave_up">No answer from the PC</string>
+    <string name="request_refused">The device refused: %1$s</string>
+    <string name="request_gave_up">No answer from the device</string>
     <string name="identity_unavailable">This phone\'s secure storage isn\'t available right now. Restart the app; if it keeps happening, restart the phone.</string>
     <string name="identity_reset">This phone\'s key was reset by Android (for example after the screen lock was removed). Pair your PCs again.</string>
     <string name="err_not_running">no timer is running</string>
@@ -72,8 +72,8 @@
     <string name="sched_limit">Schedule: today\'s time is used up</string>
     <string name="save">Save</string>
     <string name="saved">Saved</string>
-    <string name="conflict">Changed on the PC or by another parent meanwhile — the current values are loaded. Check and save again.</string>
-    <string name="offline_hint">The PC is offline — changes can\'t be saved now.</string>
+    <string name="conflict">Changed on the device or by another parent meanwhile — the current values are loaded. Check and save again.</string>
+    <string name="offline_hint">The device is offline — changes can\'t be saved now.</string>
     <string name="set_action">When time is up</string>
     <string name="set_language">PC language</string>
     <string name="set_thresholds">Warning colours (minutes left)</string>
@@ -91,7 +91,7 @@
     <string name="no_alerts">No alerts</string>
     <string name="err_settings">Check the values: thresholds 1–1440, colours as #RRGGBB, alerts 1–1440 and unique.</string>
     <string name="sched_enable">Weekly schedule</string>
-    <string name="sched_hint">Tap a day to change it. The PC gets the changes when you save.</string>
+    <string name="sched_hint">Tap a day to change it. The device gets the changes when you save.</string>
     <string name="hours_short">h</string>
     <string name="sched_off">No gaming</string>
     <string name="sched_no_limit">No limit</string>
@@ -109,7 +109,7 @@
     <string name="sched_check">Check</string>
     <string name="sched_bad_window">The end must be later than the start (no overnight hours).</string>
     <string name="sched_limit_over_window">The limit is longer than the allowed hours: the hours end gaming first.</string>
-    <string name="err_schedule">The PC did not accept the schedule: check the hours and the limits.</string>
+    <string name="err_schedule">The device did not accept the schedule: check the hours and the limits.</string>
     <string name="history_empty">No events yet</string>
     <string name="load_more">Load more</string>
     <string name="hist_all">All</string>
@@ -128,7 +128,7 @@
     <string name="ev_closed">The app was closed while running</string>
     <string name="ev_tampered">Tampering detected</string>
     <string name="ev_updated">Closed for an update</string>
-    <string name="who_pc">On the PC</string>
+    <string name="who_pc">On the device</string>
     <string name="who_system">System</string>
     <string name="this_phone">this phone</string>
     <string name="peer_sub">%1$s · last seen %2$s</string>
@@ -234,4 +234,11 @@
     <string name="ev_time_requested">Asked for more time</string>
     <string name="ev_time_request_declined">Said no to more time</string>
     <string name="no_controls">This device can\'t be controlled from here yet: screen-time limits for phones come in the next version. It is connected, and you can manage its parents under More.</string>
+    <string name="st_paused">Paused (no game open)</string>
+    <string name="tab_games">Games</string>
+    <string name="loading">Loading…</string>
+    <string name="games_hint">Tick the apps that count as games: the timer and the schedule count and limit only these. Everything else (calls, messages, school apps) always works.</string>
+    <string name="games_count">Limited: %1$d</string>
+    <string name="games_search">Search</string>
+    <string name="games_saved">Saved</string>
 </resources>

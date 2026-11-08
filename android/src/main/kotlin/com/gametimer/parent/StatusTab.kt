@@ -97,8 +97,15 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
     val timer = state?.json?.get("timer") as? JsonObject
     val schedule = state?.json?.get("schedule") as? JsonObject
     val interruption = state?.json?.str("interruption")
-    val running = state?.isRunning == true
+    // A phone (protocol minor 4) counts game time only while a game is open: "paused" has time left too
+    val running = state?.isActive == true
+    val paused = state?.isPaused == true
     val expired = !running && timer?.str("state") == "expired"
+    // A phone's timer is game time: "end at" a time of day doesn't apply there
+    var phone by remember(agent.agentId) { mutableStateOf(agent.platform == "android") }
+    LaunchedEffect(status) {
+        (status as? LinkStatus.Online)?.let { o -> phone = ((o.hello["agent"] as? JsonObject)?.str("platform") == "android") }
+    }
     // Lift / end now / end at: agents with protocol minor ≥ 1 (v1.7.1); older ones keep Stop and ±
     val controls = (status as? LinkStatus.Online)?.let { AgentApi.supportsTimerControls(it.hello) } == true
     val scheduleStatus = schedule?.str("status")
@@ -160,7 +167,8 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         // The child asked for more time on the PC (protocol minor 3): answer right here
         val request = state?.json?.get("request") as? JsonObject
         val requestId = request?.str("id")
-        if (running && requestId != null) {
+        // (a phone also asks after its time is up, so not only while a timer runs)
+        if (requestId != null) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.req_title, shortTime(request.str("time"))), style = MaterialTheme.typography.titleMedium)
@@ -185,7 +193,7 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                     Text(if (running) formatSeconds(seconds) else "00:00", fontSize = 44.sp, fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold, color = if (running) MaterialTheme.colorScheme.onSurface else colors.timeUp)
                     // The end on the phone's own clock (now + time left): the PC's clock and zone may differ
-                    if (running) phoneEnd(seconds).let {
+                    if (running && !paused) phoneEnd(seconds).let {
                         Text(stringResource(R.string.ends_short, it), style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -194,11 +202,12 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         }
         StateChip(
             when {
+                paused -> stringResource(R.string.st_paused)
                 running -> stringResource(R.string.st_running)
                 expired -> stringResource(R.string.state_expired)
                 else -> stringResource(R.string.timer_idle)
             },
-            when { running -> colors.good; expired -> colors.timeUp; else -> colors.neutral },
+            when { paused -> colors.neutral; running -> colors.good; expired -> colors.timeUp; else -> colors.neutral },
         )
         if (running) timer?.str("action")?.let {
             Text(stringResource(R.string.then_action, actionText(it)), style = MaterialTheme.typography.bodySmall,
@@ -231,7 +240,7 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     if (controls) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.end_at_button)) }, enabled = online,
+                        if (!phone) DropdownMenuItem(text = { Text(stringResource(R.string.end_at_button)) }, enabled = online,
                             onClick = { menu = false; pickEnd = true })
                         DropdownMenuItem(text = { Text(stringResource(R.string.end_now), color = MaterialTheme.colorScheme.error) }, enabled = online,
                             onClick = { menu = false; confirm = endMessage to { api.endNow() } })
@@ -242,7 +251,19 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                 }
             }
         } else {
-            StartForm(context, online) { interval, h, m -> run { if (interval) api.startInterval(h, m) else api.startUntil(h, m) } }
+            // A phone takes + when its time is up or games aren't allowed now: extra game time past the schedule
+            if (phone && (expired || scheduleStatus in setOf("limitReached", "outsideWindow", "dayDisabled"))) {
+                Button(onClick = { run { api.extend(step) } }, enabled = online, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.plus_n, step))
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
+                    STEPS.forEach { n ->
+                        FilterChip(selected = step == n, onClick = { step = n; prefs.edit().putInt("step", n).apply() },
+                            label = { Text(n.toString()) })
+                    }
+                }
+            }
+            StartForm(context, online, intervalOnly = phone) { interval, h, m -> run { if (interval) api.startInterval(h, m) else api.startUntil(h, m) } }
             // No timer, but the schedule limits today (or has locked the PC): set it aside for today
             if (controls && scheduleRestricts) {
                 OutlinedButton(onClick = askLift, enabled = online, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.lift_today)) }
@@ -349,9 +370,11 @@ private fun scheduleLine(schedule: JsonObject?): String? = when (schedule?.str("
 
 /** For / until, presets and a − / + stepper (no typing); the last values per mode are remembered on this phone. */
 @Composable
-private fun StartForm(context: Context, online: Boolean, onStart: (Boolean, Int, Int) -> Unit) {
+private fun StartForm(context: Context, online: Boolean, intervalOnly: Boolean = false, onStart: (Boolean, Int, Int) -> Unit) {
     val prefs = remember { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
     var interval by rememberSaveable { mutableStateOf(prefs.getBoolean("interval", true)) }
+    // A phone counts game time: "until a time of day" doesn't apply
+    if (intervalOnly && !interval) interval = true
     // Interval: minutes 1..23:59; until: minutes since midnight on the PC
     fun last(isInterval: Boolean) = if (isInterval) (prefs.getInt("ih", 1) * 60 + prefs.getInt("im", 0)).coerceIn(1, 1439)
         else (prefs.getInt("ah", 20) * 60 + prefs.getInt("am", 0)).coerceIn(0, 1439)
@@ -360,7 +383,7 @@ private fun StartForm(context: Context, online: Boolean, onStart: (Boolean, Int,
     val h = stringResource(R.string.hours_short)
     val min = stringResource(R.string.min_short)
 
-    SingleChoiceSegmentedButtonRow {
+    if (!intervalOnly) SingleChoiceSegmentedButtonRow {
         listOf(true to R.string.mode_interval, false to R.string.mode_until).forEachIndexed { i, (isInterval, label) ->
             SegmentedButton(selected = interval == isInterval, shape = SegmentedButtonDefaults.itemShape(i, 2), onClick = {
                 interval = isInterval

@@ -83,6 +83,19 @@ public class AgentApi(private val link: AgentLink) {
         if (s.week.size >= 7) s.copy(week = s.week.take(7))
         else s.copy(week = s.week + List(7 - s.week.size) { DaySchedule(true, 0, 0, 1440) })
 
+    /** The phone's apps and which of them are limited (capability `apps`, minor 4). */
+    public suspend fun apps(): ApiResult<AgentApps> = read("apps.get", null) { it["apps"]!!.decodeAs() }
+
+    /** Sets the limited apps (the games); a change made meanwhile by another parent is a [ApiResult.Conflict]. */
+    public suspend fun saveApps(limited: Set<String>, rev: Long): ApiResult<AgentApps> = write(
+        "apps.put",
+        buildJsonObject {
+            put("limited", JsonArray(limited.sorted().map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            put("ifRev", rev)
+        },
+        "apps",
+    ) { it.decodeAs() }
+
     public suspend fun history(limit: Int = 50, before: String? = null): ApiResult<HistoryPage> =
         read("history.get", buildJsonObject { put("limit", limit); if (before != null) put("before", before) }) { r ->
             HistoryPage(

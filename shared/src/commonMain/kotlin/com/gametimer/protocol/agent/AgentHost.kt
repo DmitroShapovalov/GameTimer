@@ -53,8 +53,11 @@ public class AgentHost(
 ) {
     public companion object {
         public const val PROTOCOL_MAJOR: Int = 2
-        /** 1: timer.end, timer.setEnd, …; 2: timer.setEnd inSeconds; 3: state.request, timer.answerRequest (as the C# agent). */
-        public const val PROTOCOL_MINOR: Int = 3
+        /**
+         * 1: timer.end, timer.setEnd, …; 2: timer.setEnd inSeconds; 3: state.request, timer.answerRequest (as the C#
+         * agent); 4: timer state `paused` and the `apps` capability (the phone agent, §6 / §7).
+         */
+        public const val PROTOCOL_MINOR: Int = 4
 
         // §3 limits
         public val HANDSHAKE_TIMEOUT: Duration = 5.seconds

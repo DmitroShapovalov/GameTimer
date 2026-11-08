@@ -32,6 +32,8 @@ private val COMMANDS: Map<String, Command> = mapOf(
     "schedule.get" to Command("schedule", false, false),
     "schedule.put" to Command("schedule", true, false),
     "history.get" to Command("history", false, false),
+    "apps.get" to Command("apps", false, false), // minor 4: the phone's apps and the limited ones
+    "apps.put" to Command("apps", true, false),
     "peers.list" to Command("peers", false, true),
     "peers.revoke" to Command("peers", true, true),
     "peers.setRole" to Command("peers", true, true),
