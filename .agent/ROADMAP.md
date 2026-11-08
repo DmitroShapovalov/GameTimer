@@ -270,13 +270,19 @@ Owner's decisions for C3 (2026-11-08):
 - **Only the chosen games are blocked**: the parent picks them from the phone's apps (Games, in the parent app).
 - **Strict mode in C3**, as an option the parent turns on on the phone behind the parent PIN.
 
+Owner's decisions for C4 (2026-11-08):
+- **Push + in the app**: tamper events notify the parents' phones (also away, through push) and show on Status and in History.
+- **The relay's time checks the phone's clock**: a clock found off is reported, and the rules go by the right time.
+- **Lost permissions are only reported** (blocking can't work without them); limits work again once they're back.
+- **Offline: no threshold** — the parent app shows the phone offline, no separate warning.
+
 | # | Step | Status |
 |---|---|---|
 | C0 | Spike on the test phone: usage access + block page, then strict mode; delay (poll vs accessibility), what a child can switch off, battery | in review (first build PR #55) |
 | C1 | Agent core in `shared` (Noise responder, pairing, peers, requests, events); Kotlin ↔ Kotlin and C# ↔ Kotlin interop | ✓ (PR #57) |
 | C2 | Android agent app: foreground service, relay + LAN, pairing QR on the child's phone | ✓ (PR #58; owner's device check pending) |
-| C3 | Enforcement: timer, schedule, game list, block page, strict mode, ask for more time | in review ✎ (shared/play: the phone's rules; child: watcher, block page, strict mode; parent app: Games, paused) |
-| C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | ☐ |
+| C3 | Enforcement: timer, schedule, game list, block page, strict mode, ask for more time | ✓ (PR #59; owner's device check pending) |
+| C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | in review ✎ (protocol minor 5: `state.device`, tamper events; relay time checks the clock) |
 | C5 | Acceptance + release (v2.0) | ☐ |
 
 ## Backlog / known gaps

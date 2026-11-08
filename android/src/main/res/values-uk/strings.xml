@@ -241,4 +241,18 @@
     <string name="games_count">Обмежено: %1$d</string>
     <string name="games_search">Пошук</string>
     <string name="games_saved">Збережено</string>
+    <!-- C4: the phone's tamper events -->
+    <string name="ev_protection_off">Захист вимкнено: %1$s</string>
+    <string name="ev_protection_back">Захист знову ввімкнено: %1$s</string>
+    <string name="ev_clock_changed">Годинник переведено на %1$d хв</string>
+    <string name="ev_zone_changed">Змінено часовий пояс</string>
+    <string name="ev_clock_wrong">Годинник збито на %1$d хв (використовується правильний час)</string>
+    <string name="ev_rebooted">Телефон перезавантажено</string>
+    <string name="ev_force_stopped">GameTimer Child зупинили примусово</string>
+    <string name="perm_usage">доступ до історії використання</string>
+    <string name="perm_overlay">показ поверх інших застосунків</string>
+    <string name="perm_accessibility">спеціальні можливості (суворий режим)</string>
+    <string name="perm_admin">адміністратор пристрою (суворий режим)</string>
+    <string name="device_missing">Захист на телефоні вимкнено: %1$s. Доки його не ввімкнуть знову, обмеження не працюють.</string>
+    <string name="interruption_phone">GameTimer Child на телефоні зупинили примусово (%1$s). Відтоді як його відкрили, він знову працює.</string>
 </resources>

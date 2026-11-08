@@ -134,4 +134,9 @@ class GuardService : AccessibilityService() {
 class AdminReceiver : DeviceAdminReceiver() {
     override fun onDisableRequested(context: Context, intent: Intent): CharSequence =
         context.getString(R.string.admin_disable_warning)
+
+    // Reported to the parents at once (C4), not at the next check
+    override fun onDisabled(context: Context, intent: Intent) {
+        AgentRuntime.watcher?.let { w -> Thread { w.checkProtection(force = true) }.start() }
+    }
 }

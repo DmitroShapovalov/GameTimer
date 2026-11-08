@@ -48,12 +48,19 @@ class PlayBackendTests {
 
         fun advance(ms: Long) { epoch += ms; elapsed += ms }
 
-        override fun now(): LocalNow {
-            val days = epoch.floorDiv(86_400_000L)
-            val sod = (epoch.mod(86_400_000L) / 1000).toInt()
-            val weekday = ((days + 4) % 7).toInt() // 1970-01-01 was a Thursday
-            val date = com.gametimer.protocol.identity.DiscoveryTag.utcDate(epoch)
-            return LocalNow(epoch, date, sod, weekday, date + "T00:00:00Z")
+        var zone = 0L // milliseconds east of UTC
+        var zoneName = "Europe/Test"
+        override fun zoneId(): String = zoneName
+
+        override fun now(): LocalNow = at(epoch)
+
+        override fun at(epochMillis: Long): LocalNow {
+            val local = epochMillis + zone
+            val days = local.floorDiv(86_400_000L)
+            val sod = (local.mod(86_400_000L) / 1000).toInt()
+            val weekday = ((days + 4).mod(7L)).toInt() // 1970-01-01 was a Thursday
+            val date = com.gametimer.protocol.identity.DiscoveryTag.utcDate(local)
+            return LocalNow(epochMillis, date, sod, weekday, date + "T00:00:00Z")
         }
 
         override fun elapsedMillis(): Long = elapsed
@@ -106,9 +113,9 @@ class PlayBackendTests {
         h.sendJson(AgentFixture.pairHello())
         h.receiveJson()
         val hub = TestHub.handshake(rig.host, key, pairing = false, scope = backgroundScope).first
-        hub.sendJson(buildJsonObject { put("t", "ready"); put("protocol", 2); put("minor", 4) })
+        hub.sendJson(buildJsonObject { put("t", "ready"); put("protocol", 2); put("minor", 5) })
         val hello = hub.receiveJson()
-        assertEquals(4, hello["minor"]!!.jsonPrimitive.int)
+        assertEquals(5, hello["minor"]!!.jsonPrimitive.int)
         assertEquals(listOf("timer", "schedule", "history", "apps", "peers", "push"), (hello["capabilities"] as JsonArray).map { it.jsonPrimitive.content })
         assertEquals("stopped", hello.obj("state").obj("timer").s("state"))
         rig.host.close()
@@ -508,6 +515,216 @@ class PlayBackendTests {
         val second = PlayBackend(AgentInfo("x", "android", "t"), phone)
         second.tick("com.game.one")
         assertEquals(BlockReason.TimeUp, second.blockReason("com.game.one"))
+    }
+
+    private suspend fun TestHub.lastHistory(n: Int = 5) =
+        (request("history.get", buildJsonObject { put("limit", n) })["events"] as JsonArray).map { it.jsonObject }
+
+    @Test
+    fun lostProtectionIsReportedAndListedUntilItIsBack() = runTest {
+        val rig = Rig(this)
+        val p = rig.parent()
+        // Never granted: nothing is expected yet
+        rig.backend.protection(emptySet(), strict = false)
+        assertEquals(0, (p.state().obj("device")["missing"] as JsonArray).size)
+        rig.backend.protection(setOf(Protection.USAGE, Protection.OVERLAY), strict = false)
+        rig.backend.protection(setOf(Protection.USAGE), strict = false) // the child switched one off
+        var st = p.state()
+        assertEquals(listOf("overlay"), (st.obj("device")["missing"] as JsonArray).map { it.jsonPrimitive.content })
+        val lost = p.lastHistory(1).single()
+        assertEquals("tampered", lost.s("type")); assertEquals("overlay", lost.s("action")); assertEquals("system", lost.s("source"))
+        // Strict mode on: its permissions are expected too
+        rig.backend.protection(setOf(Protection.USAGE, Protection.OVERLAY), strict = true)
+        st = p.state()
+        assertEquals(listOf("accessibility", "admin"), (st.obj("device")["missing"] as JsonArray).map { it.jsonPrimitive.content })
+        assertEquals("true", st.obj("device").s("strict"))
+        rig.backend.protection(setOf(Protection.USAGE, Protection.OVERLAY, Protection.ACCESSIBILITY, Protection.ADMIN), strict = true)
+        assertEquals(0, (p.state().obj("device")["missing"] as JsonArray).size)
+        val types = p.lastHistory(5).map { it.s("type") + "/" + it.s("action") }
+        assertTrue("protectionRestored/overlay" in types && "protectionRestored/admin" in types, types.toString())
+        rig.host.close()
+    }
+
+    @Test
+    fun aClockOrTimeZoneChangeIsReported() = runTest {
+        val rig = Rig(this)
+        val p = rig.parent()
+        rig.play(null, 2)
+        rig.phone.epoch += 3 * 3600_000L // the clock moved 3 hours on
+        rig.play(null, 1)
+        val e = p.lastHistory(1).single()
+        assertEquals("clockChanged", e.s("action")); assertEquals(180, e["minutes"]!!.jsonPrimitive.int)
+        rig.phone.zone = 3600_000L // daylight saving time: the same zone, no news
+        rig.play(null, 1)
+        assertEquals("clockChanged", p.lastHistory(1).single().s("action"))
+        rig.phone.zoneName = "Pacific/Kiritimati"
+        rig.play(null, 1)
+        assertEquals("timeZoneChanged", p.lastHistory(1).single().s("action"))
+        rig.play(null, 5)
+        assertEquals("timeZoneChanged", p.lastHistory(1).single().s("action")) // nothing new
+        rig.host.close()
+    }
+
+    @Test
+    fun theRelaysTimeUndoesAMovedDateAfterAReboot() = runTest {
+        val phone = FakePhone().apply { boot = 1 }
+        val first = Rig(this, phone)
+        val p = first.parent()
+        p.limit("com.game.one", rev = 1)
+        p.schedule(week(30))
+        first.play("com.game.one", 30 * 60 + 1)
+        first.backend.saveNow()
+        first.host.close()
+        val real = phone.epoch
+        // The child moves the date on and restarts the phone: a fresh day by the clock
+        phone.epoch += 86_400_000L; phone.elapsed = 0; phone.boot = 2
+        phone.stored = phone.saved
+        val second = Rig(this, phone)
+        second.play("com.game.one", 1)
+        assertNull(second.backend.blockReason("com.game.one"))
+        // Online: the relay's time puts it right, today's time is used again, and the parents hear of it
+        second.backend.trustedTime(real + 1000)
+        second.play("com.game.one", 2)
+        assertEquals(BlockReason.TimeUp, second.backend.blockReason("com.game.one"))
+        val h = second.backend.let { phone.saved!!.history.takeLast(4).map { e -> e.type + "/" + e.action } }
+        assertTrue("rebooted/null" in h && "tampered/clockWrong" in h, h.toString())
+        // Reported once: the next connect with the same error says nothing new
+        val count = phone.saved!!.history.count { it.action == "clockWrong" }
+        second.backend.trustedTime(real + 5000)
+        second.backend.saveNow()
+        assertEquals(count, phone.saved!!.history.count { it.action == "clockWrong" })
+        second.host.close()
+    }
+
+    @Test
+    fun aZoneChangeWithTheRelaysTimeGainsNothingWithinABoot() = runTest {
+        val rig = Rig(this)
+        val p = rig.parent()
+        p.limit("com.game.one", rev = 1)
+        p.schedule(week(30, start = 8 * 60, end = 20 * 60))
+        rig.play("com.game.one", 30 * 60 + 1)
+        rig.backend.trustedTime(rig.phone.epoch) // online: the day is placed by the right time
+        // UTC+14 and the clock a few minutes off, then the relay reconnects
+        rig.phone.zone = 14 * 3600_000L; rig.phone.zoneName = "Pacific/Kiritimati"
+        rig.phone.epoch += 3 * 60_000L
+        rig.play("com.game.one", 2)
+        rig.backend.trustedTime(rig.phone.epoch - 3 * 60_000L)
+        rig.play("com.game.one", 2)
+        assertEquals(BlockReason.TimeUp, rig.backend.blockReason("com.game.one"))
+        assertEquals("limitReached", p.state().obj("schedule").s("status"))
+        rig.host.close()
+    }
+
+    @Test
+    fun aRebootIntoAnotherZoneKeepsTheDayAndIsReported() = runTest {
+        val phone = FakePhone().apply { boot = 1 }
+        val first = Rig(this, phone)
+        val p = first.parent()
+        p.limit("com.game.one", rev = 1)
+        p.schedule(week(30))
+        first.play("com.game.one", 30 * 60 + 1)
+        first.backend.protection(setOf(Protection.USAGE, Protection.OVERLAY), strict = false)
+        first.backend.protection(setOf(Protection.USAGE), strict = false)
+        first.backend.saveNow()
+        first.host.close()
+        // Safe mode: UTC+14, then a normal start (an unseen date by the new zone)
+        phone.zone = 14 * 3600_000L; phone.zoneName = "Pacific/Kiritimati"; phone.elapsed = 0; phone.boot = 2
+        phone.stored = phone.saved
+        val second = Rig(this, phone)
+        val p2 = second.parent("P2")
+        second.play("com.game.one", 2)
+        assertEquals(BlockReason.TimeUp, second.backend.blockReason("com.game.one"))
+        val types = p2.lastHistory(6).map { it.s("type") + "/" + it.s("action") }
+        assertTrue("rebooted/null" in types && "tampered/timeZoneChanged" in types, types.toString())
+        // A permission still off after the restart isn't reported again
+        second.backend.protection(setOf(Protection.USAGE), strict = false)
+        assertEquals(1, phone.saved!!.history.count { it.action == "overlay" })
+        second.host.close()
+    }
+
+    @Test
+    fun aClockSetBackWhileOffIsReported() = runTest {
+        val phone = FakePhone().apply { boot = 1 }
+        val first = Rig(this, phone)
+        first.parent()
+        first.play(null, 20)
+        first.backend.saveNow()
+        first.host.close()
+        phone.epoch -= 3600_000L; phone.elapsed = 0; phone.boot = 2
+        phone.stored = phone.saved
+        val second = Rig(this, phone)
+        val p2 = second.parent("P2")
+        second.play(null, 1)
+        assertTrue(p2.lastHistory(3).any { it.s("action") == "clockChanged" })
+        second.host.close()
+    }
+
+    @Test
+    fun aParentsClockPutsTheDayRightWhenTheRelayIsBlocked() = runTest {
+        val phone = FakePhone().apply { boot = 1 }
+        val first = Rig(this, phone)
+        val p = first.parent()
+        p.limit("com.game.one", rev = 1)
+        p.schedule(week(30))
+        first.play("com.game.one", 30 * 60 + 1)
+        first.backend.saveNow()
+        first.host.close()
+        val real = phone.epoch
+        phone.epoch += 86_400_000L; phone.elapsed = 0; phone.boot = 2
+        phone.stored = phone.saved
+        val second = Rig(this, phone)
+        second.play("com.game.one", 1)
+        assertNull(second.backend.blockReason("com.game.one")) // a fresh day by the clock
+        // A parent connects at home (relay blocked): its ready carries its clock
+        second.backend.trustedTime(real + 1000, fromParent = true)
+        second.play("com.game.one", 2)
+        assertEquals(BlockReason.TimeUp, second.backend.blockReason("com.game.one"))
+        // A parent's clock a few minutes off is no news
+        val count = phone.saved!!.history.size
+        second.backend.trustedTime(phone.epoch - 86_400_000L + 5 * 60_000L, fromParent = true)
+        second.backend.saveNow()
+        assertEquals(count, phone.saved!!.history.size)
+        second.host.close()
+    }
+
+    @Test
+    fun aBrokenClockIsReportedNotFollowedAndTheRelayOverrulesAParent() = runTest {
+        val rig = Rig(this)
+        val p = rig.parent()
+        p.limit("com.game.one", rev = 1)
+        p.schedule(week(30))
+        rig.play("com.game.one", 30 * 60 + 1)
+        val real = rig.phone.epoch
+        rig.backend.trustedTime(4_000_000_000_000_000L, fromParent = true) // returns at once, follows nothing
+        rig.play("com.game.one", 2)
+        assertEquals(BlockReason.TimeUp, rig.backend.blockReason("com.game.one"))
+        // A parent's phone a day ahead places the day wrongly; the relay's time puts it right again
+        rig.backend.trustedTime(real + 86_400_000L, fromParent = true)
+        rig.play("com.game.one", 1)
+        assertNull(rig.backend.blockReason("com.game.one"))
+        rig.backend.trustedTime(rig.phone.epoch)
+        rig.play("com.game.one", 1)
+        assertEquals(BlockReason.TimeUp, rig.backend.blockReason("com.game.one"))
+        assertEquals("2026-10-17", shiftDate("2026-10-24", -7))
+        rig.host.close()
+    }
+
+    @Test
+    fun aForceStopIsShownLikeTheClosedPcApp() = runTest {
+        val rig = Rig(this)
+        val p = rig.parent()
+        rig.backend.reportClosed(rig.phone.epoch - 600_000L)
+        assertTrue(p.state()["interruption"] is JsonPrimitive)
+        assertEquals("closed", p.lastHistory(1).single().s("type"))
+        p.request("interruption.ack", null, withRid = true)
+        assertTrue(p.state()["interruption"] is kotlinx.serialization.json.JsonNull)
+        rig.host.close()
+    }
+
+    @Test
+    fun httpDatesParse() {
+        assertEquals(1_794_139_303_000L, com.gametimer.protocol.agent.parseHttpDate("Sun, 08 Nov 2026 12:01:43 GMT"))
+        assertNull(com.gametimer.protocol.agent.parseHttpDate("08 Nov 2026"))
     }
 
     @Test

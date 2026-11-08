@@ -36,6 +36,23 @@ public interface PlayPlatform {
 
     /** The phone's boot count (the same within one boot), or -1 when unknown. */
     public fun bootCount(): Int = -1
+
+    /** The local time (the phone's zone) at [epochMillis]: for a clock found wrong (C4). */
+    public fun at(epochMillis: Long): LocalNow = now()
+
+    /** The phone's time zone id (`Europe/Amsterdam`), or "" when unknown: a change is reported (C4). */
+    public fun zoneId(): String = ""
+}
+
+/** What enforcement needs on the phone (C4 reports it when it goes): names as in `state.device.missing`. */
+public object Protection {
+    public const val USAGE: String = "usage"
+    public const val OVERLAY: String = "overlay"
+    public const val ACCESSIBILITY: String = "accessibility"
+    public const val ADMIN: String = "admin"
+    /** Needed for any limit; the strict-mode ones only while strict mode guards. */
+    internal val BASIC = setOf(USAGE, OVERLAY)
+    internal val STRICT = setOf(ACCESSIBILITY, ADMIN)
 }
 
 /** Why a limited game is blocked right now. */
@@ -74,6 +91,13 @@ public class PlayBackend(
         internal const val REQUEST_PAUSE_AFTER_NO_MS = 5 * 60_000L
         internal const val MAX_LIMITED = 500
         internal const val DAYS_KEPT = 8
+        internal const val CLOCK_SLACK_MS = 2 * 60_000L
+        internal const val PARENT_SLACK_MS = 10 * 60_000L
+        internal const val DAY_MS = 86_400_000L
+        /** Further than this from the counted day, a time is a broken clock: reported, never followed. */
+        internal const val MAX_SHIFT_MS = 30 * DAY_MS
+        internal const val VERIFIED_BY_PARENT = 1
+        internal const val VERIFIED_BY_RELAY = 2
         private val json = Json { encodeDefaults = false; explicitNulls = false }
     }
 
@@ -101,11 +125,41 @@ public class PlayBackend(
     private var declinedAt: Long? = null
     /** On the monotonic clock: when the counted day ends (its local midnight), or null before the first tick. */
     private var midnightAt: Long? = null
+    /** The right time (the relay's, C4) at [trustedAt] on the monotonic clock. */
+    private var trustedEpoch: Long? = null
+    private var trustedAt = 0L
+    private var relayTrusted = false
+    /** The previous tick's clock offset: tiny steps (the monotonic clock's drift) move the base along. */
+    private var lastOffset: Long? = null
+    /** The latest wall clock saved (it is saved again once well ahead). */
+    private var lastWallSaved = 0L
+    /** The phone clock's offset from the monotonic one when last reported or first seen (changes add up). */
+    private var clockOffset: Long? = null
+    /** The checks of what happened while the agent didn't run (C4), done at the first tick. */
+    private var startChecked = false
+    private var rebootedSince = false
+    /** What protection the phone has now (from the app, every few seconds), and whether strict mode guards. */
+    private var present: Set<String>? = null
+    private var strictOn = false
 
     init {
-        // The app restarted within the same boot: the monotonic clock still counts from the same point
         val boot = platform.bootCount()
-        if (boot >= 0 && data.anchorBoot == boot && data.today.isNotEmpty()) midnightAt = data.anchorMidnight
+        if (boot >= 0 && data.anchorBoot == boot && data.today.isNotEmpty()) {
+            // The app restarted within the same boot: the monotonic clock still counts from the same point
+            midnightAt = data.anchorMidnight
+        } else if (boot >= 0 && data.anchorBoot >= 0 && data.anchorBoot != boot) {
+            rebootedSince = true // told at the first tick
+        }
+    }
+
+    /**
+     * The local time now: the phone's clock, or — when the relay's time shows it more than [CLOCK_SLACK_MS] off —
+     * the right time in the phone's zone.
+     */
+    private fun clockNow(): LocalNow {
+        val wall = platform.now()
+        val right = trustedEpoch?.let { it + (platform.elapsedMillis() - trustedAt) } ?: return wall
+        return if (kotlin.math.abs(wall.epochMillis - right) > CLOCK_SLACK_MS) platform.at(right) else wall
     }
 
     private class Pending(val id: String, val iso: String, val at: Long)
@@ -154,7 +208,8 @@ public class PlayBackend(
         val nowMs = platform.elapsedMillis()
         val step = (nowMs - lastTick).coerceIn(0, MAX_STEP_MS)
         lastTick = nowMs
-        val now = platform.now()
+        watchClock(nowMs)
+        val now = clockNow()
         rollOver(now)
         val wasGame = foreground?.let { it in data.limited } == true
         foreground = front
@@ -191,7 +246,7 @@ public class PlayBackend(
     /** Whether [pkg] must be covered by the block page now (a limited game while blocked), and why. */
     public fun blockReason(pkg: String?): BlockReason? = lock.withLock {
         if (pkg == null || pkg !in data.limited) return null
-        val now = platform.now()
+        val now = clockNow()
         if (!blockedLocked(now)) return null
         val s = scheduleLocked(now).status
         val t = data.timer
@@ -203,7 +258,7 @@ public class PlayBackend(
 
     /** The child asks for more time on the block page (protocol minor 3, as on the PC). */
     public fun askForMoreTime(): AskResult = change(null) {
-        val now = platform.now()
+        val now = clockNow()
         val t = platform.elapsedMillis()
         if (!blockedLocked(now)) return@change AskResult.NotBlocked
         val r = request
@@ -222,13 +277,127 @@ public class PlayBackend(
 
     /** Minutes of game time left today, or null without a limit (the child's screen). */
     public fun minutesLeft(): Int? = lock.withLock {
-        val now = platform.now()
+        val now = clockNow()
         val t = data.timer
         when {
             t != null -> (t.remainingMs.coerceAtLeast(0) / 60_000).toInt()
             data.expired -> 0
             else -> scheduleLocked(now).availableMs.takeIf { it != Long.MAX_VALUE }?.let { (it / 60_000).toInt() }
         }
+    }
+
+    // ---------------- tamper visibility (C4) ----------------
+
+    /**
+     * The right time from the relay (its `Date` at a connect, [epochMillis], received at [receivedAt] on the
+     * monotonic clock), or from a paired parent's phone ([fromParent]). A phone clock more than [CLOCK_SLACK_MS] off is reported (once per error); state and
+     * history times then go by the right time. Until the first one in a boot the counted day was placed by the
+     * phone's clock (the first start, or a reboot): it is put right now — by instants, never by the time zone —
+     * and stays so for the rest of the boot (later ones only report).
+     */
+    public fun trustedTime(epochMillis: Long, receivedAt: Long = platform.elapsedMillis(), fromParent: Boolean = false): Unit = change(null) {
+        // A parent's phone (its `ready`, minor 5) is the fallback when the relay can't be reached (blocked, at
+        // home): its clock may be a little off, so it counts only beyond [PARENT_SLACK_MS] and never over the relay
+        if (fromParent && relayTrusted) return@change
+        val slack = if (fromParent) PARENT_SLACK_MS else CLOCK_SLACK_MS
+        val t = platform.elapsedMillis()
+        val right = epochMillis + (t - receivedAt)
+        val skew = platform.now().epochMillis - right
+        if (!fromParent) relayTrusted = true
+        if (!fromParent || kotlin.math.abs(skew) > slack) { trustedEpoch = epochMillis; trustedAt = receivedAt }
+        if (kotlin.math.abs(skew) <= slack) {
+            if (!fromParent && data.skewReported != null) data = data.copy(skewReported = null)
+        } else {
+            val reported = data.skewReported
+            if (reported == null || kotlin.math.abs(skew - reported) > slack) {
+                data = data.copy(skewReported = skew)
+                history(clockNow(), "tampered", "system", action = "clockWrong", minutes = (skew / 60_000).toInt())
+            }
+        }
+        // A parent's time places the day only until the relay's does; far-off times (a broken clock) only report
+        val level = if (fromParent) VERIFIED_BY_PARENT else VERIFIED_BY_RELAY
+        if (data.anchorVerified < level && (!fromParent || kotlin.math.abs(skew) > slack) && midnightAt != null &&
+            data.today.isNotEmpty() && data.dayEnd > 0 && kotlin.math.abs(right - data.dayEnd) < MAX_SHIFT_MS) {
+            // Whole days between the counted day's end and the right time: the day that contains it
+            val days = if (right >= data.dayEnd) (right - data.dayEnd) / DAY_MS + 1 else -((data.dayEnd - DAY_MS - right + DAY_MS - 1) / DAY_MS)
+            val day = shiftDate(data.today, days) ?: data.today
+            val end = data.dayEnd + days * DAY_MS
+            anchor(t + (end - right), end, verified = level)
+            if (day != data.today) newDay(clockNow(), day)
+            stateEvent(clockNow())
+        }
+        save = true
+    }
+
+    /** A change of the phone's clock (adding up, beyond [CLOCK_SLACK_MS]) or time zone: reported to the parents. */
+    private fun Out.watchClock(nowMs: Long) {
+        val wall = platform.now()
+        val offset = wall.epochMillis - nowMs
+        val zone = platform.zoneId()
+        if (!startChecked) {
+            startChecked = true
+            // What happened while the agent didn't run: a restart, another zone, a clock set back
+            if (rebootedSince) history(clockNow(), "rebooted", "system")
+            if (data.zone.isNotEmpty() && zone != data.zone) history(clockNow(), "tampered", "system", action = "timeZoneChanged")
+            if (data.lastWall > 0 && wall.epochMillis < data.lastWall - CLOCK_SLACK_MS) {
+                history(clockNow(), "tampered", "system", action = "clockChanged", minutes = ((wall.epochMillis - data.lastWall) / 60_000).toInt())
+            }
+        } else {
+            // The monotonic clock drifts a little against the network's time: tiny steps aren't a change
+            val prev = lastOffset
+            if (prev != null && kotlin.math.abs(offset - prev) < 1_000) clockOffset = clockOffset?.plus(offset - prev)
+            val base = clockOffset
+            if (base != null && kotlin.math.abs(offset - base) > CLOCK_SLACK_MS) {
+                history(clockNow(), "tampered", "system", action = "clockChanged", minutes = ((offset - base) / 60_000).toInt())
+                clockOffset = offset
+            }
+            if (zone != data.zone) history(clockNow(), "tampered", "system", action = "timeZoneChanged")
+        }
+        if (clockOffset == null) clockOffset = offset
+        lastOffset = offset
+        if (zone != data.zone) { data = data.copy(zone = zone); dirty = true }
+        if (wall.epochMillis > data.lastWall) {
+            data = data.copy(lastWall = wall.epochMillis)
+            if (wall.epochMillis - lastWallSaved > 60_000) { lastWallSaved = wall.epochMillis; dirty = true }
+        }
+    }
+
+    /**
+     * What protection the phone has now ([Protection] names), from the app every few seconds, and whether strict
+     * mode guards ([strict]: its permissions are needed only then). One the phone had and lost is reported
+     * (`tampered`, pushed to the parents) and listed in `state.device.missing` until it is back.
+     */
+    public fun protection(current: Set<String>, strict: Boolean): Unit = change(null) {
+        val now = clockNow()
+        // After a restart: what was reported before (a permission still off isn't news)
+        val before = if (present == null) data.reportedMissing else missingLocked()
+        present = current
+        strictOn = strict
+        // Basic permissions are expected once the phone had them; the strict ones while strict mode guards
+        val had = data.granted + (current intersect Protection.BASIC)
+        if (had != data.granted) { data = data.copy(granted = had); save = true }
+        val after = missingLocked()
+        if (after != data.reportedMissing) { data = data.copy(reportedMissing = after); save = true }
+        for (p in (after - before).sorted()) history(now, "tampered", "system", action = p)
+        for (p in (before - after).sorted()) history(now, "protectionRestored", "system", action = p)
+        if (after != before) stateEvent(now)
+    }
+
+    private fun missingLocked(): Set<String> {
+        val have = present ?: return emptySet()
+        val expected = data.granted + (if (strictOn) Protection.STRICT else emptySet())
+        return expected - have
+    }
+
+    /**
+     * The app was stopped by the user ([epochMillis]: when; Android's force stop, learned at the next start):
+     * shown as the PC's "closed" (`state.interruption` until a parent dismisses it, and a pushed history event).
+     */
+    public fun reportClosed(epochMillis: Long): Unit = change(null) {
+        val at = platform.at(epochMillis)
+        data = data.copy(interruption = at.iso)
+        history(at, "closed", "system")
+        stateEvent(clockNow())
     }
 
     // ---------------- the rules ----------------
@@ -259,9 +428,13 @@ public class PlayBackend(
         return now.copy(date = data.today, secondOfDay = second, weekday = weekdayOf(data.today) ?: now.weekday)
     }
 
-    private fun anchor(at: Long) {
+    /**
+     * The counted day ends at [at] on this boot's monotonic clock, which is the instant [end] (epoch); [verified]:
+     * placed by the phone's clock (0), a parent's (1) or the relay's time (2).
+     */
+    private fun anchor(at: Long, end: Long, verified: Int) {
         midnightAt = at
-        data = data.copy(anchorBoot = platform.bootCount(), anchorMidnight = at)
+        data = data.copy(anchorBoot = platform.bootCount(), anchorMidnight = at, dayEnd = end, anchorVerified = verified)
         dirty = true
     }
 
@@ -283,19 +456,32 @@ public class PlayBackend(
      */
     private fun Out.rollOver(now: LocalNow) {
         val t = platform.elapsedMillis()
-        val end = midnightAt
-        if (end != null && data.today.isNotEmpty()) {
-            if (t < end) return
+        val m = midnightAt
+        if (m != null && data.today.isNotEmpty()) {
+            if (t < m) return
             var day = data.today
-            var next = end
-            while (t >= next) { day = nextDate(day) ?: now.date; next += 86_400_000L }
-            anchor(next)
+            var next = m
+            var end = data.dayEnd
+            while (t >= next) { day = nextDate(day) ?: now.date; next += DAY_MS; end += DAY_MS }
+            anchor(next, end, data.anchorVerified)
             newDay(now, day)
             return
         }
-        anchor(t + (86_400L - now.secondOfDay) * 1000)
         save = true
-        if (data.today != now.date) newDay(now, now.date)
+        val until = (86_400L - now.secondOfDay) * 1000
+        if (data.today.isEmpty() || data.dayEnd <= 0) {
+            // The first start: the clock's date, time and zone are all there is
+            anchor(t + until, now.epochMillis + until, verified = 0)
+            if (data.today != now.date) newDay(now, now.date)
+            return
+        }
+        // After a reboot the counted day ends at the same instant as before, whatever the zone; by the phone's
+        // clock (put right by the relay's time later) only forward: a clock set back makes the day longer, not older
+        val days = if (now.epochMillis >= data.dayEnd) ((now.epochMillis - data.dayEnd) / DAY_MS + 1).coerceAtMost(MAX_SHIFT_MS / DAY_MS) else 0
+        val day = shiftDate(data.today, days) ?: data.today
+        val end = data.dayEnd + days * DAY_MS
+        anchor(t + (end - now.epochMillis).coerceAtLeast(0), end, verified = 0)
+        if (day != data.today) newDay(now, day)
     }
 
     private fun Out.newDay(now: LocalNow, date: String) {
@@ -360,8 +546,8 @@ public class PlayBackend(
         save = true
     }
 
-    private fun Out.history(now: LocalNow, type: String, source: String, ctx: RequestContext? = null, minutes: Int? = null, mode: String? = null) {
-        val e = PlayEvent(now.iso, type, source, device = ctx?.hubName, hub = ctx?.hubId, mode = mode, minutes = minutes)
+    private fun Out.history(now: LocalNow, type: String, source: String, ctx: RequestContext? = null, minutes: Int? = null, mode: String? = null, action: String? = null) {
+        val e = PlayEvent(now.iso, type, source, device = ctx?.hubName, hub = ctx?.hubId, mode = mode, minutes = minutes, action = action)
         data = data.copy(history = (data.history + e).takeLast(MAX_HISTORY))
         events += "ev.history" to buildJsonObject { put("event", json.encodeToJsonElement(e)) }
         save = true
@@ -395,17 +581,27 @@ public class PlayBackend(
                 put("availableSeconds", if (s.availableMs == Long.MAX_VALUE) 0 else s.availableMs / 1000)
                 put("usedSecondsToday", today().usedMs / 1000)
             })
-            put("interruption", JsonNull)
+            put("interruption", data.interruption?.let { JsonPrimitive(it) } ?: JsonNull)
+            // minor 5: what the phone's limits need and lack now (a parent sees why they may not work)
+            put("device", buildJsonObject {
+                put("missing", buildJsonArray { missingLocked().sorted().forEach { add(JsonPrimitive(it)) } })
+                put("strict", strictOn)
+            })
             put("request", request?.let { r -> buildJsonObject { put("id", r.id); put("time", r.iso) } } ?: JsonNull)
         }
     }
 
     // ---------------- AgentBackend ----------------
 
-    override suspend fun state(): JsonObject = lock.withLock { stateLocked(platform.now()) }
+    override suspend fun state(): JsonObject = lock.withLock { stateLocked(clockNow()) }
 
     override suspend fun handle(type: String, message: JsonObject, context: RequestContext): Reply = when (type) {
-        "state.get", "interruption.ack" -> lock.withLock { Reply.ok(buildJsonObject { put("state", stateLocked(platform.now())) }) }
+        "state.get" -> lock.withLock { Reply.ok(buildJsonObject { put("state", stateLocked(clockNow())) }) }
+        "interruption.ack" -> change(context.origin) {
+            val now = clockNow()
+            if (data.interruption != null) { data = data.copy(interruption = null); save = true; stateEvent(now) }
+            okState(now)
+        }
         "timer.start" -> start(message, context)
         "timer.stop" -> stop(message, context)
         "timer.extend" -> extend(message, context)
@@ -423,7 +619,7 @@ public class PlayBackend(
     private fun okState(now: LocalNow): Reply = Reply.ok(buildJsonObject { put("state", stateLocked(now)) })
 
     private fun start(m: JsonObject, ctx: RequestContext): Reply = change(ctx.origin) {
-        val now = platform.now()
+        val now = clockNow()
         rollOver(now)
         if (m.str("mode") != "interval") return@change Reply.error("invalid_time") // a time of day means nothing for game time
         val hours = m.int("hours") ?: return@change Reply.error("bad_request")
@@ -448,7 +644,7 @@ public class PlayBackend(
     }
 
     private fun stop(m: JsonObject, ctx: RequestContext): Reply = change(ctx.origin) {
-        val now = platform.now()
+        val now = clockNow()
         rollOver(now)
         val skip = m["skipScheduleToday"].isTrue()
         val s = scheduleLocked(now)
@@ -470,7 +666,7 @@ public class PlayBackend(
     }
 
     private fun extend(m: JsonObject, ctx: RequestContext): Reply = change(ctx.origin) {
-        val now = platform.now()
+        val now = clockNow()
         rollOver(now)
         val minutes = m.int("minutes") ?: return@change Reply.error("invalid_minutes")
         if (minutes == 0 || minutes !in -1440..1440) return@change Reply.error("invalid_minutes")
@@ -490,7 +686,7 @@ public class PlayBackend(
     }
 
     private fun end(ctx: RequestContext): Reply = change(ctx.origin) {
-        val now = platform.now()
+        val now = clockNow()
         val t = data.timer ?: return@change Reply.error("not_running")
         history(now, "extended", "phone", ctx, minutes = -((t.remainingMs.coerceAtLeast(0) + 59_999) / 60_000).toInt().coerceAtLeast(1))
         data = data.copy(timer = t.copy(remainingMs = 0))
@@ -500,7 +696,7 @@ public class PlayBackend(
 
     /** Only `inSeconds` (minor 2): that much game time left; more than now counts as the parent's extra time. */
     private fun setEnd(m: JsonObject, ctx: RequestContext): Reply = change(ctx.origin) {
-        val now = platform.now()
+        val now = clockNow()
         val t = data.timer ?: return@change Reply.error("not_running")
         if (t.remainingMs <= 0) return@change Reply.error("not_running")
         val secs = m.int("inSeconds") ?: return@change Reply.error("invalid_time")
@@ -513,7 +709,7 @@ public class PlayBackend(
     }
 
     private fun answer(m: JsonObject, ctx: RequestContext): Reply = change(ctx.origin) {
-        val now = platform.now()
+        val now = clockNow()
         val id = m.str("request") ?: return@change Reply.error("bad_request")
         val minutes = m.int("minutes") ?: return@change Reply.error("bad_request")
         if (minutes !in 0..1440) return@change Reply.error("invalid_minutes")
@@ -545,7 +741,7 @@ public class PlayBackend(
     }
 
     private fun putSchedule(m: JsonObject, ctx: RequestContext): Reply = change(ctx.origin) {
-        val now = platform.now()
+        val now = clockNow()
         rollOver(now)
         val ifRev = (m["ifRev"] as? JsonPrimitive)?.content?.toLongOrNull()
         if (ifRev != null && ifRev != data.schedule.rev) {
@@ -628,7 +824,7 @@ public class PlayBackend(
             save = true
             val apps = appsJson(installed)
             events += "ev.apps" to buildJsonObject { put("apps", apps) }
-            stateEvent(platform.now())
+            stateEvent(clockNow())
             Reply.ok(buildJsonObject { put("apps", apps) })
         }
     }
@@ -641,6 +837,9 @@ internal fun weekdayOf(date: String): Int? = epochDay(date)?.let { ((it + 4).mod
 
 /** The date after a `YYYY-MM-DD` date, or null. */
 internal fun nextDate(date: String): String? = epochDay(date)?.let { civil(it + 1) }
+
+/** The date [days] after (or before) a `YYYY-MM-DD` date, or null. */
+internal fun shiftDate(date: String, days: Long): String? = epochDay(date)?.let { civil(it + days) }
 
 /** Days from 1970-01-01 (Howard Hinnant's days_from_civil), or null. */
 private fun epochDay(date: String): Long? {

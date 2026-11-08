@@ -172,8 +172,18 @@ class Notifier(private val context: Context) {
         if (e.type == "timeRequested" && pcNow != null && parseTime(e.time)?.let { Duration.between(it, pcNow) > Duration.ofMinutes(15) } == true) return
         val (category, text) = when (e.type) {
             "expired" -> NotifySettings.Category.TimeUp to context.getString(R.string.ntf_time_up, actionText(e.action))
-            "closed" -> NotifySettings.Category.Suspicious to context.getString(R.string.ntf_closed)
-            "tampered" -> NotifySettings.Category.Suspicious to context.getString(R.string.ntf_tampered)
+            "closed" -> NotifySettings.Category.Suspicious to
+                context.getString(if (agent.platform == "android") R.string.ev_force_stopped else R.string.ntf_closed)
+            "tampered" -> NotifySettings.Category.Suspicious to when (e.action) {
+                // The phone's (protocol minor 5): what was switched off or changed
+                "clockChanged" -> context.getString(R.string.ev_clock_changed, e.minutes ?: 0)
+                "timeZoneChanged" -> context.getString(R.string.ev_zone_changed)
+                "clockWrong" -> context.getString(R.string.ev_clock_wrong, e.minutes ?: 0)
+                else -> permissionRes(e.action)?.let { context.getString(R.string.ev_protection_off, context.getString(it)) }
+                    ?: context.getString(R.string.ntf_tampered)
+            }
+            "protectionRestored" -> NotifySettings.Category.Suspicious to
+                context.getString(R.string.ev_protection_back, permissionRes(e.action)?.let { context.getString(it) } ?: e.action.orEmpty())
             "timeRequested" -> NotifySettings.Category.Requests to context.getString(R.string.ntf_request)
             else -> {
                 if (e.source == "system") return // automatic starts, resumes, restores: not someone's action

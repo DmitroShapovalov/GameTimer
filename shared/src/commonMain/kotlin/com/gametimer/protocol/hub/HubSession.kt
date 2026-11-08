@@ -213,6 +213,7 @@ public class HubSession private constructor(
                 // §4.3: the first transport message must be ready, sent at once
                 socket.sendJson(send, buildJsonObject {
                     put("t", "ready"); put("protocol", PROTOCOL_MAJOR); put("minor", PROTOCOL_MINOR); put("app", appName)
+                    put("now", currentEpochMillis()) // minor 5: a phone agent checks its clock against it (§7.4)
                 })
                 val hello = withTimeoutOrNull(10.seconds) { socket.receiveJson(recv) } ?: throw SessionClosedException(null)
                 when (hello.type()) {

@@ -133,8 +133,9 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            play/ = the phone's rules (C3, docs/protocol.md §7.4): PlayBackend (an AgentBackend with
                            timer / schedule / history / apps: game time counts only while a limited app is in front,
                            `paused` otherwise; time's up blocks the limited apps until a parent acts; the schedule's
-                           daily allowance; a parent's + / "yes" past the schedule), ScheduleRules (the PC's
-                           evaluator), PlayPlatform (time, apps, storage from the app). Tests: commonTest (virtual time, also on the iOS simulator);
+                           daily allowance; a parent's + / "yes" past the schedule; days by the monotonic clock;
+                           C4 tamper events: lost protection, clock / zone changes, the relay's time, force stop,
+                           reboot), ScheduleRules (the PC's evaluator), PlayPlatform (time, apps, storage from the app). Tests: commonTest (virtual time, also on the iOS simulator);
                            jvmTest runs it behind a Ktor CIO WebSocket server (TestAgentServer + SimBackend) against
                            the Kotlin hub client and the C# gt-testhub (-PcsharpHub).
                            RelayClient (+ RelayFrames) = a port of the C# RelayClient (§10.2, wake-ups §10.6),
@@ -143,7 +144,8 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            message whole), so TLS is ktor-network-tls (TLS 1.2 only): -PliveRelay=wss://… checks
                            the deployed relay in CI. hub/Engines*.kt names the engines (the hub stays on OkHttp)
 child/                     Phase C: the agent on the child's phone (com.gametimer.child, minSdk 29; child/README.md):
-  AgentRuntime.kt          The AgentHost (remoteAccess always on), RelayClient (started while a parent is paired),
+  AgentRuntime.kt          The AgentHost (remoteAccess always on), RelayClient (started while a parent is paired; its
+                           Date header → PlayBackend.trustedTime), force stops from ApplicationExitInfo (C4),
                            LanServer while on Wi-Fi / Ethernet (QR carries the Wi-Fi IPv4); pairing state for the UI
   AgentService.kt          specialUse foreground service + BootReceiver (after reboot / update, once the PIN is set)
   AgentFileStore.kt        AgentStore sealed with an Android Keystore AES-GCM key (noBackupFilesDir); an unreadable
@@ -153,8 +155,9 @@ child/                     Phase C: the agent on the child's phone (com.gametime
   LanServer.kt             Ktor CIO on 5123: /v2 and /v2/pair, LAN addresses only, no Origin
   AndroidPlay.kt           PlayPlatform for the phone (local time, monotonic clock, launchable apps, play.json),
                            Grants (usage / overlay / battery / admin / accessibility), StrictMode (on, pause 10 min)
-  Watcher.kt               The app in front from usage events (700 ms while the screen is on) → PlayBackend.tick;
-                           a blocked limited game gets BlockActivity (once per visit, retried after 2 s)
+  Watcher.kt               The app in front from usage events (700 ms while the screen is on, per activity, split
+                           screen) → PlayBackend.tick; a blocked limited game gets BlockActivity (once per visit,
+                           retried after 2 s); every 5 s the grants → PlayBackend.protection (C4)
   BlockActivity.kt         "Time's up" / "Not now" + "Ask for more time"; closes itself once allowed again
   GuardService.kt          Strict mode (from the C0 spike): instant block via accessibility events, closes settings
                            screens showing the app's name; AdminReceiver (device admin: no uninstall)

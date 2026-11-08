@@ -241,4 +241,18 @@
     <string name="games_count">Beperkt: %1$d</string>
     <string name="games_search">Zoeken</string>
     <string name="games_saved">Opgeslagen</string>
+    <!-- C4: the phone's tamper events -->
+    <string name="ev_protection_off">Beveiliging uitgezet: %1$s</string>
+    <string name="ev_protection_back">Beveiliging weer aan: %1$s</string>
+    <string name="ev_clock_changed">De klok is %1$d min verzet</string>
+    <string name="ev_zone_changed">De tijdzone is gewijzigd</string>
+    <string name="ev_clock_wrong">De klok loopt %1$d min verkeerd (de juiste tijd wordt gebruikt)</string>
+    <string name="ev_rebooted">De telefoon is opnieuw opgestart</string>
+    <string name="ev_force_stopped">GameTimer Child is geforceerd gestopt</string>
+    <string name="perm_usage">gebruikstoegang</string>
+    <string name="perm_overlay">weergeven over andere apps</string>
+    <string name="perm_accessibility">toegankelijkheidsservice (strenge modus)</string>
+    <string name="perm_admin">apparaatbeheer (strenge modus)</string>
+    <string name="device_missing">Beveiliging staat uit op de telefoon: %1$s. De limieten werken pas weer als die weer aan staat.</string>
+    <string name="interruption_phone">GameTimer Child is op de telefoon geforceerd gestopt (%1$s). Sinds hij weer is geopend, werkt hij weer.</string>
 </resources>

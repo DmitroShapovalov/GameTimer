@@ -118,6 +118,9 @@ no `hello` — until it has received and decrypted the **first transport message
 { "t": "ready", "protocol": 2, "minor": 0, "app": "GameTimer Parent 0.1.0 (android)" }
 ```
 
+Since minor 5 a hub adds `now`: its clock in epoch milliseconds (a number). Agents ignore it except the phone
+agent, which checks its own clock against it when the relay's time isn't available (§7.4).
+
 On `/v2/pair` the first transport message is `pair.hello` instead (§8). Anything else first →
 protocol error.
 
@@ -230,7 +233,8 @@ supports and the hub adapts.
 controls only when `hello.minor` ≥ 1. `2` (agent v1.8.0): `timer.setEnd` with `inSeconds`; a hub
 sends it only when `hello.minor` ≥ 2 and falls back to `hours` + `minutes` otherwise. `3` (agent v1.9):
 `state.request` and `timer.answerRequest` (the child asks for more time on the PC, §7.1). `4` (the phone
-agent, Phase C): `timer.state` `paused` and the `apps` capability (§7.4); the Windows agent stays at 3.
+agent, Phase C): `timer.state` `paused` and the `apps` capability (§7.4). `5` (the phone agent, C4):
+`state.device` and the phone's tamper events (§7.4); the Windows agent stays at 3.
 
 **Capabilities** — the hub renders a control only if the agent lists the capability. Names are
 stable; a breaking change gets a new name (`timer2`).
@@ -263,7 +267,8 @@ Payloads reuse the shapes of the former v1 API (now `src/GameTimer/Services/Remo
              "targetTime": "2026-10-18T20:30:00+02:00", "action": "lock", "zone": "green" },
   "schedule": { "status": "allowed", "availableSeconds": 2700, "usedSecondsToday": 1800 },
   "interruption": null,                 // or ISO time of the last unclean close
-  "request": null                       // minor 3: { "id": "…", "time": ISO } — the child asks for more time
+  "request": null,                      // minor 3: { "id": "…", "time": ISO } — the child asks for more time
+  "device": { "missing": [], "strict": false } // minor 5, phone agent only (§7.4)
 }
 ```
 
@@ -273,6 +278,10 @@ Payloads reuse the shapes of the former v1 API (now `src/GameTimer/Services/Remo
 runs out (that timer is the parent's new limit and isn't capped by the schedule). History types
 `scheduleSkipped` / `scheduleRestored` record both. History events caused by a hub carry its id in
 `hub` (agent v1.7.2), so a hub can tell its own actions from another hub with the same name.
+
+`device` (minor 5, the phone agent): `missing` lists the protection the phone's limits need and lack now
+(`usage`, `overlay`, and while strict mode guards `accessibility`, `admin`); `strict`: strict mode guards.
+Hubs treat a missing field as nothing missing.
 
 `request` (minor 3): the child pressed "Ask for more time" on the PC and no parent has answered yet.
 At most one at a time; it goes away when it is answered (`timer.answerRequest`), when the timer stops
@@ -339,7 +348,7 @@ Error `code`s: the v1 set (`invalid_time`, `already_running`, `not_running`, `in
 | `ev.peers` | a parent was added, revoked or changed role | `peers[]`, `change` (`added` / `revoked` / `role`), `peer` (hub id) |
 | `ev.apps` | (minor 4) the limited apps changed | `apps` |
 
-### 7.4 The phone agent (Phase C, minor 4)
+### 7.4 The phone agent (Phase C, minor 4–5)
 
 The child's phone (`platform` `android`) announces `timer`, `schedule`, `history` and `apps` (no
 `settings`) and uses the same shapes, with these rules (owner's decisions for C3):
@@ -358,8 +367,8 @@ The child's phone (`platform` `android`) announces `timer`, `schedule`, `history
   alone: a new day starts when the counted day's midnight is reached and the next one 24 hours later, whatever
   the phone's date and time say, and the schedule takes the weekday and the time of day from that day and that
   clock — moving the date, the time or the time zone gains nothing (daylight saving time and travelling shift
-  the hours by as much until the next reboot). This holds across app restarts; a reboot takes the phone's date
-  and time as they are (until C4 reports clock changes to the parents). Outside the allowed hours or on a day without games the limited apps are blocked
+  the hours by as much until the next reboot). This holds across app restarts; after a reboot the phone's date
+  and time are taken as they are until the relay's time is known (C4, below). Outside the allowed hours or on a day without games the limited apps are blocked
   (`outsideWindow` / `dayDisabled`). `timer.start` is capped by what is left today (`schedule_limit` when
   nothing is), except during a lift (`skippedToday`).
 - **More time.** `timer.extend` with minutes > 0, a "yes" to the child's request (`timer.answerRequest`) and
@@ -373,6 +382,31 @@ The child's phone (`platform` `android`) announces `timer`, `schedule`, `history
 - `apps.put` keeps only apps the phone lists in `apps.get` (a home screen, the phone app and the agent itself
   are never listed: they can't be limited).
 - History types as on the PC; the child's own request has `source` `pc` (= on the device itself).
+- **Tamper visibility (minor 5, C4).** Recorded as history events with `source` `system`; `closed` and
+  `tampered` wake the parents' phones (§10.6) like the PC's:
+  - `tampered` with `action` `usage` / `overlay` / `accessibility` / `admin`: that protection was switched off
+    (the basic two once the phone had them, the strict-mode two while strict mode guards); listed in
+    `state.device.missing` until it is back, then `protectionRestored` with the same `action`. Without them the
+    limits can't work; the phone only reports it (owner's decision).
+  - `tampered` with `action` `clockChanged` (`minutes`: the change, adding up while the agent runs; also a clock
+    found set back at the next start) or `timeZoneChanged` (the zone id, so daylight saving time is no news; also
+    a zone changed while the agent didn't run).
+  - `tampered` with `action` `clockWrong` (`minutes`: how far off): at a relay connect the relay's HTTP `Date`
+    (over TLS) showed the phone's clock more than 2 minutes off. Reported once per error (kept across restarts);
+    state and history times then go by the right time. The counted day is kept as an instant (when it ends), so
+    a reboot keeps it whatever the zone, and a clock set back makes it longer, not older. Until the relay's time
+    is known in a boot the day was placed by the phone's clock; the first relay time puts it right (by instants,
+    either way) and later ones in that boot only report. When the relay can't be reached (blocked, or at home
+    without it), a paired parent's `ready.now` does the same, counted only beyond 10 minutes (a parent's clock may
+    be a little off) and never over the relay's time (which may still correct a day a parent's time placed). It
+    comes only when a parent app connects (it has no background connection at home). A time more than 30 days
+    from the counted day is a broken clock: reported, never followed; hubs' `now` outside 2020–2100 is ignored. Fully offline with no parent connecting, a clock moved
+    forward plus a reboot gives a fresh day until then.
+  - `closed`: Android's force stop (learned at the next start, Android 11+); `state.interruption` holds its
+    time until a parent dismisses it (`interruption.ack`), as on the PC. A force-stopped app stays off until it
+    is opened again: meanwhile the parents see the phone offline (no separate warning, owner's decision).
+  - `rebooted`: the phone was restarted since the agent last ran (no wake-up).
+  - A permission still missing, or a clock error already reported, isn't reported again after a restart.
 
 ## 8. Roles and pairing
 
@@ -667,7 +701,9 @@ like after any reconnect (§12), so it shows the same notifications it would at 
   `events` lists what the phone would show (its notification categories that are on), so it is never
   woken for nothing. `token: null` stops the wake-ups (background notifications off, or the PC removed
   on the phone).
-- **When.** Only while "Control from anywhere" is on and the agent's relay socket is up: on an
+- **When.** Only while "Control from anywhere" is on. Events while the agent's relay socket is down, or younger
+  than the relay's minute, are kept and sent once the socket may wake (the phone agent's tamper events mostly
+  happen at its start or offline; the Windows agent sends only while connected). Then: on an
   `ev.history` whose type the hub asked for — automatic ones (source `system`) only for `expired`,
   `closed`, `tampered` — and on a new parent app (`peerAdded`); for each such hub with a token and **no
   live session**, never the hub that caused the event. `ev.alert` wakes only hubs that list `alert`

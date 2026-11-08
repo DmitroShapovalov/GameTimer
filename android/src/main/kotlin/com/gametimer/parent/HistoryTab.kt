@@ -74,7 +74,7 @@ private enum class HistoryFilter(val label: Int) { All(R.string.hist_all), Timer
 
 private val TIMER_TYPES = setOf("started", "stopped", "reset", "extended", "expired", "resumed", "scheduleSkipped", "scheduleRestored",
     "timeRequested", "timeRequestDeclined")
-private val ALERT_TYPES = setOf("closed", "tampered")
+private val ALERT_TYPES = setOf("closed", "tampered", "protectionRestored", "rebooted")
 
 private fun HistoryFilter.accepts(e: HistoryEvent) = when (this) {
     HistoryFilter.All -> true
@@ -182,7 +182,7 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
                     )
                 }
             }
-            items(list, key = { it.key }) { e -> EventRow(e.event, e.time?.format(timeFormat) ?: "") }
+            items(list, key = { it.key }) { e -> EventRow(e.event, e.time?.format(timeFormat) ?: "", phone = agent.platform == "android") }
         }
         next?.let { cursor ->
             item(key = "more") {
@@ -213,14 +213,14 @@ fun HistoryTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
 }
 
 @Composable
-private fun EventRow(e: HistoryEvent, time: String) {
+private fun EventRow(e: HistoryEvent, time: String, phone: Boolean) {
     val (icon, color) = look(e)
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(36.dp).background(color.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
         }
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
-            Text(eventText(e), style = MaterialTheme.typography.bodyLarge)
+            Text(eventText(e, phone), style = MaterialTheme.typography.bodyLarge)
             Text(listOf(time, who(e)).filter { it.isNotEmpty() }.joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -240,6 +240,8 @@ private fun look(e: HistoryEvent): Pair<ImageVector, Color> {
         "updated" -> Icons.Filled.Settings to c.neutral
         "expired" -> Icons.Filled.Lock to c.timeUp
         "closed", "tampered" -> Icons.Filled.Warning to c.alert
+        "protectionRestored" -> Icons.Filled.Refresh to c.good
+        "rebooted" -> Icons.Filled.Refresh to c.neutral
         "timeRequested" -> Icons.Filled.Notifications to c.changed
         "timeRequestDeclined" -> Icons.Filled.Close to c.neutral
         else -> Icons.Filled.Edit to c.neutral
@@ -256,7 +258,7 @@ private fun who(e: HistoryEvent): String = when (e.source) {
 }
 
 @Composable
-private fun eventText(e: HistoryEvent): String = when (e.type) {
+private fun eventText(e: HistoryEvent, phone: Boolean): String = when (e.type) {
     "started" -> {
         val m = e.minutes ?: 0
         val dur = if (m >= 60) "%d:%02d".format(m / 60, m % 60) else "$m ${stringResource(R.string.min_short)}"
@@ -267,12 +269,29 @@ private fun eventText(e: HistoryEvent): String = when (e.type) {
     "extended" -> if ((e.minutes ?: 0) >= 0) stringResource(R.string.ev_plus, e.minutes ?: 0) else stringResource(R.string.ev_minus, -(e.minutes ?: 0))
     "expired" -> stringResource(R.string.ev_expired, actionText(e.action))
     "resumed" -> stringResource(R.string.ev_resumed)
-    "closed" -> stringResource(R.string.ev_closed)
-    "tampered" -> stringResource(R.string.ev_tampered)
+    "closed" -> stringResource(if (phone) R.string.ev_force_stopped else R.string.ev_closed)
+    "tampered" -> when (e.action) {
+        // The phone's (protocol minor 5): what was switched off or changed
+        "clockChanged" -> stringResource(R.string.ev_clock_changed, e.minutes ?: 0)
+        "timeZoneChanged" -> stringResource(R.string.ev_zone_changed)
+        "clockWrong" -> stringResource(R.string.ev_clock_wrong, e.minutes ?: 0)
+        else -> permissionRes(e.action)?.let { stringResource(R.string.ev_protection_off, stringResource(it)) } ?: stringResource(R.string.ev_tampered)
+    }
+    "protectionRestored" -> stringResource(R.string.ev_protection_back, permissionRes(e.action)?.let { stringResource(it) } ?: e.action.orEmpty())
+    "rebooted" -> stringResource(R.string.ev_rebooted)
     "updated" -> stringResource(R.string.ev_updated)
     "scheduleSkipped" -> stringResource(R.string.ev_sched_skipped)
     "scheduleRestored" -> stringResource(R.string.ev_sched_restored)
     "timeRequested" -> stringResource(R.string.ev_time_requested)
     "timeRequestDeclined" -> stringResource(R.string.ev_time_request_declined)
     else -> e.type
+}
+
+/** The name of a phone permission in `state.device.missing` and the tamper events (protocol minor 5), or null. */
+internal fun permissionRes(name: String?): Int? = when (name) {
+    "usage" -> R.string.perm_usage
+    "overlay" -> R.string.perm_overlay
+    "accessibility" -> R.string.perm_accessibility
+    "admin" -> R.string.perm_admin
+    else -> null
 }

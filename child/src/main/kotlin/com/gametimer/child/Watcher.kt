@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.PowerManager
 import android.os.SystemClock
 import com.gametimer.play.PlayBackend
+import com.gametimer.play.Protection
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -30,10 +31,33 @@ class Watcher(context: Context, private val backend: PlayBackend) {
     private var askedFor: String? = null
     private var askedAt = 0L
 
+    private val strict = StrictMode(app)
+    private var lastCheck = 0L
+    private var disconnectedSince: Long? = null
+
+    /**
+     * Tells the play logic what protection the phone has now (C4: a lost one is reported to the parents). Every
+     * [CHECK_MS] from the loop, and at once when something switched off (device admin).
+     */
+    fun checkProtection(force: Boolean = false) {
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastCheck < CHECK_MS) return
+        lastCheck = now
+        try {
+            var present = Grants.of(app).present
+            // Switched on in Settings but not running (killed by a vendor's battery manager) for a minute: not
+            // protecting. The minute covers the service binding after a start and brief unbinds.
+            if (GuardService.connected) disconnectedSince = null else if (disconnectedSince == null) disconnectedSince = now
+            if (disconnectedSince?.let { now - it > 60_000 } == true) present = present - Protection.ACCESSIBILITY
+            backend.protection(present, strict.guarding)
+        } catch (e: Exception) { }
+    }
+
     suspend fun run() {
         val usm = app.getSystemService(UsageStatsManager::class.java)
         val power = app.getSystemService(PowerManager::class.java)
         while (currentCoroutineContext().isActive) {
+            checkProtection()
             if (!power.isInteractive) {
                 // Screen off: nothing is played; look again less often
                 synchronized(resumed) { resumed.clear() }
@@ -117,5 +141,6 @@ class Watcher(context: Context, private val backend: PlayBackend) {
 
     private companion object {
         const val POLL_MS = 700L
+        const val CHECK_MS = 5_000L
     }
 }

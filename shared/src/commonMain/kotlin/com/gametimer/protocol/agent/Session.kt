@@ -54,7 +54,7 @@ internal suspend fun closeQuietly(transport: FrameTransport) {
 /** A result that may itself be null, told apart from a timeout's null. */
 internal class Step<T>(val value: T)
 
-private class Handshaken(val send: CipherState, val recv: CipherState, val peer: Peer, val hubMinor: Int)
+private class Handshaken(val send: CipherState, val recv: CipherState, val peer: Peer, val hubMinor: Int, val hubTime: Long?)
 
 private suspend fun AgentHost.runSession(transport: FrameTransport, ticket: HandshakeTicket) {
     val ip = ticket.remoteIp
@@ -88,6 +88,8 @@ private suspend fun AgentHost.runSession(transport: FrameTransport, ticket: Hand
 
     try {
         persist() // lastSeen, set by register
+        // A paired parent's clock (authenticated by the session): the phone agent checks its own against it
+        done.hubTime?.let { t -> try { onHubTime?.invoke(t) } catch (e: Exception) { } }
         // Events published from now on wait in the session until hello is out (§6: hello comes first)
         val hello = try {
             hello(session, done.hubMinor)
@@ -141,18 +143,21 @@ private suspend fun AgentHost.sessionHandshake(transport: FrameTransport, ticket
 
     // §4.3: nothing happens until the first transport message proves a live hub
     val first = transport.receive() ?: run { recordFailure(ip); return null }
-    val hubMinor = readReady(recv, first) ?: run { recordFailure(ip); return null }
-    return Handshaken(send, recv, known, hubMinor)
+    val (hubMinor, hubTime) = readReady(recv, first) ?: run { recordFailure(ip); return null }
+    return Handshaken(send, recv, known, hubMinor, hubTime)
 }
 
-/** The hub's minor from a valid `ready`, or null. */
-private fun readReady(recv: CipherState, frame: ByteArray): Int? {
+/** The hub's minor and its clock (minor 5 `now`, epoch ms; null without one) from a valid `ready`, or null. */
+private fun readReady(recv: CipherState, frame: ByteArray): Pair<Int, Long?>? {
     val plain = try { recv.decrypt(frame) } catch (e: NoiseException) { return null }
     val r = StrictJson.parse(plain)
     if (r.str("t") != "ready") return null
     if (r.int("protocol") != AgentHost.PROTOCOL_MAJOR) return null
     val minor = r.int("minor") ?: return null
-    return if (minor < 0) null else minor
+    if (minor < 0) return null
+    // 2020…2100: anything else is a broken clock, not a time to check against
+    val now = (r["now"] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toLongOrNull()?.takeIf { it in 1_577_836_800_000L..4_102_444_800_000L }
+    return minor to now
 }
 
 /** An integer member that fits an Int (like .NET's TryGetInt32), else null. */

@@ -69,9 +69,23 @@ public data class PlayData(
     val appsRev: Long = 1,
     /** Newest last, at most [PlayBackend.MAX_HISTORY]. */
     val history: List<PlayEvent> = emptyList(),
+    /** The app was stopped (force stop) at this time, until a parent dismisses it (`state.interruption`). */
+    val interruption: String? = null,
+    /** Basic protection ([Protection]) the phone has had: losing it later is reported. */
+    val granted: Set<String> = emptySet(),
     /** The boot ([PlayPlatform.bootCount]) and the monotonic time of the counted day's midnight in it. */
     val anchorBoot: Int = -1,
     val anchorMidnight: Long = 0,
+    /** The counted day's end as an instant (epoch ms): days stay put across reboots, whatever the zone. */
+    val dayEnd: Long = 0,
+    /** In this boot the day was placed by the phone's clock (0), a parent's phone's (1) or the relay's time (2). */
+    val anchorVerified: Int = 0,
+    /** The time zone id last seen, and the latest wall clock seen (a clock set back while off is reported). */
+    val zone: String = "",
+    val lastWall: Long = 0,
+    /** The missing protection last reported, and the clock error last reported (not again after a restart). */
+    val reportedMissing: Set<String> = emptySet(),
+    val skewReported: Long? = null,
 )
 
 /** The local time as the phone sees it (its zone): the date, the second of the day, the weekday. */
