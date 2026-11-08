@@ -241,7 +241,7 @@ private fun PcCard(link: AgentLink, agent: PairedAgent, onClick: () -> Unit) {
                 Text(agent.name, style = MaterialTheme.typography.titleMedium)
                 Text(statusText(status), style = MaterialTheme.typography.bodySmall)
             }
-            if (state?.isRunning == true) Text(formatSeconds(seconds), fontFamily = FontFamily.Monospace, fontSize = 22.sp)
+            if (state?.isActive == true) Text(formatSeconds(seconds), fontFamily = FontFamily.Monospace, fontSize = 22.sp)
         }
     }
 }
@@ -406,7 +406,7 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
     fun has(capability: String) = caps?.contains(capability) ?: true
     LaunchedEffect(caps) {
         if ((tab == 1 && !has("schedule")) || (tab == 2 && !has("history"))) tab = 0
-        if (!has("settings")) moreTab = 1
+        if (!has("settings") && !has("apps")) moreTab = 1
     }
 
     Scaffold(
@@ -467,6 +467,17 @@ private fun PcScreen(vm: MainViewModel, agent: PairedAgent, snackbar: SnackbarHo
                     }
                     // Removing the PC from the list is enough: the screen for a PC that isn't listed goes home by itself
                     if (moreTab == 0) SettingsTab(vm, agent, link)
+                    else ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })
+                } else if (has("apps")) {
+                    // A child's phone: its games instead of the PC's settings
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        listOf(R.string.tab_games, R.string.tab_parents).forEachIndexed { i, label ->
+                            SegmentedButton(selected = moreTab == i, onClick = { moreTab = i }, shape = SegmentedButtonDefaults.itemShape(i, 2)) {
+                                Text(stringResource(label))
+                            }
+                        }
+                    }
+                    if (moreTab == 0) GamesTab(vm, agent, link)
                     else ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })
                 } else {
                     ParentsTab(vm, agent, link, onSelfRemoved = { vm.remove(agent) })

@@ -71,8 +71,15 @@ public class AgentState(public val json: JsonObject, public val receivedAtNanos:
     public val timer: JsonObject? get() = json["timer"] as? JsonObject
     public val isRunning: Boolean get() = timer?.string("state") == "running"
 
-    /** Seconds left now, counted down locally; 0 when no timer runs. */
+    /** Minor 4 (the phone): game time left, but no game is open, so it isn't counting down. */
+    public val isPaused: Boolean get() = timer?.string("state") == "paused"
+
+    /** A timer with time left: counting down, or paused. */
+    public val isActive: Boolean get() = isRunning || isPaused
+
+    /** Seconds left now, counted down locally while running (frozen while paused); 0 when no timer runs. */
     public fun remainingSecondsNow(): Int {
+        if (isPaused) return (timer?.get("remainingSeconds") as? JsonPrimitive)?.intOrNull ?: 0
         if (!isRunning) return 0
         val atReceive = (timer?.get("remainingSeconds") as? JsonPrimitive)?.intOrNull ?: return 0
         val elapsed = (elapsedRealtimeNanos() - receivedAtNanos).nanoseconds.inWholeSeconds.toInt()

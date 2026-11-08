@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GameTimer</string>
-    <string name="home_title">Je pc\'s</string>
+    <string name="home_title">Je apparaten</string>
     <string name="home_empty">Nog geen apparaten. Open op de pc Instellingen → Telefoon verbinden; op de telefoon van je kind GameTimer Child → Telefoon van een ouder koppelen. Scan dan de QR-code.</string>
     <string name="add_pc">Apparaat toevoegen</string>
     <string name="status_online">Online</string>
@@ -11,7 +11,7 @@
     <string name="status_offline">Offline</string>
     <string name="status_refused">Deze telefoon is niet meer aan de pc gekoppeld</string>
     <string name="status_wrong_device">Een ander apparaat antwoordde — niet je pc</string>
-    <string name="status_revoked">Verwijderd op de pc</string>
+    <string name="status_revoked">Verwijderd op het apparaat</string>
     <string name="remove">Verwijderen</string>
     <string name="remove_confirm">%1$s van deze telefoon verwijderen?</string>
     <string name="cancel">Annuleren</string>
@@ -38,8 +38,8 @@
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="minutes">Minuten</string>
-    <string name="request_refused">De pc weigerde: %1$s</string>
-    <string name="request_gave_up">Geen antwoord van de pc</string>
+    <string name="request_refused">Het apparaat weigerde: %1$s</string>
+    <string name="request_gave_up">Geen antwoord van het apparaat</string>
     <string name="identity_unavailable">De beveiligde opslag van deze telefoon is nu niet beschikbaar. Start de app opnieuw; helpt dat niet, herstart dan de telefoon.</string>
     <string name="identity_reset">Android heeft de sleutel van deze telefoon gewist (bijvoorbeeld na het verwijderen van de schermvergrendeling). Koppel je pc\'s opnieuw.</string>
     <string name="err_not_running">er loopt geen timer</string>
@@ -72,8 +72,8 @@
     <string name="sched_limit">Schema: de tijd van vandaag is op</string>
     <string name="save">Opslaan</string>
     <string name="saved">Opgeslagen</string>
-    <string name="conflict">Intussen gewijzigd op de pc of door een andere ouder — de huidige waarden zijn geladen. Controleer en sla opnieuw op.</string>
-    <string name="offline_hint">De pc is offline — wijzigingen kunnen nu niet worden opgeslagen.</string>
+    <string name="conflict">Intussen gewijzigd op het apparaat of door een andere ouder — de huidige waarden zijn geladen. Controleer en sla opnieuw op.</string>
+    <string name="offline_hint">Het apparaat is offline — wijzigingen kunnen nu niet worden opgeslagen.</string>
     <string name="set_action">Als de tijd om is</string>
     <string name="set_language">Taal op de pc</string>
     <string name="set_thresholds">Waarschuwingskleuren (minuten over)</string>
@@ -91,7 +91,7 @@
     <string name="no_alerts">Geen signalen</string>
     <string name="err_settings">Controleer de waarden: drempels 1–1440, kleuren als #RRGGBB, signalen 1–1440 en uniek.</string>
     <string name="sched_enable">Weekschema</string>
-    <string name="sched_hint">Tik op een dag om die te wijzigen. De pc krijgt de wijzigingen als je opslaat.</string>
+    <string name="sched_hint">Tik op een dag om die te wijzigen. Het apparaat krijgt de wijzigingen als je opslaat.</string>
     <string name="hours_short">u</string>
     <string name="sched_off">Niet gamen</string>
     <string name="sched_no_limit">Geen limiet</string>
@@ -109,7 +109,7 @@
     <string name="sched_check">Controleren</string>
     <string name="sched_bad_window">Het einde moet later zijn dan het begin (niet over middernacht).</string>
     <string name="sched_limit_over_window">De limiet is langer dan de toegestane uren: de uren beëindigen het gamen eerst.</string>
-    <string name="err_schedule">De pc heeft het schema niet geaccepteerd: controleer de uren en de limieten.</string>
+    <string name="err_schedule">Het apparaat heeft het schema niet geaccepteerd: controleer de uren en de limieten.</string>
     <string name="history_empty">Nog geen gebeurtenissen</string>
     <string name="load_more">Meer laden</string>
     <string name="hist_all">Alles</string>
@@ -128,7 +128,7 @@
     <string name="ev_closed">De app is gesloten tijdens het lopen</string>
     <string name="ev_tampered">Manipulatie gedetecteerd</string>
     <string name="ev_updated">Gesloten voor een update</string>
-    <string name="who_pc">Op de pc</string>
+    <string name="who_pc">Op het apparaat</string>
     <string name="who_system">Systeem</string>
     <string name="this_phone">deze telefoon</string>
     <string name="peer_sub">%1$s · laatst gezien %2$s</string>
@@ -234,4 +234,11 @@
     <string name="ev_time_requested">Om meer tijd gevraagd</string>
     <string name="ev_time_request_declined">Nee gezegd tegen meer tijd</string>
     <string name="no_controls">Dit apparaat kan hier nog niet bediend worden: schermtijdlimieten voor telefoons komen in de volgende versie. Het is gekoppeld, en de ouders ervan beheer je onder Meer.</string>
+    <string name="st_paused">Gepauzeerd (geen game open)</string>
+    <string name="tab_games">Games</string>
+    <string name="loading">Laden…</string>
+    <string name="games_hint">Vink de apps aan die als games tellen: de timer en het schema tellen en beperken alleen deze. Al het andere (bellen, berichten, school-apps) werkt altijd.</string>
+    <string name="games_count">Beperkt: %1$d</string>
+    <string name="games_search">Zoeken</string>
+    <string name="games_saved">Opgeslagen</string>
 </resources>

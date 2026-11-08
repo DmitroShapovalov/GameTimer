@@ -57,6 +57,14 @@ public data class HistoryEvent(
 /** One page of history, newest first; [next] continues it when [more]. */
 public data class HistoryPage(val events: List<HistoryEvent>, val more: Boolean, val next: String?)
 
+/** An app on the child's phone (§7.2 apps.get, minor 4): [limited] = one of the games the timer limits. */
+@Serializable
+public data class InstalledApp(val id: String, val name: String, val limited: Boolean = false)
+
+/** `apps` (§7.2 apps.get / apps.put). */
+@Serializable
+public data class AgentApps(val installed: List<InstalledApp>, val rev: Long = 0)
+
 /** A paired parent app (§7.2 peers[]). */
 @Serializable
 public data class PeerInfo(

@@ -194,6 +194,8 @@ private fun Home(pin: ParentPin) {
                     }
                 }
             }
+            if (state.phase == AgentRuntime.Phase.Running) TodayCard()
+            ProtectionCard(::withPin)
             BatteryCard()
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -256,6 +258,99 @@ private fun Home(pin: ParentPin) {
         )
     }
     if (changingPin) ChangePinDialog(pin) { changingPin = false }
+}
+
+/** Today's game time as the child sees it. */
+@Composable
+private fun TodayCard() {
+    val play by AgentRuntime.play.collectAsState()
+    // Game time is counted every second without an event: read it again while the screen is open
+    LaunchedEffect(Unit) { while (true) { AgentRuntime.refreshPlay(); delay(5_000) } }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(stringResource(R.string.today_title), style = MaterialTheme.typography.titleMedium)
+            val left = play.minutesLeft
+            Text(when {
+                left == null -> stringResource(R.string.today_no_limit)
+                left <= 0 -> stringResource(R.string.today_time_up)
+                else -> stringResource(R.string.today_left, left / 60, left % 60)
+            })
+            if (play.asked) Text(stringResource(R.string.block_asked), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * What blocking needs (usage access, display over other apps) and strict mode (device admin + the accessibility
+ * service, behind the parent PIN). Every button here is behind the PIN: the phone is the child's.
+ */
+@Composable
+private fun ProtectionCard(withPin: (() -> Unit) -> Unit) {
+    val context = LocalContext.current
+    val strict = remember { StrictMode(context) }
+    var grants by remember { mutableStateOf(Grants.of(context)) }
+    var strictOn by remember { mutableStateOf(strict.on) }
+    var paused by remember { mutableStateOf(strict.paused) }
+    LaunchedEffect(Unit) { while (true) { grants = Grants.of(context); strictOn = strict.on; paused = strict.paused; delay(1_500) } }
+    fun open(intent: Intent) = runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    val pkgUri = Uri.parse("package:${context.packageName}")
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.prot_title), style = MaterialTheme.typography.titleMedium)
+            if (!grants.canBlock) Text(stringResource(R.string.prot_needed), color = MaterialTheme.colorScheme.error)
+            GrantRow(stringResource(R.string.grant_usage), grants.usage) {
+                withPin { open(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+            }
+            GrantRow(stringResource(R.string.grant_overlay), grants.overlay) {
+                withPin { open(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri)) }
+            }
+            if (!grants.usage || !grants.overlay || !grants.accessibility || !grants.admin) {
+                Text(stringResource(R.string.prot_restricted), style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { withPin { open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)) } }) {
+                    Text(stringResource(R.string.prot_app_info))
+                }
+            }
+            Text(stringResource(R.string.strict_title), style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.strict_text), style = MaterialTheme.typography.bodySmall)
+            val adminExplanation = stringResource(R.string.admin_explanation)
+            GrantRow(stringResource(R.string.grant_admin), grants.admin) {
+                withPin {
+                    open(Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                        .putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent(context))
+                        .putExtra(android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION, adminExplanation))
+                }
+            }
+            GrantRow(stringResource(R.string.grant_accessibility), grants.accessibility) {
+                withPin { open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            }
+            val ready = grants.admin && grants.accessibility
+            Text(stringResource(when {
+                !strictOn -> R.string.strict_off
+                paused -> R.string.strict_paused
+                !ready -> R.string.strict_broken
+                else -> R.string.strict_on
+            }))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!strictOn) {
+                    Button(onClick = { withPin { strict.on = true; strict.unpause() } }, enabled = ready) { Text(stringResource(R.string.strict_turn_on)) }
+                } else {
+                    OutlinedButton(onClick = { withPin { if (paused) strict.unpause() else strict.pause(10) } }) {
+                        Text(stringResource(if (paused) R.string.strict_resume else R.string.strict_pause))
+                    }
+                    TextButton(onClick = { withPin { strict.on = false } }) { Text(stringResource(R.string.strict_turn_off)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GrantRow(title: String, granted: Boolean, onGrant: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Modifier.weight(1f))
+        if (granted) Text(stringResource(R.string.granted), color = MaterialTheme.colorScheme.primary)
+        else TextButton(onClick = onGrant) { Text(stringResource(R.string.grant)) }
+    }
 }
 
 @Composable

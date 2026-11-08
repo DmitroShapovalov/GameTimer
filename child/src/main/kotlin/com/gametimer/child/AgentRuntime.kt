@@ -7,7 +7,11 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.provider.Settings
+import com.gametimer.play.AskResult
+import com.gametimer.play.BlockReason
+import com.gametimer.play.PlayBackend
 import com.gametimer.protocol.agent.AgentHost
+import com.gametimer.protocol.agent.AgentInfo
 import com.gametimer.protocol.agent.PairingAbortReason
 import com.gametimer.protocol.agent.PairingUi
 import com.gametimer.protocol.agent.Peer
@@ -97,7 +101,11 @@ object AgentRuntime {
         _state.update { it.copy(phase = Phase.Starting) }
         try {
             Sodium.initialize()
-            val h = AgentHost(AgentFileStore(app), ChildBackend(deviceName(), appVersion()), pairingUi, scope = s)
+            val play = PlayBackend(AgentInfo(deviceName(), "android", appVersion()), AndroidPlayPlatform(app))
+            val h = AgentHost(AgentFileStore(app), play, pairingUi, scope = s)
+            play.host = h
+            play.onChanged = { refreshPlay() }
+            backend = play
             h.remoteAccess = true // a phone is mostly away from home: control from anywhere is always on
             h.onPeersChanged = { s.launch { onPeersChanged() } }
             h.onPaired = { _state.update { st -> st.copy(pairing = null, message = Message.Paired) } }
@@ -107,6 +115,10 @@ object AgentRuntime {
             _state.update { it.copy(phase = Phase.Running) }
             onPeersChanged()
             watchNetwork()
+            val w = Watcher(app, play)
+            watcher = w
+            s.launch { w.run() }
+            refreshPlay()
         } catch (e: StoreUnreadableException) {
             failed(s, Phase.StoreUnreadable)
         } catch (e: Exception) {
@@ -116,7 +128,7 @@ object AgentRuntime {
 
     private fun failed(s: CoroutineScope, phase: Phase) {
         host?.close()
-        host = null; relay = null; lan = null
+        host = null; relay = null; lan = null; backend = null; watcher = null
         s.cancel()
         scope = null // the next start() tries again
         _state.update { State(phase = phase) }
@@ -125,12 +137,13 @@ object AgentRuntime {
     /** Says bye to the parents and stops everything; always completes the teardown, each step bounded. */
     suspend fun stop() = lifecycle.withLock {
         val s = scope ?: return@withLock
-        val h = host; val r = relay; val l = lan; val cb = network
+        val h = host; val r = relay; val l = lan; val cb = network; val b = backend
         // Out first: nothing new (network events, peer changes) reaches the old instances
-        scope = null; host = null; relay = null; lan = null; network = null
+        scope = null; host = null; relay = null; lan = null; network = null; backend = null; watcher = null
         withContext(NonCancellable) {
             try {
                 cb?.let { runCatching { app.getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) } }
+                runCatching { b?.saveNow() } // the game time counted since the last save
                 h?.cancelPairing()
                 withTimeoutOrNull(2_500) { h?.shutdown() }
                 withTimeoutOrNull(2_000) { r?.stop() }
@@ -155,6 +168,7 @@ object AgentRuntime {
         val h = host ?: return@withLock
         val peers = h.peerList
         _state.update { it.copy(peers = peers) }
+        refreshPlay()
         // Relay routes exist only for paired parents: with none there is nothing to register
         if (peers.isEmpty()) relay?.stop() else relay?.start()
     }
@@ -187,6 +201,29 @@ object AgentRuntime {
     }
 
     fun clearMessage() = _state.update { it.copy(message = null) }
+
+    // ---------------- play (C3): the screen's and the block page's view ----------------
+
+    /** Game time left today (null = no limit), whether the child asked, how many parents and games there are. */
+    data class PlayUi(val minutesLeft: Int? = null, val asked: Boolean = false, val parents: Int = 0, val tick: Long = 0)
+
+    @Volatile var backend: PlayBackend? = null
+        private set
+    @Volatile var watcher: Watcher? = null
+        private set
+    private val _play = MutableStateFlow(PlayUi())
+    val play: StateFlow<PlayUi> = _play.asStateFlow()
+
+    fun refreshPlay() {
+        val b = backend
+        _play.update {
+            PlayUi(b?.minutesLeft(), b?.asked == true, _state.value.peers.size, it.tick + 1)
+        }
+    }
+
+    fun blockReason(pkg: String?): BlockReason? = backend?.blockReason(pkg)
+
+    fun askForMoreTime(): AskResult = backend?.askForMoreTime() ?: AskResult.NotBlocked
 
     // ---------------- the home network ----------------
 

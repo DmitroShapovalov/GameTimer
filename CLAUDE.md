@@ -129,7 +129,12 @@ shared/                    Protocol v2 core in Kotlin Multiplatform (jvm, androi
                            requests + rid cache, §5 ordering via RequestOrigin, /v2/pair with the two-phones rule,
                            peers / roles, publish + push wake-ups, route claims, discovery tags, known networks).
                            The app plugs in AgentBackend, PairingUi, AgentStore and a FrameTransport per connection;
-                           StrictJson = I-JSON parsing. Tests: commonTest (virtual time, also on the iOS simulator);
+                           StrictJson = I-JSON parsing.
+                           play/ = the phone's rules (C3, docs/protocol.md §7.4): PlayBackend (an AgentBackend with
+                           timer / schedule / history / apps: game time counts only while a limited app is in front,
+                           `paused` otherwise; time's up blocks the limited apps until a parent acts; the schedule's
+                           daily allowance; a parent's + / "yes" past the schedule), ScheduleRules (the PC's
+                           evaluator), PlayPlatform (time, apps, storage from the app). Tests: commonTest (virtual time, also on the iOS simulator);
                            jvmTest runs it behind a Ktor CIO WebSocket server (TestAgentServer + SimBackend) against
                            the Kotlin hub client and the C# gt-testhub (-PcsharpHub).
                            RelayClient (+ RelayFrames) = a port of the C# RelayClient (§10.2, wake-ups §10.6),
@@ -146,10 +151,17 @@ child/                     Phase C: the agent on the child's phone (com.gametime
   ParentPin.kt             Parent PIN (owner's decision: not the phone's PIN): PBKDF2, 5 tries then 30 s..1 h lock
                            (monotonic within a boot); ParentUnlock = 5 min while on screen
   LanServer.kt             Ktor CIO on 5123: /v2 and /v2/pair, LAN addresses only, no Origin
-  ChildBackend.kt          C2: info + a §7.1 state (nothing running), no capabilities yet (C3 brings timer etc.)
-  MainActivity.kt          Compose: first-run PIN, status (relay / home network), parents, pairing QR (zxing) +
-                           the code dialog, battery exemption. en / ru / nl / uk
-  spike/                   The C0 spike's code (blocking, device admin, strict mode), not compiled; back in C3
+  AndroidPlay.kt           PlayPlatform for the phone (local time, monotonic clock, launchable apps, play.json),
+                           Grants (usage / overlay / battery / admin / accessibility), StrictMode (on, pause 10 min)
+  Watcher.kt               The app in front from usage events (700 ms while the screen is on) → PlayBackend.tick;
+                           a blocked limited game gets BlockActivity (once per visit, retried after 2 s)
+  BlockActivity.kt         "Time's up" / "Not now" + "Ask for more time"; closes itself once allowed again
+  GuardService.kt          Strict mode (from the C0 spike): instant block via accessibility events, closes settings
+                           screens showing the app's name; AdminReceiver (device admin: no uninstall)
+  MainActivity.kt          Compose: first-run PIN, status (relay / home network), today's game time, limits
+                           (grants, strict mode — every button behind the PIN), parents, pairing QR (zxing) + the
+                           code dialog, battery exemption. en / ru / nl / uk
+  spike/                   The C0 spike's code as it was (reference only, not compiled)
 android/                   Parent app (Kotlin, Jetpack Compose, minSdk 26, applicationId com.gametimer.parent):
   HubStore.kt              hub key (AES-GCM wrapped by an Android Keystore key) + paired PCs, in noBackupFilesDir
   LinkHub.kt               App-wide: the hub key, one AgentLink per PC (with the relay path, RelayPath.DEFAULT_URL;

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GameTimer</string>
-    <string name="home_title">Ваши компьютеры</string>
+    <string name="home_title">Ваши устройства</string>
     <string name="home_empty">Пока нет устройств. На ПК откройте Настройки → Подключить телефон, на телефоне ребёнка — GameTimer Child → Подключить телефон родителя. Затем отсканируйте QR-код.</string>
     <string name="add_pc">Добавить устройство</string>
     <string name="status_online">В сети</string>
@@ -11,7 +11,7 @@
     <string name="status_offline">Не в сети</string>
     <string name="status_refused">Этот телефон больше не подключён к ПК</string>
     <string name="status_wrong_device">Ответило другое устройство — не ваш ПК</string>
-    <string name="status_revoked">Удалён на ПК</string>
+    <string name="status_revoked">Удалён на устройстве</string>
     <string name="remove">Удалить</string>
     <string name="remove_confirm">Удалить %1$s с этого телефона?</string>
     <string name="cancel">Отмена</string>
@@ -38,8 +38,8 @@
     <string name="start">Старт</string>
     <string name="stop">Стоп</string>
     <string name="minutes">Минуты</string>
-    <string name="request_refused">ПК отказал: %1$s</string>
-    <string name="request_gave_up">Нет ответа от ПК</string>
+    <string name="request_refused">Устройство отказало: %1$s</string>
+    <string name="request_gave_up">Нет ответа от устройства</string>
     <string name="identity_unavailable">Защищённое хранилище телефона сейчас недоступно. Перезапустите приложение; если не поможет — перезагрузите телефон.</string>
     <string name="identity_reset">Android сбросил ключ этого телефона (например, после отключения блокировки экрана). Подключите компьютеры заново.</string>
     <string name="err_not_running">таймер не запущен</string>
@@ -72,8 +72,8 @@
     <string name="sched_limit">Расписание: время на сегодня исчерпано</string>
     <string name="save">Сохранить</string>
     <string name="saved">Сохранено</string>
-    <string name="conflict">Пока вы редактировали, изменили на ПК или другой родитель — загружены текущие значения. Проверьте и сохраните снова.</string>
-    <string name="offline_hint">ПК не в сети — изменения сейчас не сохранить.</string>
+    <string name="conflict">За это время изменено на устройстве или другим родителем — загружены текущие значения. Проверьте и сохраните снова.</string>
+    <string name="offline_hint">Устройство не в сети — изменения сейчас не сохранить.</string>
     <string name="set_action">Когда время вышло</string>
     <string name="set_language">Язык на ПК</string>
     <string name="set_thresholds">Цвета предупреждения (осталось минут)</string>
@@ -91,7 +91,7 @@
     <string name="no_alerts">Сигналов нет</string>
     <string name="err_settings">Проверьте значения: пороги 1–1440, цвета в виде #RRGGBB, сигналы 1–1440 без повторов.</string>
     <string name="sched_enable">Расписание на неделю</string>
-    <string name="sched_hint">Нажмите на день, чтобы изменить его. ПК получит изменения после сохранения.</string>
+    <string name="sched_hint">Нажмите на день, чтобы изменить его. Устройство получит изменения после сохранения.</string>
     <string name="hours_short">ч</string>
     <string name="sched_off">Без игр</string>
     <string name="sched_no_limit">Без лимита</string>
@@ -109,7 +109,7 @@
     <string name="sched_check">Проверьте</string>
     <string name="sched_bad_window">Конец должен быть позже начала (через полночь нельзя).</string>
     <string name="sched_limit_over_window">Лимит больше разрешённых часов: игра закончится по часам.</string>
-    <string name="err_schedule">ПК не принял расписание: проверьте часы и лимиты.</string>
+    <string name="err_schedule">Устройство не приняло расписание: проверьте часы и лимиты.</string>
     <string name="history_empty">Событий пока нет</string>
     <string name="load_more">Загрузить ещё</string>
     <string name="hist_all">Все</string>
@@ -128,7 +128,7 @@
     <string name="ev_closed">Приложение закрыли во время работы</string>
     <string name="ev_tampered">Обнаружено вмешательство</string>
     <string name="ev_updated">Закрыто для обновления</string>
-    <string name="who_pc">На ПК</string>
+    <string name="who_pc">На устройстве</string>
     <string name="who_system">Система</string>
     <string name="this_phone">этот телефон</string>
     <string name="peer_sub">%1$s · был(а) %2$s</string>
@@ -234,4 +234,11 @@
     <string name="ev_time_requested">Попросил ещё времени</string>
     <string name="ev_time_request_declined">Отказал в дополнительном времени</string>
     <string name="no_controls">Этим устройством пока нельзя управлять отсюда: ограничения времени для телефонов появятся в следующей версии. Оно подключено, а его родителями можно управлять в разделе «Ещё».</string>
+    <string name="st_paused">На паузе (игра не открыта)</string>
+    <string name="tab_games">Игры</string>
+    <string name="loading">Загрузка…</string>
+    <string name="games_hint">Отметьте приложения, которые считаются играми: таймер и расписание считают и ограничивают только их. Всё остальное (звонки, сообщения, школьные приложения) работает всегда.</string>
+    <string name="games_count">Ограничено: %1$d</string>
+    <string name="games_search">Поиск</string>
+    <string name="games_saved">Сохранено</string>
 </resources>
