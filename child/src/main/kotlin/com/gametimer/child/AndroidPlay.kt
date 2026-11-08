@@ -13,6 +13,7 @@ import com.gametimer.play.AppEntry
 import com.gametimer.play.LocalNow
 import com.gametimer.play.PlayData
 import com.gametimer.play.PlayPlatform
+import com.gametimer.play.Protection
 import java.io.File
 import java.io.IOException
 import java.time.ZonedDateTime
@@ -29,8 +30,9 @@ class AndroidPlayPlatform(context: Context) : PlayPlatform {
     private val file = File(app.noBackupFilesDir, "play.json")
     private val json = Json { ignoreUnknownKeys = true }
 
-    override fun now(): LocalNow {
-        val z = ZonedDateTime.now()
+    override fun now(): LocalNow = local(ZonedDateTime.now())
+
+    private fun local(z: ZonedDateTime): LocalNow {
         return LocalNow(
             epochMillis = z.toInstant().toEpochMilli(),
             date = z.toLocalDate().toString(),
@@ -39,6 +41,10 @@ class AndroidPlayPlatform(context: Context) : PlayPlatform {
             iso = z.withNano(0).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
         )
     }
+
+    override fun at(epochMillis: Long): LocalNow = local(ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(epochMillis), java.time.ZoneId.systemDefault()))
+
+    override fun zoneId(): String = java.time.ZoneId.systemDefault().id
 
     override fun elapsedMillis(): Long = SystemClock.elapsedRealtime()
 
@@ -84,6 +90,15 @@ class AndroidPlayPlatform(context: Context) : PlayPlatform {
 data class Grants(val usage: Boolean, val overlay: Boolean, val battery: Boolean, val admin: Boolean, val accessibility: Boolean) {
     /** Blocking works (about a second after a game opens). */
     val canBlock: Boolean get() = usage && overlay
+
+    /** As the play logic names them ([Protection]), for C4's reports. */
+    val present: Set<String>
+        get() = buildSet {
+            if (usage) add(Protection.USAGE)
+            if (overlay) add(Protection.OVERLAY)
+            if (accessibility) add(Protection.ACCESSIBILITY)
+            if (admin) add(Protection.ADMIN)
+        }
 
     companion object {
         fun of(context: Context): Grants {

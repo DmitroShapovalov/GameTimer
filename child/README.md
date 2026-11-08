@@ -18,8 +18,18 @@ controls, like the Windows PC: the same protocol (docs/protocol.md §7.4), the s
 - **Strict mode** (optional, behind the parent PIN): with Device admin and the accessibility service, a game is
   covered the moment it opens, and the settings screens that would switch the app off are closed. Pause it for
   10 minutes with the PIN to change settings.
-- **Known gap until C4**: moving the phone's date or time does nothing, but a reboot after moving the date
-  starts a fresh day. C4 will tell the parents about clock changes, reboots and switched-off permissions.
+- **Clock**: moving the phone's date, time or time zone gains nothing; once online, the phone checks its clock
+  against the relay's time, so a moved date plus a reboot gains nothing either (only fully offline, until it is next online).
+
+## Parents see tampering (C4)
+
+The parent app shows it on the phone's Status page and in its History, and notifies (category "Suspicious", also
+away from home through push):
+- a permission the limits need was switched off (usage access, display over other apps; with strict mode on also
+  device admin and the accessibility service) — until it is back, the Status page says the limits can't work;
+- the clock or the time zone was changed, or the clock is off (checked against the relay's time);
+- the app was force-stopped (shown when it runs again, as "closed" on the PC); a reboot is listed in History.
+A force-stopped or uninstalled app simply goes offline in the parent app.
 
 ## What it does
 
@@ -61,6 +71,9 @@ controls, like the Windows PC: the same protocol (docs/protocol.md §7.4), the s
 8. Schedule: set today's limit to a few minutes and check it starts by itself and blocks when used up.
 9. Strict mode: grant Device admin and the accessibility service, turn it on (PIN), then try as the child to
    open App info → Force stop / Uninstall: you're sent to the home screen. Pause (PIN) to change settings.
+10. Tampering (C4): switch off Display over other apps (strict mode off): the parent's phone notifies and the
+    Status page shows the warning; switch it on again. Change the time zone in Settings, and set the time by
+    hand 10 minutes off with mobile data on: both are notified. Force stop the app, open it again: "force-stopped".
 
 Things to note in the report: anything that didn't connect, how long it took to come back online after a network
 change or a reboot, and whether the phone stays reachable after an hour in the pocket (battery manager).
@@ -95,8 +108,20 @@ change or a reboot, and whether the phone stays reachable after an hour in the p
 - **Строгий режим** (по желанию, под родительским PIN): с администратором устройства и спецвозможностями игра
   закрывается в момент открытия, а экраны настроек, которыми можно отключить приложение, закрываются. Чтобы поменять
   настройки, поставьте его на паузу на 10 минут (PIN).
-- **Известная дыра до C4**: перевод даты или времени на телефоне ничего не даёт, но перезагрузка после перевода
-  даты начинает новый день. C4 будет сообщать родителям о смене часов, перезагрузках и отключённых разрешениях.
+- **Часы**: перевод даты, времени или часового пояса ничего не даёт; в сети телефон сверяет часы со временем
+  relay, так что перевод даты с перезагрузкой тоже ничего не даёт (только совсем без интернета, до следующего выхода в сеть).
+
+## Родители видят обход защиты (C4)
+
+Родительское приложение показывает это на странице «Статус» телефона и в «Истории» и присылает уведомление
+(категория «Подозрительное», вне дома тоже, через push):
+- отключили разрешение, нужное для ограничений (история использования, показ поверх других приложений; при
+  строгом режиме ещё администратор устройства и спецвозможности) — пока его не вернут, «Статус» предупреждает, что
+  ограничения не работают;
+- перевели часы или сменили часовой пояс, или часы сбиты (сверка со временем relay);
+- приложение остановили принудительно (видно, когда оно снова запустится, как «закрыли» на ПК); перезагрузка видна в
+  «Истории».
+Принудительно остановленное или удалённое приложение в родительском приложении просто становится «не в сети».
 
 ## Что умеет
 
@@ -140,6 +165,10 @@ change or a reboot, and whether the phone stays reachable after an hour in the p
 9. Строгий режим: выдай администратора устройства и спецвозможности, включи его (PIN), затем как ребёнок попробуй
    открыть «О приложении» → «Остановить» / «Удалить»: тебя выкинет на домашний экран. Пауза (PIN) — чтобы поменять
    настройки.
+10. Обход защиты (C4): отключи «Показ поверх других приложений» (строгий режим выключен) — на телефон родителя
+    придёт уведомление, на «Статусе» появится предупреждение; включи обратно. Смени часовой пояс в настройках и
+    выставь время вручную на 10 минут неверно при включённом мобильном интернете — придут оба уведомления.
+    Останови приложение принудительно и открой снова — «остановили принудительно».
 
 Что записать в отчёт: что не подключилось, сколько времени занимает возврат в сеть после смены сети или перезагрузки,
 и остаётся ли телефон доступен через час в кармане (менеджер батареи).

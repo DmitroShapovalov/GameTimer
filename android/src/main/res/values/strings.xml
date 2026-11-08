@@ -241,4 +241,18 @@
     <string name="games_count">Limited: %1$d</string>
     <string name="games_search">Search</string>
     <string name="games_saved">Saved</string>
+    <!-- C4: the phone's tamper events -->
+    <string name="ev_protection_off">Protection switched off: %1$s</string>
+    <string name="ev_protection_back">Protection back on: %1$s</string>
+    <string name="ev_clock_changed">The clock was changed by %1$d min</string>
+    <string name="ev_zone_changed">The time zone was changed</string>
+    <string name="ev_clock_wrong">The clock is off by %1$d min (the right time is used)</string>
+    <string name="ev_rebooted">The phone was restarted</string>
+    <string name="ev_force_stopped">GameTimer Child was force-stopped</string>
+    <string name="perm_usage">usage access</string>
+    <string name="perm_overlay">display over other apps</string>
+    <string name="perm_accessibility">accessibility service (strict mode)</string>
+    <string name="perm_admin">device admin (strict mode)</string>
+    <string name="device_missing">Protection is off on the phone: %1$s. The limits can\'t work until it\'s back on.</string>
+    <string name="interruption_phone">GameTimer Child was force-stopped on the phone (%1$s). It works again since it was opened.</string>
 </resources>

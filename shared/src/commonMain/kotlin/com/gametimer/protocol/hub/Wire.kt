@@ -12,7 +12,7 @@ import kotlinx.serialization.json.longOrNull
 internal val PROLOGUE: ByteArray = "GameTimer/2".encodeToByteArray()
 
 internal const val PROTOCOL_MAJOR = 2
-internal const val PROTOCOL_MINOR = 4 // 1: timer.end, timer.setEnd, timer.stop skipScheduleToday; 2: timer.setEnd inSeconds; 3: state.request, timer.answerRequest; 4: timer paused, apps
+internal const val PROTOCOL_MINOR = 5 // 1: timer.end, timer.setEnd, timer.stop skipScheduleToday; 2: timer.setEnd inSeconds; 3: state.request, timer.answerRequest; 4: timer paused, apps; 5: state.device, phone tamper events
 
 internal fun JsonObject.type(): String? = (this["t"] as? JsonPrimitive)?.takeIf { it.isString }?.content
 

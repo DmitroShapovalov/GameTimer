@@ -158,9 +158,18 @@ fun StatusTab(vm: MainViewModel, agent: PairedAgent, link: AgentLink) {
         if (interruption != null) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.interruption, shortDateTime(interruption)))
+                    Text(stringResource(if (phone) R.string.interruption_phone else R.string.interruption, shortDateTime(interruption)))
                     TextButton(onClick = { run { api.acknowledgeInterruption() } }, enabled = online) { Text(stringResource(R.string.dismiss)) }
                 }
+            }
+        }
+        // A phone (protocol minor 5): protection its limits need that is switched off now
+        val missing = ((state?.json?.get("device") as? JsonObject)?.get("missing") as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.orEmpty()
+        if (missing.isNotEmpty()) {
+            val names = missing.map { n -> permissionRes(n)?.let { stringResource(it) } ?: n }
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Text(stringResource(R.string.device_missing, names.joinToString(", ")), Modifier.padding(16.dp))
             }
         }
 

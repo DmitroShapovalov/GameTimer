@@ -1,5 +1,7 @@
 package com.gametimer.child
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkProperties
@@ -107,10 +109,23 @@ object AgentRuntime {
             play.onChanged = { refreshPlay() }
             backend = play
             h.remoteAccess = true // a phone is mostly away from home: control from anywhere is always on
+            // A parent's phone's clock (its ready): checks this phone's clock when the relay can't be reached (C4)
+            h.onHubTime = { t ->
+                val at = android.os.SystemClock.elapsedRealtime()
+                s.launch { play.trustedTime(t, at, fromParent = true) }
+            }
             h.onPeersChanged = { s.launch { onPeersChanged() } }
             h.onPaired = { _state.update { st -> st.copy(pairing = null, message = Message.Paired) } }
             host = h
-            relay = RelayClient(h, scope = s).also { r -> s.launch { r.status.collect { st -> _state.update { it.copy(relay = st) } } } }
+            relay = RelayClient(h, scope = s).also { r ->
+                // The relay's time checks the phone's clock (C4)
+                r.onServerTime = { t ->
+                    val at = android.os.SystemClock.elapsedRealtime()
+                    s.launch { play.trustedTime(t, at) } // off the relay's connect loop (it saves and publishes)
+                }
+                s.launch { r.status.collect { st -> _state.update { it.copy(relay = st) } } }
+            }
+            reportForceStop(play)
             lan = LanServer(h)
             _state.update { it.copy(phase = Phase.Running) }
             onPeersChanged()
@@ -222,6 +237,31 @@ object AgentRuntime {
     }
 
     fun blockReason(pkg: String?): BlockReason? = backend?.blockReason(pkg)
+
+    /**
+     * A force stop since the last start (Android 11+ keeps the reason; before that it goes unseen) is shown to
+     * the parents like the PC's "closed" (C4). The first start only notes where the list stands.
+     */
+    private fun reportForceStop(play: PlayBackend) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        try {
+            val prefs = app.getSharedPreferences("tamper", Context.MODE_PRIVATE)
+            val exits = app.getSystemService(ActivityManager::class.java).getHistoricalProcessExitReasons(null, 0, 16)
+            val seen = prefs.getLong("exitSeen", -1L)
+            val newest = exits.maxOfOrNull { it.timestamp } ?: 0L
+            // An update also stops the app (on Android 11–12 recorded as the user's): not a force stop
+            val updated = app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime
+            if (seen >= 0) {
+                exits.filter {
+                    it.timestamp > seen && it.reason == ApplicationExitInfo.REASON_USER_REQUESTED &&
+                        kotlin.math.abs(it.timestamp - updated) > 5 * 60_000L
+                }.maxByOrNull { it.timestamp }?.let { play.reportClosed(it.timestamp) }
+            }
+            prefs.edit().putLong("exitSeen", maxOf(newest, seen, 0L)).apply()
+        } catch (e: Exception) {
+            // best effort
+        }
+    }
 
     fun askForMoreTime(): AskResult = backend?.askForMoreTime() ?: AskResult.NotBlocked
 

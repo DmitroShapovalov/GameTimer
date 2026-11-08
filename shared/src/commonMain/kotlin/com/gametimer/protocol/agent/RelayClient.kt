@@ -50,6 +50,9 @@ public interface RelaySocket {
 
     /** Idempotent; makes a pending send or receive return or throw promptly. */
     public suspend fun close()
+
+    /** The relay's time at the connect (its HTTP `Date`, epoch milliseconds), if it gave one. */
+    public val serverTime: Long? get() = null
 }
 
 public fun interface RelaySocketFactory {
@@ -89,6 +92,8 @@ public class RelayClient(
 
         /** §10.6: one wake-up per phone in this time; events in between are sent as one trailing wake-up. */
         internal var wakeEvery: Duration = 30.seconds // settable for tests
+        /** The relay takes wake-ups only from a socket connected this long (§10.6, its WakeAfterConnected + margin). */
+        internal val WAKE_AFTER_CONNECTED = 65.seconds
 
         /** Streams on one relay socket, counted here whatever the relay sends (§10.4): 4 waiting + 16 sessions. */
         public const val MAX_STREAMS: Int = AgentHost.MAX_RELAY_PENDING + AgentHost.MAX_SESSIONS
@@ -98,9 +103,17 @@ public class RelayClient(
     private val gate = newHostLock()
     private var job: Job? = null
     @Volatile private var current: Connection? = null
+    /** Wake-ups asked for while no socket was up: token → when (under [gate]). */
+    private val offlineWakes = mutableMapOf<String, Long>()
     private val _status = MutableStateFlow(RelayStatus.Off)
 
     public val status: StateFlow<RelayStatus> = _status.asStateFlow()
+
+    /**
+     * The relay's time at each connect (from TLS-protected HTTP `Date`, whole seconds): the phone agent checks its
+     * clock against it (C4). Called on the connect loop; must not block.
+     */
+    @Volatile public var onServerTime: ((Long) -> Unit)? = null
 
     /** False while the app is stopping: new streams are refused (1008) so no session starts after the bye went out. */
     @Volatile public var acceptStreams: Boolean = true
@@ -109,8 +122,11 @@ public class RelayClient(
         gate.withLock {
             if (job != null) return
             host.relayPeersChanged = { current?.markDirty() }
-            // Not connected: nothing to do (the phones catch up when they next connect)
-            host.relayWake = { tokens -> current?.wake(tokens) }
+            // Not connected: kept until the next socket may wake (a phone asleep would otherwise never hear of it)
+            host.relayWake = { tokens ->
+                val c = current
+                if (c != null) c.wake(tokens) else gate.withLock { tokens.forEach { offlineWakes[it] = host.now } }
+            }
             job = scope.launch { runLoop() }
         }
     }
@@ -139,8 +155,10 @@ public class RelayClient(
             val started = timeSource.markNow()
             try {
                 val socket = withTimeout(CONNECT_TIMEOUT) { connector.connect(url) }
+                socket.serverTime?.let { t -> try { onServerTime?.invoke(t) } catch (e: Exception) { } }
                 val conn = Connection(socket)
                 current = conn
+                gate.withLock { offlineWakes.toMap().also { offlineWakes.clear() } }.let { if (it.isNotEmpty()) conn.queue(it) }
                 try { conn.run() } finally { current = null }
             } catch (e: CancellationException) {
                 currentCoroutineContext().ensureActive() // stopped: out; a connect timeout: retry
@@ -177,9 +195,25 @@ public class RelayClient(
 
         fun markDirty() = lock.withLock { dirty = true }
 
-        /** §10.6: a wake-up per token at most every [wakeEvery]; one too soon is sent when the time is up. */
+        private val connectedAt = timeSource.markNow()
+
+        /** Wake-ups from before this socket ([events]: token → when): sent once the relay takes them. */
+        fun queue(events: Map<String, Long>) = lock.withLock {
+            for ((t, at) in events) wakes[t] = WakeState(timeSource.markNow() - wakeEvery, true, at)
+        }
+
+        /**
+         * §10.6: a wake-up per token at most every [wakeEvery]; one too soon is sent when the time is up. A socket
+         * younger than [WAKE_AFTER_CONNECTED] holds them back (the relay would drop them).
+         */
         fun wake(tokens: List<String>) {
             val eventAt = host.now
+            if (connectedAt.elapsedNow() < WAKE_AFTER_CONNECTED) {
+                lock.withLock {
+                    for (t in tokens) wakes[t] = WakeState(wakes[t]?.last ?: (timeSource.markNow() - wakeEvery), true, eventAt)
+                }
+                return
+            }
             val due = mutableListOf<String>()
             lock.withLock {
                 for (t in tokens) {
@@ -196,6 +230,7 @@ public class RelayClient(
         }
 
         private fun sendPendingWakes() {
+            if (connectedAt.elapsedNow() < WAKE_AFTER_CONNECTED) return
             val due = mutableListOf<Pair<String, Long>>()
             lock.withLock {
                 for ((t, w) in wakes.toList()) {
@@ -452,6 +487,8 @@ public class KtorRelaySocketFactory(private val client: HttpClient = sharedClien
 }
 
 private class KtorRelaySocket(private val session: DefaultClientWebSocketSession) : RelaySocket {
+    override val serverTime: Long? = session.call.response.headers["Date"]?.let { parseHttpDate(it) }
+
     override suspend fun send(frame: ByteArray) = session.send(Frame.Binary(true, frame))
 
     override suspend fun receive(): ByteArray? {
@@ -475,4 +512,24 @@ private class KtorRelaySocket(private val session: DefaultClientWebSocketSession
             withTimeoutOrNull(1.seconds) { session.close(CloseReason(CloseReason.Codes.NORMAL, "")) } ?: session.cancel()
         } catch (e: Exception) { /* gone */ }
     }
+}
+
+private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+/** An HTTP `Date` (IMF-fixdate, `Sun, 08 Nov 2026 12:01:43 GMT`) in epoch milliseconds, or null. */
+internal fun parseHttpDate(value: String): Long? {
+    val m = Regex("""^[A-Za-z]{3}, (\d{2}) ([A-Za-z]{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$""").matchEntire(value.trim()) ?: return null
+    val (dd, mon, yyyy, hh, mi, ss) = m.destructured
+    val month = MONTHS.indexOf(mon) + 1
+    if (month == 0) return null
+    val d = dd.toInt(); val h = hh.toInt(); val min = mi.toInt(); val sec = ss.toInt()
+    if (d !in 1..31 || h > 23 || min > 59 || sec > 60 || yyyy.toInt() !in 2020..2100) return null
+    // Days from 1970-01-01 (days_from_civil)
+    val y = yyyy.toInt() - if (month <= 2) 1 else 0
+    val era = y.floorDiv(400)
+    val yoe = y - era * 400
+    val doy = (153 * (if (month > 2) month - 3 else month + 9) + 2) / 5 + d - 1
+    val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    val days = era.toLong() * 146_097 + doe - 719_468
+    return ((days * 24 + h) * 60 + min) * 60_000L + sec * 1000L
 }

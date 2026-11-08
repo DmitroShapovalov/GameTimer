@@ -45,6 +45,32 @@ class RelayClientTests {
         }
     }
 
+    /** [seconds] of virtual time with the relay pinging now and then (the agent doesn't take it for dead). */
+    private suspend fun kotlinx.coroutines.test.TestScope.keepAlive(relay: FakeRelay, seconds: Int) {
+        repeat(seconds / 20) { advanceTimeBy(20.seconds); relay.toAgent.send(byteArrayOf(RelayFrames.PING, 1)) }
+        advanceTimeBy((seconds % 20).seconds + 1.seconds)
+    }
+
+    @Test
+    fun aWakeUpAskedForWhileDisconnectedIsSentAfterTheNextConnect() = agentTest { f ->
+        f.host.remoteAccess = true
+        val (key, _) = f.pair("B")
+        val (b, _) = f.connect(key)
+        b.request("push.set", buildJsonObject { put("token", "token-B") }, withRid = true)
+        b.end.close()
+        eventually { f.host.liveSessionCount == 0 }
+        val rig = Rig(f)
+        rig.client.start()
+        // Before the socket is up (the agent starting, the phone offline): kept
+        f.host.publish("ev.history", buildJsonObject { put("event", buildJsonObject { put("type", "tampered"); put("source", "system") }) })
+        val relay = rig.socket()
+        relay.next(RelayFrames.REGISTER)
+        keepAlive(relay, 66)
+        assertEquals("token-B", relay.next(RelayFrames.WAKE).copyOfRange(1, 8).decodeToString())
+        delay(1)
+        rig.client.stop()
+    }
+
     private class Rig(val f: AgentFixture) {
         val sockets = Channel<FakeRelay>(Channel.UNLIMITED)
         var connects = 0
@@ -150,6 +176,15 @@ class RelayClientTests {
         val relay = rig.socket()
         relay.next(RelayFrames.REGISTER)
         fun stopped() = buildJsonObject { put("event", buildJsonObject { put("type", "stopped"); put("source", "pc") }) }
+        // The relay takes wake-ups from a socket after a minute: one asked for earlier waits until then
+        f.host.publish("ev.history", stopped())
+        runCurrent()
+        assertTrue(relay.fromAgent.tryReceive().getOrNull()?.get(0) != RelayFrames.WAKE)
+        keepAlive(relay, 66)
+        assertEquals("token-B", relay.next(RelayFrames.WAKE).copyOfRange(1, 8).decodeToString())
+        advanceTimeBy(31.seconds)
+        runCurrent()
+        while (relay.fromAgent.tryReceive().isSuccess) { /* pings */ }
 
         f.host.publish("ev.history", stopped()) // at once
         f.host.publish("ev.history", stopped()) // held back

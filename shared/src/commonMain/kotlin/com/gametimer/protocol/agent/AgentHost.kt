@@ -55,9 +55,10 @@ public class AgentHost(
         public const val PROTOCOL_MAJOR: Int = 2
         /**
          * 1: timer.end, timer.setEnd, …; 2: timer.setEnd inSeconds; 3: state.request, timer.answerRequest (as the C#
-         * agent); 4: timer state `paused` and the `apps` capability (the phone agent, §6 / §7).
+         * agent); 4: timer state `paused` and the `apps` capability (the phone agent, §6 / §7); 5: `state.device` and
+         * the phone's tamper events (§7.4).
          */
-        public const val PROTOCOL_MINOR: Int = 4
+        public const val PROTOCOL_MINOR: Int = 5
 
         // §3 limits
         public val HANDSHAKE_TIMEOUT: Duration = 5.seconds
@@ -197,6 +198,12 @@ public class AgentHost(
     /** The relay client's own hooks (next to the app's), set while it runs. */
     @Volatile internal var relayPeersChanged: (() -> Unit)? = null
     @Volatile internal var relayWake: ((List<String>) -> Unit)? = null
+
+    /**
+     * A paired hub's clock from its `ready` (minor 5, epoch ms), at each session: the phone agent checks its own
+     * clock against it (§7.4). Called on the session's coroutine; must not block.
+     */
+    @Volatile public var onHubTime: ((Long) -> Unit)? = null
 
     /** The paired hubs (without their push tokens, which never leave the host). */
     public val peerList: List<Peer> get() = lock.withLock { peers.map { it.forApp() } }
