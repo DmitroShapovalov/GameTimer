@@ -50,11 +50,11 @@ A force-stopped or uninstalled app simply goes offline in the parent app.
 
 ## Try it (owner's check for C2 + C3)
 
-1. Download `gametimer-child-debug-apk` from the PR's "Android app" CI run (a zip: unzip it) and install it on the
-   test phone. Steps 1–6 (connecting) work with the released parent app. Steps 7–9 (limits) need the parent
-   app from the same CI run (`gametimer-parent-debug-apk`, it has the Games page): it can't be installed over the
-   released one (a different signing key), so uninstall that first and pair the PC again afterwards — or use
-   another phone as the parent's.
+1. From v2.0: install `GameTimerChild-….apk` from the release on the test phone and update the parent app from the
+   same release (it has the Games page). Before v2.0 (a PR build): `gametimer-child-debug-apk` and
+   `gametimer-parent-debug-apk` from the PR's "Android app" CI run (zips: unzip them); the debug parent app can't be
+   installed over the released one (a different signing key), so uninstall that first and pair the PC again
+   afterwards — or use another phone as the parent's.
 2. On the test phone: open GameTimer Child, choose a parent PIN, allow notifications, and tap **Allow** for running
    without battery restrictions.
 3. With both phones on the same Wi-Fi: **Connect a parent's phone** → PIN → a QR code. In the parent app: **Add** →
@@ -82,7 +82,10 @@ change or a reboot, and whether the phone stays reachable after an hour in the p
 
 - Forgotten PIN: Settings → Apps → GameTimer Child → Storage → Clear data (the parents' phones then have to connect
   again; a child can do the same, which C4 will report to the parents).
-- Each CI run signs with its own debug key: uninstall before installing a newer build.
+- Releases are signed with the project's key and update in place. Each CI run signs with its own debug key:
+  uninstall before installing a newer CI build, and don't mix CI builds with releases: moving between them means
+  uninstalling (with strict mode on, switch device admin off first) and connecting the parents' phones again (the
+  agent gets a new key).
 
 ---
 
@@ -141,11 +144,11 @@ change or a reboot, and whether the phone stays reachable after an hour in the p
 
 ## Как проверить (твоя проверка C2 + C3)
 
-1. Скачай `gametimer-child-debug-apk` из CI-прогона «Android app» в PR (это zip — распакуй) и установи на тестовый
-   телефон. Шаги 1–6 (подключение) работают с выпущенным родительским приложением. Для шагов 7–9 (ограничения) нужно
-   родительское приложение из того же прогона (`gametimer-parent-debug-apk`, в нём есть страница «Игры»): поверх
-   выпущенного оно не ставится (другой ключ подписи), поэтому сначала удали выпущенное и потом снова подключи ПК — или
-   возьми другой телефон в роли родительского.
+1. Начиная с v2.0: установи `GameTimerChild-….apk` из релиза на тестовый телефон и обнови родительское приложение из
+   того же релиза (в нём есть страница «Игры»). До v2.0 (сборка из PR): `gametimer-child-debug-apk` и
+   `gametimer-parent-debug-apk` из CI-прогона «Android app» в PR (это zip — распакуй); отладочное родительское
+   приложение поверх выпущенного не ставится (другой ключ подписи), поэтому сначала удали выпущенное и потом снова
+   подключи ПК — или возьми другой телефон в роли родительского.
 2. На тестовом телефоне: открой GameTimer Child, задай родительский PIN, разреши уведомления и нажми **Разрешить** для
    работы без ограничений батареи.
 3. Оба телефона в одной сети Wi-Fi: **Подключить телефон родителя** → PIN → QR-код. В родительском приложении:
@@ -177,4 +180,7 @@ change or a reboot, and whether the phone stays reachable after an hour in the p
 
 - Забыт PIN: Настройки → Приложения → GameTimer Child → Память → Очистить данные (телефоны родителей придётся подключить
   заново; ребёнок может сделать то же самое — об этом C4 будет сообщать родителям).
-- Каждый CI-прогон подписывает своим отладочным ключом: перед установкой новой сборки удали старую.
+- Релизы подписаны ключом проекта и обновляются поверх. Каждый CI-прогон подписывает своим отладочным ключом: перед
+  установкой новой CI-сборки удали старую и не смешивай CI-сборки с релизами: переход между ними — это удаление (при
+  строгом режиме сначала отключи администратора устройства) и повторное подключение телефонов родителей (у агента
+  будет новый ключ).

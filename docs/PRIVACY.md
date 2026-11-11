@@ -30,6 +30,26 @@ The technical details are in [`protocol.md`](protocol.md) (§9 discovery, §10.5
 - Everything else the app shows (the timer, schedule, settings, history) is read from the PC when you
   open it.
 
+## On the child's phone (GameTimer Child)
+
+- The agent's key pair and the paired parents (names, roles, public keys, push tokens), sealed with a key in
+  the Android Keystore; the parent PIN as a salted PBKDF2 hash. Android backup is turned off for the app.
+- The play state: the timer, the schedule, game time per day for the last 8 days, which apps are limited, up to
+  500 history events, which permissions the phone had (so losing one can be reported), its time zone and the
+  latest time seen.
+- **What it looks at, on the phone only.** Usage access tells it which app is in front (to count game time and
+  cover a blocked game); with strict mode, the accessibility service sees which window opens and looks for the
+  app's own name on settings screens. Neither the apps used nor any screen content is stored or sent anywhere:
+  parents see only the game time, the timer state and the history events.
+- **What parents see.** The phone's device name; the list of launchable apps on the phone (names and package
+  ids), so they can pick the games; the game time and timer; the phone's local time with its UTC offset (which
+  hints at its time zone); the history (including "permission switched off", "clock changed", "force
+  stopped", "restarted").
+- **The relay** is always on for the phone (unlike the PC): the phone keeps a connection to it, so the relay
+  sees the phone's IP address and when it is online, as described below for a PC — with a phone's mobile IP
+  that can roughly tell where it is. The phone also reads the relay's time (the HTTP `Date` header) to check its
+  own clock; that sends nothing extra. The phone itself doesn't use Google's push service.
+
 ## Between the phone and the PC
 
 Everything between the parent app and a PC is end-to-end encrypted (Noise, keys pinned at pairing). At
@@ -81,7 +101,7 @@ US companies acting under their own privacy policies:
 
 ## At home only
 
-With "Control from anywhere" off, nothing leaves the home network: the phone finds the PC on the local
+With "Control from anywhere" off on a PC, nothing about that PC leaves the home network: the phone finds the PC on the local
 network and talks to it directly. No outside service is involved.
 
 ## Questions

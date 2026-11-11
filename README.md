@@ -15,6 +15,7 @@ A game time limiter for Windows — designed for parents who want to manage thei
 - **Windows notifications, only what matters to the child** — when time is almost up (the red zone) and when a parent changes the time or the schedule from a phone; never over a full-screen game (the timer on screen pulses instead); can be turned off
 - **Draggable overlay position** — position the timer anywhere on screen via a visual preview
 - **Parent app for Android** — the timer, the weekly schedule, the settings and the history of each PC on your phone, end-to-end encrypted, paired by QR code; notifications when time is up or something looks wrong
+- **The child's phone too (Android)** — GameTimer Child limits the games you pick on the child's phone: game time counts only while a game is open, the same daily schedule, a block page with "Ask for more time", an optional strict mode, and a report to the parents when protection is switched off or the clock is changed
 - **Control from anywhere** (optional, off by default) — the same app over mobile data or another Wi-Fi, through a relay that can't read anything; no accounts
 - **Daily schedule** — an optional per-weekday time budget and allowed-hours window; GameTimer starts the day's allowance automatically and locks when it runs out or the hours end (off by default)
 - **Multilingual UI** — English (default), Russian, Dutch and Ukrainian, switchable at runtime
@@ -22,7 +23,8 @@ A game time limiter for Windows — designed for parents who want to manage thei
 
 ## Download
 
-Download the latest Windows installer and the Android parent app (`.apk`) from the [Releases](../../releases/latest) page.
+Download the latest Windows installer, the Android parent app (`GameTimerParent-….apk`) and, for a child's Android phone,
+GameTimer Child (`GameTimerChild-….apk`) from the [Releases](../../releases/latest) page.
 
 **Updating.** Just run the new installer while GameTimer is running. Setup asks the app to close; if a
 timer is running or the daily schedule is on, the app first asks for Windows Hello (so a child can't
@@ -91,6 +93,24 @@ when the app is closed: at home through a quiet background connection (Wi-Fi), a
 
 Everything between the app and the PC is end-to-end encrypted. If the PC gets a new address on your network, the app finds
 it again by itself. To remove a PC from the phone, use the ⋮ menu on its page.
+
+## Child's phone (Android)
+
+GameTimer Child runs on the child's phone (Android 10 or newer) and is controlled from the same parent app, like a PC.
+Install `GameTimerChild-….apk` on the child's phone, choose a **parent PIN** (not the phone's own PIN, which the child
+knows), and connect a parent's phone by QR code on the same Wi-Fi. A phone is reachable from anywhere through the relay
+(always on: phones are mostly away from home).
+
+- **Games**: in the parent app, open the phone → More → **Games** and tick the apps that count as games. Only these are
+  limited; calls, messages and school apps always work.
+- **Game time** counts only while a game is open (the parent app shows "Paused" otherwise); the daily **schedule** works
+  as on the PC. When the time is up, the games show a block page with **Ask for more time**.
+- **Strict mode** (optional, behind the parent PIN): with device admin and the accessibility service, a game is covered
+  the moment it opens, and the settings screens that would switch the app off are closed.
+- **Tampering is reported**: when a permission the limits need is switched off, the clock or time zone is changed, or
+  the app is force-stopped, the parents are notified (also away from home) and the Status page says so.
+
+Setup, permissions and what Android lets a child get around: [`child/README.md`](child/README.md).
 
 ## Control from anywhere
 

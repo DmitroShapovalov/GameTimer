@@ -1,6 +1,7 @@
 // GameTimer Child — Phase C: the agent on the child's phone (protocol v2 agent side from :shared).
-// C2: a foreground service with the AgentHost, the relay (always on) and a LAN server on Wi-Fi, pairing by
-// QR behind a parent PIN. Enforcement (blocking games) comes in C3; the C0 spike's code is kept in spike/.
+// A foreground service with the AgentHost, the relay (always on) and a LAN server on Wi-Fi, pairing by QR behind
+// a parent PIN (C2); game limits, block page and strict mode (C3); tamper reports (C4). Released with the parent
+// app from the same tag (release.yml), signed with the same release key.
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -15,12 +16,27 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: 1
-        versionName = (findProperty("appVersionName") as String?) ?: "0.2.0-dev"
+        versionName = (findProperty("appVersionName") as String?) ?: "2.0.0-dev"
+    }
+
+    // As the parent app: the release key only from CI's environment; without it a release build stays unsigned
+    val keystore = System.getenv("ANDROID_KEYSTORE_PATH")
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storeType = "pkcs12"
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false // no R8: Ktor and the libsodium JNI bindings would need keep rules
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
