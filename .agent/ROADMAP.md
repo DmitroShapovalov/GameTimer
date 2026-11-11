@@ -278,12 +278,12 @@ Owner's decisions for C4 (2026-11-08):
 
 | # | Step | Status |
 |---|---|---|
-| C0 | Spike on the test phone: usage access + block page, then strict mode; delay (poll vs accessibility), what a child can switch off, battery | in review (first build PR #55) |
+| C0 | Spike on the test phone: usage access + block page, then strict mode; delay (poll vs accessibility), what a child can switch off, battery | replaced by the agent app (C2–C3; PR #55 closed, code in `child/spike/`) |
 | C1 | Agent core in `shared` (Noise responder, pairing, peers, requests, events); Kotlin ↔ Kotlin and C# ↔ Kotlin interop | ✓ (PR #57) |
 | C2 | Android agent app: foreground service, relay + LAN, pairing QR on the child's phone | ✓ (PR #58; owner's device check pending) |
 | C3 | Enforcement: timer, schedule, game list, block page, strict mode, ask for more time | ✓ (PR #59; owner's device check pending) |
-| C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | in review ✎ (protocol minor 5: `state.device`, tamper events; relay time checks the clock) |
-| C5 | Acceptance + release (v2.0) | ☐ |
+| C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | ✓ (PR #60; owner's device check pending) |
+| C5 | Acceptance + release (v2.0) | in progress ✎ (release.yml builds and signs GameTimer Child with the parent app's key; README, PRIVACY; then the owner's device session per `child/README.md` 1–10 and the v2.0 tag) |
 
 ## Backlog / known gaps
 
