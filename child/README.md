@@ -28,7 +28,8 @@ away from home through push):
 - a permission the limits need was switched off (usage access, display over other apps; with strict mode on also
   device admin and the accessibility service) — until it is back, the Status page says the limits can't work;
 - the clock or the time zone was changed, or the clock is off (checked against the relay's time);
-- the app was force-stopped (shown when it runs again, as "closed" on the PC); a reboot is listed in History.
+- the app was force-stopped (shown when it runs again, as "closed" on the PC); a reboot is listed in History;
+- a new app was installed (within about a minute): it is not limited until a parent ticks it under Games.
 A force-stopped or uninstalled app simply goes offline in the parent app.
 
 ## What it does
@@ -74,6 +75,7 @@ A force-stopped or uninstalled app simply goes offline in the parent app.
 10. Tampering (C4): switch off Display over other apps (strict mode off): the parent's phone notifies and the
     Status page shows the warning; switch it on again. Change the time zone in Settings, and set the time by
     hand 10 minutes off with mobile data on: both are notified. Force stop the app, open it again: "force-stopped".
+    Install any app from the store: within about a minute the parent's phone says "New app on the phone".
 
 Things to note in the report: anything that didn't connect, how long it took to come back online after a network
 change or a reboot, and whether the phone stays reachable after an hour in the pocket (battery manager).
@@ -123,7 +125,8 @@ change or a reboot, and whether the phone stays reachable after an hour in the p
   ограничения не работают;
 - перевели часы или сменили часовой пояс, или часы сбиты (сверка со временем relay);
 - приложение остановили принудительно (видно, когда оно снова запустится, как «закрыли» на ПК); перезагрузка видна в
-  «Истории».
+  «Истории»;
+- установили новое приложение (в течение примерно минуты): оно не ограничено, пока родитель не отметит его в «Играх».
 Принудительно остановленное или удалённое приложение в родительском приложении просто становится «не в сети».
 
 ## Что умеет
@@ -171,7 +174,8 @@ change or a reboot, and whether the phone stays reachable after an hour in the p
 10. Обход защиты (C4): отключи «Показ поверх других приложений» (строгий режим выключен) — на телефон родителя
     придёт уведомление, на «Статусе» появится предупреждение; включи обратно. Смени часовой пояс в настройках и
     выставь время вручную на 10 минут неверно при включённом мобильном интернете — придут оба уведомления.
-    Останови приложение принудительно и открой снова — «остановили принудительно».
+    Останови приложение принудительно и открой снова — «остановили принудительно». Установи любое приложение из
+    магазина: примерно через минуту на телефон родителя придёт «Новое приложение на телефоне».
 
 Что записать в отчёт: что не подключилось, сколько времени занимает возврат в сеть после смены сети или перезагрузки,
 и остаётся ли телефон доступен через час в кармане (менеджер батареи).

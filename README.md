@@ -2,6 +2,12 @@
 
 A game time limiter for Windows — designed for parents who want to manage their children's gaming sessions with a transparent, always-on-top countdown overlay.
 
+**What it is, and what it isn't.** GameTimer is a transparent timer for a family that has an agreement about
+game time: the child sees the countdown, the parent sees what happens and is told when something is switched
+off. It runs as a normal app, so a determined child with administrator rights can get around it (the parents
+are told about what the app can notice). For limits that can't be removed, use the operating system's own
+parental controls; details in [`docs/SECURITY.md`](docs/SECURITY.md).
+
 ## Features
 
 - **Overlay timer** — a color-coded countdown displayed on top of any game (including borderless fullscreen)
@@ -94,9 +100,9 @@ when the app is closed: at home through a quiet background connection (Wi-Fi), a
 Everything between the app and the PC is end-to-end encrypted. If the PC gets a new address on your network, the app finds
 it again by itself. To remove a PC from the phone, use the ⋮ menu on its page.
 
-## Child's phone (Android)
+## Child's phone (Android) — beta
 
-GameTimer Child runs on the child's phone (Android 10 or newer) and is controlled from the same parent app, like a PC.
+New in v2.0 and still young: test it on your child's phone before relying on it. GameTimer Child runs on the child's phone (Android 10 or newer) and is controlled from the same parent app, like a PC.
 Install `GameTimerChild-….apk` on the child's phone, choose a **parent PIN** (not the phone's own PIN, which the child
 knows), and connect a parent's phone by QR code on the same Wi-Fi. A phone is reachable from anywhere through the relay
 (always on: phones are mostly away from home).
@@ -109,6 +115,8 @@ knows), and connect a parent's phone by QR code on the same Wi-Fi. A phone is re
   the moment it opens, and the settings screens that would switch the app off are closed.
 - **Tampering is reported**: when a permission the limits need is switched off, the clock or time zone is changed, or
   the app is force-stopped, the parents are notified (also away from home) and the Status page says so.
+- **New apps are reported**: a newly installed app is not limited until you tick it under Games, so the parent app
+  tells you when one appears.
 
 Setup, permissions and what Android lets a child get around: [`child/README.md`](child/README.md).
 

@@ -33,6 +33,7 @@ class Watcher(context: Context, private val backend: PlayBackend) {
 
     private val strict = StrictMode(app)
     private var lastCheck = 0L
+    private var lastApps = -APPS_MS
     private var disconnectedSince: Long? = null
 
     /**
@@ -51,6 +52,11 @@ class Watcher(context: Context, private val backend: PlayBackend) {
             if (disconnectedSince?.let { now - it > 60_000 } == true) present = present - Protection.ACCESSIBILITY
             backend.protection(present, strict.guarding)
         } catch (e: Exception) { }
+        // About every minute: a newly installed app is told to the parents
+        if (force || now - lastApps >= APPS_MS) {
+            lastApps = now
+            try { backend.checkApps() } catch (e: Exception) { }
+        }
     }
 
     suspend fun run() {
@@ -142,5 +148,6 @@ class Watcher(context: Context, private val backend: PlayBackend) {
     private companion object {
         const val POLL_MS = 700L
         const val CHECK_MS = 5_000L
+        const val APPS_MS = 60_000L
     }
 }

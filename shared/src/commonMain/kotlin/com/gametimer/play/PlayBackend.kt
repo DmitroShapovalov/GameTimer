@@ -90,6 +90,7 @@ public class PlayBackend(
         internal const val REQUEST_REPLACEABLE_MS = 15 * 60_000L
         internal const val REQUEST_PAUSE_AFTER_NO_MS = 5 * 60_000L
         internal const val MAX_LIMITED = 500
+        internal const val MAX_NEW_APPS = 10
         internal const val DAYS_KEPT = 8
         internal const val CLOCK_SLACK_MS = 2 * 60_000L
         internal const val PARENT_SLACK_MS = 10 * 60_000L
@@ -546,8 +547,8 @@ public class PlayBackend(
         save = true
     }
 
-    private fun Out.history(now: LocalNow, type: String, source: String, ctx: RequestContext? = null, minutes: Int? = null, mode: String? = null, action: String? = null) {
-        val e = PlayEvent(now.iso, type, source, device = ctx?.hubName, hub = ctx?.hubId, mode = mode, minutes = minutes, action = action)
+    private fun Out.history(now: LocalNow, type: String, source: String, ctx: RequestContext? = null, minutes: Int? = null, mode: String? = null, action: String? = null, app: String? = null) {
+        val e = PlayEvent(now.iso, type, source, device = ctx?.hubName, hub = ctx?.hubId, mode = mode, minutes = minutes, action = action, app = app)
         data = data.copy(history = (data.history + e).takeLast(MAX_HISTORY))
         events += "ev.history" to buildJsonObject { put("event", json.encodeToJsonElement(e)) }
         save = true
@@ -795,6 +796,34 @@ public class PlayBackend(
     // ---------------- apps (the limited games) ----------------
 
     private fun installed(): List<AppEntry> = try { platform.installedApps() } catch (e: Exception) { emptyList() }
+
+    /**
+     * Looks at the phone's apps (the app calls it about every minute): one that wasn't there before is told to the
+     * parents (`appInstalled`, minor 6) — a new game is not limited until a parent ticks it. The first look only
+     * notes where the list stands. At most [MAX_NEW_APPS] events per look.
+     */
+    public fun checkApps() {
+        val installed = installed()
+        if (installed.isEmpty()) return // the list couldn't be read
+        change(null) {
+            val ids = installed.map { it.id }.toSet()
+            val known = data.knownApps
+            if (known == ids) return@change
+            // Those told now become known (the rest at the next looks); a removed app drops out: installed
+            // again, it is told again
+            val added = if (known == null) emptyList() else installed.filter { it.id !in known }.take(MAX_NEW_APPS)
+            data = data.copy(knownApps = if (known == null) ids else (known intersect ids) + added.map { it.id })
+            save = true
+            if (added.isEmpty()) return@change
+            val now = clockNow()
+            for (a in added) {
+                // The name is the app's own text: no control or format characters, a sane length
+                val name = a.name.filter { !it.isISOControl() && it.category != CharCategory.FORMAT }.trim().take(64)
+                history(now, "appInstalled", "system", app = name.ifEmpty { a.id.take(64) })
+            }
+            events += "ev.apps" to buildJsonObject { put("apps", appsJson(installed)) }
+        }
+    }
 
     private fun appsJson(installed: List<AppEntry> = installed()): JsonObject {
         val (limited, rev) = lock.withLock { data.limited to data.appsRev }

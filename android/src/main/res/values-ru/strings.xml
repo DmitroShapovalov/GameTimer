@@ -255,4 +255,6 @@
     <string name="perm_admin">администратор устройства (строгий режим)</string>
     <string name="device_missing">Защита на телефоне отключена: %1$s. Пока её не включат обратно, ограничения не работают.</string>
     <string name="interruption_phone">GameTimer Child на телефоне остановили принудительно (%1$s). С тех пор как его открыли, он снова работает.</string>
+    <string name="ev_app_installed">Установлено новое приложение: %1$s</string>
+    <string name="ntf_app_installed">Новое приложение на телефоне: %1$s. Если это игра, отметьте её в разделе «Игры».</string>
 </resources>

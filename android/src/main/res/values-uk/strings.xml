@@ -255,4 +255,6 @@
     <string name="perm_admin">адміністратор пристрою (суворий режим)</string>
     <string name="device_missing">Захист на телефоні вимкнено: %1$s. Доки його не ввімкнуть знову, обмеження не працюють.</string>
     <string name="interruption_phone">GameTimer Child на телефоні зупинили примусово (%1$s). Відтоді як його відкрили, він знову працює.</string>
+    <string name="ev_app_installed">Встановлено новий застосунок: %1$s</string>
+    <string name="ntf_app_installed">Новий застосунок на телефоні: %1$s. Якщо це гра, позначте її в розділі «Ігри».</string>
 </resources>

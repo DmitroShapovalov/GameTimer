@@ -33,7 +33,8 @@ public sealed class TimerStateStore
     {
         try
         {
-            var json = ProtectedStore.Read(StatePath);
+            // Written every 15 s while a timer runs: a minute behind the mark is a power cut, not tampering
+            var json = ProtectedStore.Read(StatePath, allowLegacyPlaintext: true, tolerance: 4);
             if (json != null)
                 return JsonSerializer.Deserialize<PersistedTimer>(json, JsonOptions);
         }

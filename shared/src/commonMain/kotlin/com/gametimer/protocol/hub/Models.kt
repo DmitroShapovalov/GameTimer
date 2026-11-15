@@ -52,6 +52,8 @@ public data class HistoryEvent(
     val mode: String? = null,
     val minutes: Int? = null,
     val action: String? = null,
+    /** `appInstalled` (minor 6, phone agent): the new app's name. */
+    val app: String? = null,
 )
 
 /** One page of history, newest first; [next] continues it when [more]. */

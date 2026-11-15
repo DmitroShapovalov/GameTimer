@@ -42,7 +42,7 @@ class NotifySettings(context: Context) {
     enum class Category(val key: String, val wakeEvents: List<String>) {
         TimeUp("timeUp", listOf("expired")),         // the time ran out (or was ended): the PC locked / logged off / shut down
         Soon("soon", listOf("alert")),               // a warning point on the PC ("5 min left"): live only; woken → from the state
-        Suspicious("suspicious", listOf("closed", "tampered", "peerAdded")), // closed while a timer ran; tampered; a parent app added
+        Suspicious("suspicious", listOf("closed", "tampered", "peerAdded", "appInstalled")), // closed while a timer ran; tampered; a parent app added; a new app on the child's phone
         Others("others", listOf("started", "stopped", "reset", "extended", "scheduleSkipped", "timeRequestDeclined")), // someone else's action
         Requests("requests", listOf("timeRequested")), // the child asks for more time on the PC (protocol minor 3)
     }
@@ -182,6 +182,7 @@ class Notifier(private val context: Context) {
                 else -> permissionRes(e.action)?.let { context.getString(R.string.ev_protection_off, context.getString(it)) }
                     ?: context.getString(R.string.ntf_tampered)
             }
+            "appInstalled" -> NotifySettings.Category.Suspicious to context.getString(R.string.ntf_app_installed, e.app.orEmpty())
             "protectionRestored" -> NotifySettings.Category.Suspicious to
                 context.getString(R.string.ev_protection_back, permissionRes(e.action)?.let { context.getString(it) } ?: e.action.orEmpty())
             "timeRequested" -> NotifySettings.Category.Requests to context.getString(R.string.ntf_request)

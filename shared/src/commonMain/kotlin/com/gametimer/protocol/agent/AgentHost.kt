@@ -56,9 +56,9 @@ public class AgentHost(
         /**
          * 1: timer.end, timer.setEnd, …; 2: timer.setEnd inSeconds; 3: state.request, timer.answerRequest (as the C#
          * agent); 4: timer state `paused` and the `apps` capability (the phone agent, §6 / §7); 5: `state.device` and
-         * the phone's tamper events (§7.4).
+         * the phone's tamper events (§7.4); 6: history type `appInstalled` (§7.4).
          */
-        public const val PROTOCOL_MINOR: Int = 5
+        public const val PROTOCOL_MINOR: Int = 6
 
         // §3 limits
         public val HANDSHAKE_TIMEOUT: Duration = 5.seconds
@@ -104,7 +104,7 @@ public class AgentHost(
             token != null && token.length in 1..MAX_PUSH_TOKEN && token.all { it in '!'..'~' }
 
         /** History types that wake even when caused automatically (source system); the rest only when someone acted. */
-        private val WAKE_ALWAYS = setOf("expired", "closed", "tampered")
+        private val WAKE_ALWAYS = setOf("expired", "closed", "tampered", "appInstalled")
 
         internal fun roleName(role: PeerRole): String = if (role == PeerRole.Admin) "admin" else "parent"
 
