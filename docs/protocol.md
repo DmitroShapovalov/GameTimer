@@ -234,7 +234,8 @@ controls only when `hello.minor` ≥ 1. `2` (agent v1.8.0): `timer.setEnd` with 
 sends it only when `hello.minor` ≥ 2 and falls back to `hours` + `minutes` otherwise. `3` (agent v1.9):
 `state.request` and `timer.answerRequest` (the child asks for more time on the PC, §7.1). `4` (the phone
 agent, Phase C): `timer.state` `paused` and the `apps` capability (§7.4). `5` (the phone agent, C4):
-`state.device` and the phone's tamper events (§7.4); the Windows agent stays at 3.
+`state.device` and the phone's tamper events (§7.4). `6` (the phone agent): the history type `appInstalled`
+(§7.4); the Windows agent stays at 3.
 
 **Capabilities** — the hub renders a control only if the agent lists the capability. Names are
 stable; a breaking change gets a new name (`timer2`).
@@ -406,6 +407,10 @@ The child's phone (`platform` `android`) announces `timer`, `schedule`, `history
     time until a parent dismisses it (`interruption.ack`), as on the PC. A force-stopped app stays off until it
     is opened again: meanwhile the parents see the phone offline (no separate warning, owner's decision).
   - `rebooted`: the phone was restarted since the agent last ran (no wake-up).
+  - `appInstalled` (minor 6) with `app` (the app's name, at most 64 characters, no control or format
+    characters): an app a parent could limit appeared on the phone (looked for about once a minute; the first
+    look only notes the list). A new game is **not limited** until a parent ticks it, so this wakes the parents
+    like `tampered`; `ev.apps` follows with the new list.
   - A permission still missing, or a clock error already reported, isn't reported again after a restart.
 
 ## 8. Roles and pairing

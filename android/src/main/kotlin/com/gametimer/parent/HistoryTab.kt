@@ -74,7 +74,7 @@ private enum class HistoryFilter(val label: Int) { All(R.string.hist_all), Timer
 
 private val TIMER_TYPES = setOf("started", "stopped", "reset", "extended", "expired", "resumed", "scheduleSkipped", "scheduleRestored",
     "timeRequested", "timeRequestDeclined")
-private val ALERT_TYPES = setOf("closed", "tampered", "protectionRestored", "rebooted")
+private val ALERT_TYPES = setOf("closed", "tampered", "protectionRestored", "rebooted", "appInstalled")
 
 private fun HistoryFilter.accepts(e: HistoryEvent) = when (this) {
     HistoryFilter.All -> true
@@ -240,6 +240,7 @@ private fun look(e: HistoryEvent): Pair<ImageVector, Color> {
         "updated" -> Icons.Filled.Settings to c.neutral
         "expired" -> Icons.Filled.Lock to c.timeUp
         "closed", "tampered" -> Icons.Filled.Warning to c.alert
+        "appInstalled" -> Icons.Filled.Add to c.alert
         "protectionRestored" -> Icons.Filled.Refresh to c.good
         "rebooted" -> Icons.Filled.Refresh to c.neutral
         "timeRequested" -> Icons.Filled.Notifications to c.changed
@@ -279,6 +280,7 @@ private fun eventText(e: HistoryEvent, phone: Boolean): String = when (e.type) {
     }
     "protectionRestored" -> stringResource(R.string.ev_protection_back, permissionRes(e.action)?.let { stringResource(it) } ?: e.action.orEmpty())
     "rebooted" -> stringResource(R.string.ev_rebooted)
+    "appInstalled" -> stringResource(R.string.ev_app_installed, e.app.orEmpty())
     "updated" -> stringResource(R.string.ev_updated)
     "scheduleSkipped" -> stringResource(R.string.ev_sched_skipped)
     "scheduleRestored" -> stringResource(R.string.ev_sched_restored)

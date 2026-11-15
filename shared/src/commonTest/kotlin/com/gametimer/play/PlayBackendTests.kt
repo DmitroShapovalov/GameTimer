@@ -44,7 +44,7 @@ class PlayBackendTests {
         var saved: PlayData? = null
         var stored: PlayData? = null
         var boot = -1
-        val apps = listOf(AppEntry("com.game.one", "Game One"), AppEntry("com.game.two", "Game Two"), AppEntry("com.school", "School"))
+        var apps = listOf(AppEntry("com.game.one", "Game One"), AppEntry("com.game.two", "Game Two"), AppEntry("com.school", "School"))
 
         fun advance(ms: Long) { epoch += ms; elapsed += ms }
 
@@ -113,9 +113,9 @@ class PlayBackendTests {
         h.sendJson(AgentFixture.pairHello())
         h.receiveJson()
         val hub = TestHub.handshake(rig.host, key, pairing = false, scope = backgroundScope).first
-        hub.sendJson(buildJsonObject { put("t", "ready"); put("protocol", 2); put("minor", 5) })
+        hub.sendJson(buildJsonObject { put("t", "ready"); put("protocol", 2); put("minor", 6) })
         val hello = hub.receiveJson()
-        assertEquals(5, hello["minor"]!!.jsonPrimitive.int)
+        assertEquals(6, hello["minor"]!!.jsonPrimitive.int)
         assertEquals(listOf("timer", "schedule", "history", "apps", "peers", "push"), (hello["capabilities"] as JsonArray).map { it.jsonPrimitive.content })
         assertEquals("stopped", hello.obj("state").obj("timer").s("state"))
         rig.host.close()
@@ -706,6 +706,36 @@ class PlayBackendTests {
         rig.play("com.game.one", 1)
         assertEquals(BlockReason.TimeUp, rig.backend.blockReason("com.game.one"))
         assertEquals("2026-10-17", shiftDate("2026-10-24", -7))
+        rig.host.close()
+    }
+
+    @Test
+    fun aNewlyInstalledAppIsToldToTheParents() = runTest {
+        val rig = Rig(this)
+        val p = rig.parent()
+        rig.backend.checkApps() // the first look: where the list stands
+        assertTrue(p.lastHistory(3).none { it.s("type") == "appInstalled" })
+        rig.phone.apps = rig.phone.apps + AppEntry("com.game.new", "New\u202E Game")
+        rig.backend.checkApps()
+        val e = p.lastHistory(1).single()
+        assertEquals("appInstalled", e.s("type")); assertEquals("system", e.s("source"))
+        assertEquals("New Game", e.s("app")) // no format characters in a name a parent reads
+        rig.backend.checkApps()
+        assertEquals(1, p.lastHistory(5).count { it.s("type") == "appInstalled" }) // told once
+        // Removed and installed again: told again; and it is in the list a parent picks from
+        rig.phone.apps = rig.phone.apps.dropLast(1)
+        rig.backend.checkApps()
+        rig.phone.apps = rig.phone.apps + AppEntry("com.game.new", "New Game")
+        rig.backend.checkApps()
+        assertEquals(2, p.lastHistory(5).count { it.s("type") == "appInstalled" })
+        assertEquals(4, (p.request("apps.get").obj("apps")["installed"] as JsonArray).size)
+        // Many at once: ten per look, the rest at the next ones — none is skipped
+        rig.phone.apps = rig.phone.apps + (1..13).map { AppEntry("com.bulk.$it", "Bulk $it") }
+        rig.backend.checkApps()
+        rig.backend.checkApps()
+        rig.backend.checkApps()
+        val all = (p.request("history.get", buildJsonObject { put("limit", 50) })["events"] as JsonArray).map { it.jsonObject }
+        assertEquals(13, all.count { it.s("app")?.startsWith("Bulk") == true })
         rig.host.close()
     }
 

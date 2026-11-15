@@ -285,6 +285,23 @@ Owner's decisions for C4 (2026-11-08):
 | C4 | Tamper visibility: lost permission, force-stop, uninstall, clock change reported to the parents | ✓ (PR #60; owner's device check pending) |
 | C5 | Acceptance + release (v2.0) | in progress ✎ (release.yml builds and signs GameTimer Child with the parent app's key; README, PRIVACY; then the owner's device session per `child/README.md` 1–10 and the v2.0 tag) |
 
+## Retrospective at v2.0.0-rc1 (2026-11)
+
+A whole-system review: `docs/RETRO-2026-11.md` (EN + RU). Its findings by id:
+
+| Id | Finding | Status |
+|---|---|---|
+| S1 | PC state files could be reset by deleting them / planting plaintext | ✓ fixed (registry marks in `ProtectedStore`, tests in `tests/GameTimer.Tests`) |
+| S3 | A new app on the child's phone wasn't limited or reported | ✓ reported (`appInstalled`, protocol minor 6); "limit new apps until I decide" ☐ |
+| S7 | CI actions pinned by tag | ✓ pinned by commit + Dependabot |
+| S11, P1, P3 | Docs claimed more than the code does | ✓ SECURITY.md, README (positioning, phone agent = beta) |
+| S2 | PC schedule trusts the wall clock; no clock events on the PC | ☐ next (share the phone's rules) |
+| A1 | No tests for the Windows app's logic | started (`tests/GameTimer.Tests`: the state store); TimerController, schedule ☐ |
+| S4, S5, S6 | Fail-open autostart, suspend, plaintext history | ☐ |
+| S8 | Relay: byte budget, alerts, configurable address | ☐ |
+| P2 | Windows service + standard child account + in-app parent PIN | ☐ strategic |
+| P5, A6 | iOS parent app; update check | ☐ strategic |
+
 ## Backlog / known gaps
 
 Tamper resistance (the child uses the same Windows account, which is an administrator):

@@ -56,16 +56,34 @@ Revoking a parent on the PC (or by an admin phone) closes its sessions at once.
 
 - **Any device already on the home network can reach the port.** Without a paired key it gets nothing:
   the handshake fails and the connection is closed. It can see that the port is open.
-- **The state files are tamper-resistant.** `settings.json`, `usage.json` and `timer-state.json` are
-  encrypted with Windows DPAPI (per-user) via `ProtectedStore`: on disk they are opaque, and any hand
-  edit breaks decryption. On load, a tampered file is rolled back to the last good copy (kept as
-  `<file>.bak`, also encrypted) and a **"settings tampered"** event is written to the history the parent
-  sees on the PC and the phone. The v2 identity and paired parents live in `remote-v2.json` (DPAPI); if it
-  is lost or replaced, the PC's key changes, every phone has to pair again and a "tampered" event is
-  logged. This defeats the realistic case — a child editing a file to reset today's used time, disable the
-  schedule or the close-protection, or extend the running timer. It is **not** proof against someone
-  running code as that user: DPAPI is reversible for the same account. That is the same ceiling as the
-  close-protection (an administrator can bypass it); both raise the bar for the child, which is the threat here.
+- **The state files are tamper-evident, not tamper-proof.** `settings.json`, `usage.json` and
+  `timer-state.json` are encrypted with Windows DPAPI (per-user) via `ProtectedStore`: on disk they are
+  opaque, and a hand edit breaks decryption. Every write carries a counter inside the encrypted part, and
+  the store keeps the counter of the last write as a mark in the user's registry
+  (`HKCU\Software\GameTimer\State`). On load, a file that was **edited, deleted, replaced by an older copy
+  (also by its own backup), or planted in plaintext** is noticed: the backup (`<file>.bak`, also encrypted)
+  is restored when it is the write just before the mark or newer, and a **"settings tampered"** event is
+  written to the history the parent sees on the PC and the phone (the report is kept with the marks until it
+  is logged, so killing the app doesn't lose it). What the report can't undo: deleting a file brings back
+  its previous version (the settings before the last change), and when no copy decrypts the app starts from
+  defaults — today's used time is then lost. Either way the parents are told. Also reported: a copy of the
+  app folder run from another place (the marks go by the folder; a real second install on the same account
+  pays one report), and a saved timer put back after the timer was stopped. For the two files written every few seconds
+  (`usage.json`, `timer-state.json`) a copy up to about a minute old passes unnoticed: after a power cut the
+  disk and the registry may disagree by that much. The v2
+  identity and paired parents live in `remote-v2.json` (DPAPI); if it is lost or replaced, the PC's key
+  changes, every phone has to pair again and a "tampered" event is logged. This is **not** proof against
+  someone who runs code as that user, or who also removes the registry marks: DPAPI is reversible for the
+  same account. (Until v2.0 a deleted file, or a plaintext one after deleting the backup, went unnoticed.)
+- **The clock.** The PC's daily schedule goes by the Windows clock: someone who may change it (an
+  administrator account) gets a fresh allowance by moving the date, or into the allowed hours by moving the
+  time, and after a reboot a running timer resumes by the clock. Nothing reports it yet (the phone agent
+  does, protocol §7.4). A standard account can't change the clock.
+- **The app must be running.** It starts from a shortcut in the user's Startup folder. Removing the
+  shortcut, disabling it in Task Manager or suspending the process (which "Protection from closing" doesn't
+  stop) leaves the PC without limits; the parent app then only shows the PC as offline.
+- **The history file is plain text** (`sessions.jsonl`): entries can be removed on the PC. Notifications
+  already delivered to the parents' phones are not affected.
 - **"Protection from closing" is bypassable by an administrator.** The deny-terminate DACL stops Task
   Manager / `taskkill` only for a standard user. On an administrator account Task Manager elevates and
   overrides it. Use a **standard (non-administrator) Windows account for the child** — then it holds, and
@@ -94,13 +112,15 @@ Only `remote-v2.json` holds a key, and only for this Windows account (DPAPI).
 
 Versions are pinned in `GameTimer.csproj`. The only outbound connection is to the relay, and only while
 "Control from anywhere" is on (see `PRIVACY.md`); otherwise the app only serves the LAN and runs local
-Windows actions. Updates are distributed as a signed GitHub Release
-built by CI from this repository.
+Windows actions. Releases are built by CI from this repository and published on GitHub; the Android apps are
+signed with the project's key, the Windows installer is **not** code-signed (Windows may warn on download).
+Third-party CI actions are pinned by commit.
 
 ## Recommendations
 
 1. Keep the home Wi-Fi on WPA2/WPA3; don't run phone control on an open network.
-2. Give the child a **standard** Windows account (also makes "protection from closing" effective).
+2. Give the child a **standard** Windows account (it makes "protection from closing" effective and takes
+   away the right to change the clock).
 3. Turn phone control **off** when you are not using it.
 4. **Revoke** a phone you lose or stop trusting; re-pair with a fresh QR.
 5. A fixed PC address (router DHCP reservation) avoids re-pairing and keeps the firewall rule matching.

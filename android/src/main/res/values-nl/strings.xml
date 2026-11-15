@@ -255,4 +255,6 @@
     <string name="perm_admin">apparaatbeheer (strenge modus)</string>
     <string name="device_missing">Beveiliging staat uit op de telefoon: %1$s. De limieten werken pas weer als die weer aan staat.</string>
     <string name="interruption_phone">GameTimer Child is op de telefoon geforceerd gestopt (%1$s). Sinds hij weer is geopend, werkt hij weer.</string>
+    <string name="ev_app_installed">Nieuwe app geïnstalleerd: %1$s</string>
+    <string name="ntf_app_installed">Nieuwe app op de telefoon: %1$s. Is het een game, vink die dan aan bij Games.</string>
 </resources>

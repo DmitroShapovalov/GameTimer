@@ -217,9 +217,31 @@ begin
   Result := CloseRunningApp(RemoveEventName, 'uninstalled');
 end;
 
+// The saved timer is removed with the app ([UninstallDelete]); its mark in the state store
+// (ProtectedStore: HKCU\Software\GameTimer\State, value "timer-state.json-<path hash>") goes with it, so a
+// reinstall doesn't take the missing file for tampering. The marks of the settings and usage files stay,
+// like the files.
+procedure RemoveTimerMarks;
+var
+  Names: TArrayOfString;
+  I: Integer;
+begin
+  if RegGetValueNames(HKEY_CURRENT_USER, 'Software\GameTimer\State', Names) then
+    for I := 0 to GetArrayLength(Names) - 1 do
+      if Pos('timer-state.json-', Names[I]) = 1 then
+        RegDeleteValue(HKEY_CURRENT_USER, 'Software\GameTimer\State', Names[I]);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usPostUninstall then Finished := True;
+  if CurUninstallStep = usPostUninstall then
+  begin
+    Finished := True;
+    try
+      RemoveTimerMarks;
+    except
+    end;
+  end;
 end;
 
 procedure DeinitializeUninstall;

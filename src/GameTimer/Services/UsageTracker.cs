@@ -97,7 +97,8 @@ public sealed class UsageTracker
     {
         try
         {
-            var json = ProtectedStore.Read(UsagePath);
+            // Written every second while a timer runs: a minute of writes behind the mark is a power cut, not tampering
+            var json = ProtectedStore.Read(UsagePath, allowLegacyPlaintext: true, tolerance: 60);
             if (json != null)
                 return JsonSerializer.Deserialize<Record>(json, JsonOptions);
         }

@@ -44,6 +44,8 @@ public data class PlayEvent(
     val mode: String? = null,
     val minutes: Int? = null,
     val action: String? = null,
+    /** `appInstalled` (minor 6): the new app's name. */
+    val app: String? = null,
 )
 
 /** An app the parent can limit: its package and its label. */
@@ -71,6 +73,8 @@ public data class PlayData(
     val history: List<PlayEvent> = emptyList(),
     /** The app was stopped (force stop) at this time, until a parent dismisses it (`state.interruption`). */
     val interruption: String? = null,
+    /** The apps a parent could limit when last looked (null before the first look): a new one is reported. */
+    val knownApps: Set<String>? = null,
     /** Basic protection ([Protection]) the phone has had: losing it later is reported. */
     val granted: Set<String> = emptySet(),
     /** The boot ([PlayPlatform.bootCount]) and the monotonic time of the counted day's midnight in it. */
