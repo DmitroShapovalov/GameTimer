@@ -102,6 +102,16 @@ class RelayClientInteropTests {
 
     private suspend fun connected() = withTimeout(20.seconds) { client.status.first { it == RelayStatus.Connected } }
 
+    /**
+     * Until the relay has taken the agent's `register` for this hub. "Connected" means the frame was sent, not that
+     * the relay processed it: a hub dialling in between gets 404 and waits its back-off (20 s and more, §10.3),
+     * which is how these tests timed out on a busy CI runner.
+     */
+    private suspend fun routeKnown(paired: PairedAgent) {
+        val ak = Base64Url.tryDecode(paired.ak)!!
+        withTimeout(20.seconds) { while (routeAnswers(ak) != true) delay(100) }
+    }
+
     /** Whether the relay knows the route now: true / false, null when it can't tell (e.g. 429, too many dials). */
     private suspend fun routeAnswers(ak: ByteArray): Boolean? {
         val route = RouteToken.derive(ak, agent.host.utcToday)
@@ -120,6 +130,7 @@ class RelayClientInteropTests {
         val (key, paired) = pairHub()
         client.start()
         connected()
+        routeKnown(paired)
         val l = away(key, paired)
         val online = withTimeout(30.seconds) { l.status.first { it is LinkStatus.Online } } as LinkStatus.Online
         assertTrue(online.viaRelay)
@@ -146,6 +157,7 @@ class RelayClientInteropTests {
         val (key, paired) = pairHub()
         client.start()
         connected()
+        routeKnown(paired)
         val l = away(key, paired)
         assertTrue((withTimeout(30.seconds) { l.status.first { it is LinkStatus.Online } } as LinkStatus.Online).viaRelay)
         agent.host.remoteAccess = false
